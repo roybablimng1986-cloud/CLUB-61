@@ -1,0 +1,8 @@
+{
+  "name": "CLUB 61",
+  "description": "A feature-rich gaming platform clone featuring WinGo, Aviator, Mines, and Wallet management with real-time simulation.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
