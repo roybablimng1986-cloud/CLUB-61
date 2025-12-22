@@ -1,8 +1,5 @@
 {
-  "name": "CLUB 61",
-  "description": "A feature-rich gaming platform clone featuring WinGo, Aviator, Mines, and Wallet management with real-time simulation.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone"
-  ]
+  "name": "Mafia Club",
+  "description": "An elite gaming platform featuring high-stakes casino games and instant payouts.",
+  "requestFramePermissions": []
 }

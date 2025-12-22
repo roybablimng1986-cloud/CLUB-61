@@ -29,8 +29,8 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
     ]);
 
     const handleSetWithdrawPassword = () => {
-        if (newWithdrawPassword.length !== 6 || isNaN(Number(newWithdrawPassword))) {
-            setMsg('Password must be 6 digits.');
+        if (newWithdrawPassword.length !== 6 || !/^\d{6}$/.test(newWithdrawPassword)) {
+            setMsg('PIN must be exactly 6 digits.');
             return;
         }
         if (newWithdrawPassword !== confirmWithdrawPassword) {
@@ -61,17 +61,17 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
             </div>
 
             <div className="p-4 space-y-4">
-                <div className="bg-[#1e293b] rounded-xl overflow-hidden border border-slate-700/50">
+                <div className="bg-[#1e293b] rounded-xl overflow-hidden border border-slate-700/50 shadow-lg">
                     <div onClick={() => setShowLoginPasswordModal(true)}>
-                        <MenuItem icon={Key} label="Login Password" subtitle="View your login credentials" />
+                        <MenuItem icon={Key} label="Login Password" subtitle="Check your active security key" />
                     </div>
                     <div className="h-[1px] bg-slate-700/50 mx-14"></div>
                     <div onClick={() => setShowWithdrawPasswordModal(true)}>
                         <MenuItem 
                             icon={ShieldCheck} 
-                            label="Withdraw Password" 
-                            subtitle={isWithdrawPasswordSet ? "Password already set" : "Set password for withdrawals"} 
-                            value={isWithdrawPasswordSet ? "Set" : "Unset"}
+                            label="Withdrawal PIN" 
+                            subtitle={isWithdrawPasswordSet ? "PIN is active" : "Required for cashouts"} 
+                            value={isWithdrawPasswordSet ? "Set" : "Action Needed"}
                             color={isWithdrawPasswordSet ? "text-green-500" : "text-yellow-500"}
                         />
                     </div>
@@ -79,132 +79,122 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
 
                 <div className="bg-[#1e293b] rounded-xl overflow-hidden border border-slate-700/50">
                      <div onClick={() => setShowDeviceModal(true)}>
-                        <MenuItem icon={Smartphone} label="Device Management" subtitle="Manage logged in devices" />
+                        <MenuItem icon={Smartphone} label="Connected Devices" subtitle="Session Management" />
                      </div>
                 </div>
             </div>
 
             {/* Withdraw Password Modal */}
             {showWithdrawPasswordModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
-                    <div className="bg-[#1e293b] w-full max-w-sm rounded-2xl p-6 border border-slate-700 shadow-2xl">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-white font-bold">Set Withdrawal Password</h3>
-                            <button onClick={() => setShowWithdrawPasswordModal(false)}><X className="text-slate-400"/></button>
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in">
+                    <div className="bg-[#1e293b] w-full max-w-sm rounded-[2rem] p-8 border border-slate-700 shadow-2xl relative overflow-hidden">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-white font-black text-sm uppercase tracking-widest">Setup Secure PIN</h3>
+                            <button onClick={() => setShowWithdrawPasswordModal(false)} className="p-2 hover:bg-slate-800 rounded-full transition-colors"><X className="text-slate-400" size={18}/></button>
                         </div>
                         
                         {isWithdrawPasswordSet ? (
-                            <div className="text-center py-8">
-                                <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-500/30">
-                                    <ShieldCheck size={32} className="text-green-500"/>
+                            <div className="text-center py-6">
+                                <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-green-500/30">
+                                    <ShieldCheck size={40} className="text-green-500"/>
                                 </div>
-                                <h4 className="text-white font-bold text-lg mb-2">Password Set</h4>
-                                <p className="text-slate-400 text-sm">
-                                    You have already set your withdrawal password. For security reasons, it cannot be changed manually.
+                                <h4 className="text-white font-black text-xl mb-3">Security Active</h4>
+                                <p className="text-slate-400 text-sm leading-relaxed px-4">
+                                    Your 6-digit withdrawal PIN is already configured and verified.
                                 </p>
-                                <p className="text-slate-500 text-xs mt-4">Contact customer support if you need assistance.</p>
                             </div>
                         ) : (
                             <div className="space-y-6">
-                                <div className="relative">
-                                    <div className="flex justify-between text-xs text-slate-400 mb-2">
-                                        <span>6-Digit PIN</span>
-                                        <span>{newWithdrawPassword.length}/6</span>
-                                    </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest ml-1">New 6-Digit PIN</label>
                                     <input 
-                                        type="password" 
+                                        type="tel" 
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
                                         maxLength={6}
                                         value={newWithdrawPassword}
                                         onChange={(e) => setNewWithdrawPassword(e.target.value.replace(/\D/g,''))}
-                                        className="w-full bg-[#0f172a] h-14 rounded-xl border border-slate-600 text-white text-center text-3xl font-bold tracking-[0.5em] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-slate-700"
-                                        placeholder="••••••"
+                                        className="w-full bg-[#0a0f1d] h-14 rounded-2xl border border-slate-700 text-white text-center text-3xl font-bold tracking-[0.5em] outline-none focus:border-blue-500 shadow-inner"
+                                        placeholder="000000"
                                     />
                                 </div>
                                 
-                                <div className="relative">
-                                    <div className="flex justify-between text-xs text-slate-400 mb-2">
-                                        <span>Confirm PIN</span>
-                                        <span>{confirmWithdrawPassword.length}/6</span>
-                                    </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] text-slate-500 font-black uppercase tracking-widest ml-1">Verify PIN</label>
                                     <input 
-                                        type="password" 
+                                        type="tel" 
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
                                         maxLength={6}
                                         value={confirmWithdrawPassword}
                                         onChange={(e) => setConfirmWithdrawPassword(e.target.value.replace(/\D/g,''))}
-                                        className="w-full bg-[#0f172a] h-14 rounded-xl border border-slate-600 text-white text-center text-3xl font-bold tracking-[0.5em] outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-slate-700"
-                                        placeholder="••••••"
+                                        className="w-full bg-[#0a0f1d] h-14 rounded-2xl border border-slate-700 text-white text-center text-3xl font-bold tracking-[0.5em] outline-none focus:border-blue-500 shadow-inner"
+                                        placeholder="000000"
                                     />
                                 </div>
 
-                                {msg && <p className={`text-xs font-bold text-center ${msg.includes('success') ? 'text-green-500' : 'text-red-500'}`}>{msg}</p>}
+                                {msg && <p className={`text-[10px] font-black uppercase text-center tracking-widest ${msg.includes('success') ? 'text-green-500' : 'text-red-500'}`}>{msg}</p>}
                                 
                                 <button 
                                     onClick={handleSetWithdrawPassword}
-                                    className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-xl font-bold mt-2 shadow-lg active:scale-95 transition-transform"
+                                    className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all mt-4"
                                 >
-                                    Save Password
+                                    Activate PIN
                                 </button>
-                                <p className="text-center text-xs text-slate-500 mt-2">Note: You can only set this once.</p>
                             </div>
                         )}
                     </div>
                 </div>
             )}
 
-            {/* Login Password View Modal */}
             {showLoginPasswordModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in">
-                    <div className="bg-[#1e293b] w-full max-w-sm rounded-2xl p-6 border border-slate-700 shadow-2xl relative overflow-hidden">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-white font-bold">My Login Password</h3>
-                            <button onClick={() => setShowLoginPasswordModal(false)}><X className="text-slate-400"/></button>
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in">
+                    <div className="bg-[#1e293b] w-full max-w-sm rounded-[2rem] p-8 border border-slate-700 shadow-2xl">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="text-white font-black text-sm uppercase tracking-widest">Active Credentials</h3>
+                            <button onClick={() => setShowLoginPasswordModal(false)} className="p-2 hover:bg-slate-800 rounded-full"><X className="text-slate-400" size={18}/></button>
                         </div>
-                        <div className="bg-[#0f172a] p-6 rounded-xl border border-slate-600 text-center">
-                            <p className="text-slate-400 text-xs uppercase tracking-widest mb-2">Current Password</p>
-                            <h2 className="text-3xl font-mono font-bold text-blue-400 tracking-wider">{user.password}</h2>
+                        <div className="bg-[#0f172a] p-8 rounded-3xl border border-slate-800 text-center shadow-inner">
+                            <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-3">Your Security Key</p>
+                            <h2 className="text-3xl font-mono font-black text-blue-400 tracking-wider">{user.password}</h2>
                         </div>
-                        <p className="text-center text-xs text-slate-500 mt-4">This is the password you set during registration.</p>
                     </div>
                 </div>
             )}
 
-            {/* Device Management Modal */}
             {showDeviceModal && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 animate-in fade-in">
-                    <div className="bg-[#1e293b] w-full max-w-md h-[70vh] rounded-t-2xl sm:rounded-2xl flex flex-col border-t sm:border border-slate-700 shadow-2xl animate-in slide-in-from-bottom duration-300">
-                        <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-[#1e293b] rounded-t-2xl">
-                            <h3 className="font-bold text-white">Device Management</h3>
-                            <button onClick={() => setShowDeviceModal(false)} className="p-2 hover:bg-slate-700 rounded-full"><X size={20} className="text-slate-400"/></button>
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center z-[100] animate-in fade-in">
+                    <div className="bg-[#1e293b] w-full max-w-md h-[70vh] rounded-t-[3rem] flex flex-col border-t border-slate-700 shadow-2xl animate-in slide-in-from-bottom duration-300">
+                        <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-[#1e293b] rounded-t-[3rem]">
+                            <h3 className="font-black text-sm uppercase tracking-widest text-white">Device History</h3>
+                            <button onClick={() => setShowDeviceModal(false)} className="p-3 bg-slate-800 rounded-full hover:bg-slate-700"><X size={20} className="text-slate-400"/></button>
                         </div>
                         
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4">
                             {devices.map(device => (
-                                <div key={device.id} className="bg-[#0f172a] p-4 rounded-xl border border-slate-700 flex justify-between items-center">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${device.status === 'Online' ? 'bg-green-500/10 text-green-500' : 'bg-slate-700 text-slate-400'}`}>
-                                            {device.type === 'mobile' ? <Smartphone size={20}/> : <Laptop size={20}/>}
+                                <div key={device.id} className="bg-[#0f172a] p-5 rounded-2xl border border-slate-700 flex justify-between items-center shadow-md">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${device.status === 'Online' ? 'bg-green-500/10 text-green-500' : 'bg-slate-700 text-slate-400'}`}>
+                                            {device.type === 'mobile' ? <Smartphone size={24}/> : <Laptop size={24}/>}
                                         </div>
                                         <div>
-                                            <div className="font-bold text-sm text-white flex items-center gap-2">
+                                            <div className="font-black text-sm text-white flex items-center gap-2">
                                                 {device.name}
                                                 {device.status === 'Online' && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>}
                                             </div>
-                                            <div className="text-xs text-slate-400">Status: {device.status} • {device.lastActive}</div>
+                                            <div className="text-[10px] text-slate-500 font-bold uppercase mt-1">{device.status} • {device.lastActive}</div>
                                         </div>
                                     </div>
                                     {device.status !== 'Online' && (
                                         <button 
                                             onClick={() => handleRemoveDevice(device.id)}
-                                            className="px-3 py-1.5 bg-red-500/10 text-red-500 text-xs font-bold rounded-lg border border-red-500/20 hover:bg-red-500/20"
+                                            className="px-4 py-2 bg-red-600/10 text-red-500 text-[10px] font-black uppercase rounded-xl border border-red-500/20 active:scale-90"
                                         >
-                                            Log Out
+                                            Logout
                                         </button>
                                     )}
                                 </div>
                             ))}
-                            {devices.length === 1 && (
-                                <p className="text-center text-slate-500 text-xs pt-4">No other devices logged in.</p>
-                            )}
                         </div>
                     </div>
                 </div>
@@ -214,19 +204,19 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
 };
 
 const MenuItem = ({ icon: Icon, label, subtitle, value, color }: { icon: any, label: string, subtitle?: string, value?: string, color?: string }) => (
-    <div className="flex items-center justify-between p-4 active:bg-slate-700/50 cursor-pointer hover:bg-slate-800/30 transition-colors group">
-        <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center group-hover:bg-blue-500 group-hover:text-white transition-colors">
-                <Icon size={20} />
+    <div className="flex items-center justify-between p-5 active:bg-slate-700/50 cursor-pointer hover:bg-slate-800/30 transition-colors group">
+        <div className="flex items-center gap-5">
+            <div className="w-12 h-12 rounded-2xl bg-blue-600/10 text-blue-500 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all shadow-inner">
+                <Icon size={24} />
             </div>
             <div>
-                <div className="text-sm font-bold text-white group-hover:text-blue-200 transition-colors">{label}</div>
-                {subtitle && <div className="text-[10px] text-slate-500 group-hover:text-slate-400">{subtitle}</div>}
+                <div className="text-sm font-black uppercase tracking-widest text-slate-200 group-hover:text-blue-200 transition-colors">{label}</div>
+                {subtitle && <div className="text-[10px] text-slate-500 font-bold mt-1 uppercase tracking-tighter">{subtitle}</div>}
             </div>
         </div>
-        <div className="flex items-center gap-2">
-            {value && <span className={`text-xs font-bold ${color || 'text-slate-400'}`}>{value}</span>}
-            <ChevronRight size={16} className="text-slate-600 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
+        <div className="flex items-center gap-3">
+            {value && <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-black/20 ${color || 'text-slate-400'}`}>{value}</span>}
+            <ChevronRight size={18} className="text-slate-600 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
         </div>
     </div>
 );

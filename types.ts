@@ -1,6 +1,5 @@
 
-
-export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_DOG' | 'GAME_VORTEX' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS';
+export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_DOG' | 'GAME_LUCKY_WHEEL' | 'GAME_DRAGON_TIGER' | 'GAME_PLINKO' | 'GAME_HEAD_TAILS' | 'GAME_MOTO_RACING' | 'GAME_SLOTS' | 'GAME_ANDAR_BAHAR' | 'GAME_HILO' | 'GAME_LIMBO' | 'GAME_DRAGON_TOWER' | 'GAME_KENO' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_DICE' | 'GAME_ROULETTE' | 'GAME_SICBO' | 'GAME_BACCARAT' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'REWARDS_HUB' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS';
 
 export interface UserProfile {
   uid: string;
@@ -13,11 +12,36 @@ export interface UserProfile {
   totalDeposit: number;
   totalBet: number; 
   inviteCode: string;
-  password?: string; // Added to store/display password
+  password?: string;
   withdrawalPassword?: string;
-  usedGiftCodes?: string[]; // Added to track used codes
+  usedGiftCodes?: string[];
   invitedBy?: string;
   totalCommission?: number;
+  wagerRequired: number;
+  // Binding Status
+  isBankBound?: boolean;
+  isUpiBound?: boolean;
+  isTelegramJoined?: boolean;
+  bankDetails?: { accountName: string; accountNo: string; ifsc: string };
+  upiDetails?: { upiId: string };
+}
+
+export interface RouletteBet {
+    type: 'NUMBER' | 'COLOR' | 'ODD_EVEN' | 'RANGE';
+    value: string | number;
+    amount: number;
+}
+
+export interface GameResult {
+    win: boolean;
+    amount: number;
+    game: string;
+    period?: string;
+    resultDetails?: {
+        label: string;
+        value: string;
+        color?: string;
+    }[];
 }
 
 export interface WinGoHistory {
@@ -35,6 +59,16 @@ export interface WinGoGameState {
   lastResult: WinGoHistory | null;
 }
 
+export interface DragonTigerState {
+  period: string;
+  timeLeft: number;
+  status: 'BETTING' | 'LOCKED' | 'RESULT';
+  dragonCard: number | null;
+  tigerCard: number | null;
+  history: ('D' | 'T' | 'Tie')[];
+  liveBets: { username: string; target: 'D' | 'T' | 'Tie'; amount: number }[];
+}
+
 export interface Transaction {
   id: string;
   type: 'DEPOSIT' | 'WITHDRAW' | 'BET' | 'WIN' | 'COMMISSION' | 'GIFT' | 'BONUS';
@@ -45,14 +79,14 @@ export interface Transaction {
   utr?: string;
   method?: string;
   timestamp?: number;
-  accountDetails?: any; // To store Bank/UPI details for withdrawals
+  accountDetails?: any;
 }
 
 export interface GameHistoryItem {
   id: string;
   game: string;
   amount: number;
-  win: number; // 0 if loss
+  win: number;
   date: string;
   details: string;
 }
@@ -84,16 +118,4 @@ export interface CommissionItem {
     amount: number;
     date: string;
     type: string;
-}
-
-export interface GameResult {
-    win: boolean;
-    amount: number;
-    game: string;
-    period?: string;
-    resultDetails?: {
-        label: string;
-        value: string;
-        color?: string;
-    }[];
 }

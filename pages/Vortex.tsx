@@ -1,271 +1,237 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Coins, Volume2, VolumeX, ArrowDown } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus } from '../services/mockFirebase';
+import { ArrowLeft, Wallet, Volume2, VolumeX } from 'lucide-react';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute } from '../services/mockFirebase';
 import { GameResult } from '../types';
 
-interface VortexProps {
-    onBack: () => void;
-    userBalance: number;
-    onResult: (result: GameResult) => void;
+interface Props {
+  onBack: () => void;
+  userBalance: number;
+  onResult: (r: GameResult) => void;
 }
 
-// Wheel Configuration
-// Visual Order: Clockwise starting from Top (0 degrees)
-const SEGMENTS = [
-    { label: '50X', value: 50, bg: '#E11D48', text: 'white' }, // Pink/Red - Top
-    { label: 'LOSE', value: 0, bg: '#1E293B', text: '#94A3B8' }, 
-    { label: '2X', value: 2, bg: '#F59E0B', text: 'black' }, // Amber - Right
-    { label: 'LOSE', value: 0, bg: '#1E293B', text: '#94A3B8' },
-    { label: '10X', value: 10, bg: '#10B981', text: 'white' }, // Emerald - Bottom
-    { label: 'LOSE', value: 0, bg: '#1E293B', text: '#94A3B8' },
-    { label: '5X', value: 5, bg: '#3B82F6', text: 'white' }, // Blue - Left
-    { label: 'LOSE', value: 0, bg: '#1E293B', text: '#94A3B8' },
+const POCKETS = [
+    { mult: 50, color: '#facc15' }, { mult: 0, color: '#1e293b' }, { mult: 2, color: '#3b82f6' }, 
+    { mult: 0, color: '#1e293b' }, { mult: 5, color: '#10b981' }, { mult: 0, color: '#1e293b' }, 
+    { mult: 10, color: '#ef4444' }, { mult: 0, color: '#1e293b' }, { mult: 2, color: '#3b82f6' }, 
+    { mult: 0, color: '#1e293b' }, { mult: 5, color: '#10b981' }, { mult: 0, color: '#1e293b' }
 ];
 
-const Spinner: React.FC<VortexProps> = ({ onBack, userBalance, onResult }) => {
-    const [betAmount, setBetAmount] = useState(10);
-    const [isSpinning, setIsSpinning] = useState(false);
-    const [rotation, setRotation] = useState(0); 
-    const [muted, setMuted] = useState(getMuteStatus());
-    const [lastWinIndex, setLastWinIndex] = useState<number | null>(null);
+const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
+  const [betAmount, setBetAmount] = useState(10);
+  const [gameState, setGameState] = useState<'IDLE' | 'SPINNING' | 'LOCKED'>('IDLE');
+  const [muted, setMuted] = useState(getMuteStatus());
+  const [history, setHistory] = useState<string[]>(['10X', '0X', '5X', '2X', '0X']);
+  
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const requestRef = useRef<number>(0);
+  const isMounted = useRef(true);
+
+  // Advanced Physics State
+  const ringRotation = useRef(0);
+  const ballAngle = useRef(0);
+  const ballRadius = useRef(165); 
+  const ballAngularVel = useRef(0);
+  const spiralPhase = useRef(0); // 0: outer orbit, 1: spiraling, 2: drop
+
+  useEffect(() => {
+    isMounted.current = true;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const animate = () => {
+        updatePhysics();
+        draw(ctx);
+        requestRef.current = requestAnimationFrame(animate);
+    };
+
+    requestRef.current = requestAnimationFrame(animate);
+    return () => {
+      isMounted.current = false;
+      cancelAnimationFrame(requestRef.current);
+      stopAllSounds();
+    };
+  }, [gameState]);
+
+  const updatePhysics = () => {
+    // Ring always spins slowly
+    ringRotation.current += 0.015;
     
-    const isMounted = useRef(true);
-
-    useEffect(() => {
-        isMounted.current = true;
-        return () => {
-            isMounted.current = false;
-            stopAllSounds();
-        };
-    }, []);
-
-    const handleToggleMute = () => {
-        setMuted(toggleMute());
-    };
-
-    const startSpin = () => {
-        if (isSpinning) return;
-        if (betAmount > userBalance) {
-            alert("Insufficient Balance");
-            return;
+    if (gameState === 'SPINNING') {
+        ballAngle.current += ballAngularVel.current;
+        
+        if (spiralPhase.current === 0) {
+            // Ball is losing speed due to rim friction
+            ballAngularVel.current *= 0.993; 
+            if (ballAngularVel.current < 0.08) spiralPhase.current = 1;
+        } else if (spiralPhase.current === 1) {
+            // Ball starts spiraling inward towards pockets
+            ballRadius.current -= 1.8;
+            ballAngularVel.current *= 0.985;
+            if (ballRadius.current <= 85) finalizeVortex();
         }
+    }
+  };
 
-        if(isMounted.current) playSound('click');
-        if(isMounted.current) playSound('spin'); 
-        updateBalance(-betAmount, 'BET', 'Lucky Wheel');
-        setIsSpinning(true);
-        setLastWinIndex(null);
+  const draw = (ctx: CanvasRenderingContext2D) => {
+    const w = 400, h = 400;
+    ctx.clearRect(0, 0, w, h);
+    const cx = w/2, cy = h/2;
 
-        // 1. Determine Result Probability
-        const rand = Math.random();
-        let targetIndex = 0;
+    // Draw Bowl Outer Edge (Depth Effect)
+    const grad = ctx.createRadialGradient(cx, cy, 50, cx, cy, 180);
+    grad.addColorStop(0, '#020617');
+    grad.addColorStop(0.6, '#0f172a');
+    grad.addColorStop(1, '#1e293b');
+    ctx.beginPath();
+    ctx.arc(cx, cy, 180, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 4;
+    ctx.stroke();
 
-        // Weights
-        if (rand < 0.5) { // 50% Lose
-             const loseIndices = [1, 3, 5, 7];
-             targetIndex = loseIndices[Math.floor(Math.random() * loseIndices.length)];
-        } else if (rand < 0.8) { // 30% 2x (Index 2)
-             targetIndex = 2;
-        } else if (rand < 0.9) { // 10% 5x (Index 6)
-             targetIndex = 6;
-        } else if (rand < 0.98) { // 8% 10x (Index 4)
-             targetIndex = 4;
-        } else { // 2% 50x (Index 0)
-             targetIndex = 0;
-        }
-
-        // 2. Calculate Exact Rotation
-        // Segment 0 starts at Top (0 deg).
-        // To land on targetIndex, we need that segment to be at Top (0 deg) after rotation.
-        // Current Angle of targetIndex is `targetIndex * 45`.
-        // To bring it to 0, we must subtract `targetIndex * 45` from the total rotation.
+    // Draw Rotating Center Pocket Ring
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(ringRotation.current);
+    POCKETS.forEach((p, i) => {
+        const angle = (Math.PI * 2 / POCKETS.length) * i;
+        ctx.save();
+        ctx.rotate(angle);
         
-        const segmentAngle = 360 / SEGMENTS.length; // 45 degrees
-        const spins = 5; // Minimum full spins
+        // Pocket box
+        ctx.beginPath();
+        ctx.moveTo(45, -18); ctx.lineTo(85, -25); ctx.lineTo(85, 25); ctx.lineTo(45, 18);
+        ctx.closePath();
+        ctx.fillStyle = p.color;
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff20';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Label
+        ctx.fillStyle = p.mult > 0 ? '#fff' : '#475569';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.mult === 50 ? 'JP' : p.mult + 'X', 65, 5);
+        ctx.restore();
+    });
+    ctx.restore();
+
+    // Center Cap
+    ctx.beginPath();
+    ctx.arc(cx, cy, 45, 0, Math.PI * 2);
+    ctx.fillStyle = '#1e293b';
+    ctx.fill();
+    ctx.strokeStyle = '#fbbf2440';
+    ctx.stroke();
+
+    // Draw Ball (Physics based)
+    if (gameState === 'SPINNING') {
+        const bx = cx + Math.cos(ballAngle.current) * ballRadius.current;
+        const by = cy + Math.sin(ballAngle.current) * ballRadius.current;
         
-        const currentRot = rotation;
-        const minSpin = 360 * spins;
-        const targetAngle = -(targetIndex * segmentAngle); 
-        
-        // Calculate the next value: value < currentRot - minSpin AND value % 360 == targetAngle
-        const nextRot = Math.floor((currentRot - minSpin - targetAngle) / 360) * 360 + targetAngle;
+        // Ball Shadow
+        ctx.beginPath();
+        ctx.arc(bx + 4, by + 4, 7, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.fill();
 
-        setRotation(nextRot);
+        // Ball Body
+        ctx.beginPath();
+        ctx.arc(bx, by, 7, 0, Math.PI * 2);
+        const ballGrad = ctx.createRadialGradient(bx-2, by-2, 1, bx, by, 7);
+        ballGrad.addColorStop(0, '#ffffff');
+        ballGrad.addColorStop(1, '#cbd5e1');
+        ctx.fillStyle = ballGrad;
+        ctx.shadowBlur = 10; ctx.shadowColor = '#fff';
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+  };
 
-        setTimeout(() => {
-            if (!isMounted.current) return;
-            setIsSpinning(false);
-            stopAllSounds();
-            handleResult(SEGMENTS[targetIndex]);
-            setLastWinIndex(targetIndex);
-        }, 4000); 
-    };
+  const launch = () => {
+    if (gameState !== 'IDLE' || userBalance < betAmount) return;
+    setGameState('SPINNING');
+    updateBalance(-betAmount, 'BET', 'Vortex Launch');
+    playSound('click'); playSound('spin');
+    
+    ballAngle.current = Math.random() * Math.PI * 2;
+    ballRadius.current = 168;
+    ballAngularVel.current = 0.28 + Math.random() * 0.08;
+    spiralPhase.current = 0;
+  };
 
-    const handleResult = (segment: typeof SEGMENTS[0]) => {
+  const finalizeVortex = () => {
+    if (gameState !== 'SPINNING') return;
+    setGameState('LOCKED');
+
+    // Pocket match logic: find which pocket is under the ball's final angle
+    const relativeAngle = (ballAngle.current - ringRotation.current) % (Math.PI * 2);
+    const normalized = relativeAngle < 0 ? relativeAngle + Math.PI * 2 : relativeAngle;
+    const idx = Math.floor( (normalized / (Math.PI * 2)) * POCKETS.length ) % POCKETS.length;
+    
+    const result = POCKETS[idx];
+    const winAmt = betAmount * result.mult;
+
+    setTimeout(() => {
         if (!isMounted.current) return;
-        const winAmount = betAmount * segment.value;
-        if (winAmount > 0) {
-            playSound('win');
-            updateBalance(winAmount, 'WIN', 'Wheel Win');
-            onResult({
-                win: true,
-                amount: winAmount,
-                game: 'Lucky Wheel',
-                resultDetails: [{ label: 'Multiplier', value: segment.label, color: 'bg-green-500' }]
-            });
-            addGameHistory('Lucky Wheel', betAmount, winAmount, `Hit ${segment.label}`);
-        } else {
-            playSound('loss');
-            onResult({
-                win: false,
-                amount: betAmount,
-                game: 'Lucky Wheel',
-                resultDetails: [{ label: 'Result', value: 'Loss', color: 'bg-red-500' }]
-            });
-            addGameHistory('Lucky Wheel', betAmount, 0, `Hit Lose`);
-        }
-    };
+        if (winAmt > 0) { updateBalance(winAmt, 'WIN', 'Vortex Win'); playSound('win'); } else { playSound('loss'); }
+        setHistory(prev => [result.mult + 'X', ...prev].slice(0, 10));
+        onResult({ 
+            win: winAmt > 0, 
+            amount: winAmt > 0 ? winAmt : betAmount, 
+            game: 'Vortex',
+            resultDetails: [{ label: 'Pocket', value: result.mult + 'X', color: result.mult > 0 ? 'text-yellow-400' : 'text-slate-500' }]
+        });
+        setGameState('IDLE');
+    }, 1200);
+  };
 
-    return (
-        <div className="bg-[#1e1136] min-h-screen flex flex-col font-sans text-white overflow-hidden">
-             {/* Header */}
-             <div className="p-4 flex items-center justify-between z-10 bg-[#2d1b4e] border-b border-purple-900">
-                <div className="flex items-center gap-4">
-                    <button onClick={onBack}><ArrowLeft className="text-purple-300" /></button>
-                    <h1 className="text-lg font-bold italic tracking-wider">LUCKY <span className="text-yellow-400">WHEEL</span></h1>
-                </div>
-                <div className="flex items-center gap-3">
-                     <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-purple-700">
-                         <Coins size={14} className="text-yellow-500"/>
-                         <span className="text-sm font-bold text-white">₹{userBalance.toFixed(2)}</span>
-                    </div>
-                    <button onClick={handleToggleMute}>
-                        {muted ? <VolumeX size={20} className="text-purple-300"/> : <Volume2 size={20} className="text-purple-300"/>}
-                    </button>
-                </div>
-            </div>
-
-            {/* Main Area */}
-            <div className="flex-1 flex flex-col items-center justify-center relative bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]">
-                
-                {/* BIG RED POINTER */}
-                <div className="absolute top-[50%] left-1/2 -translate-x-1/2 z-40 mt-[-185px] md:mt-[-215px] filter drop-shadow-lg pointer-events-none">
-                     <ArrowDown size={64} className="text-red-600 fill-red-600 stroke-[3px] stroke-white"/>
-                </div>
-
-                {/* Outer Rim */}
-                <div className="relative w-[320px] h-[320px] md:w-[380px] md:h-[380px] rounded-full p-4 bg-gradient-to-b from-[#FCD34D] via-[#B45309] to-[#FCD34D] shadow-[0_0_50px_rgba(255,215,0,0.3)] flex items-center justify-center">
-                    
-                    {/* Lights on Rim */}
-                    <div className="absolute inset-0 rounded-full animate-spin-slow">
-                        {[...Array(12)].map((_, i) => (
-                            <div 
-                                key={i} 
-                                className="absolute w-3 h-3 bg-white rounded-full shadow-[0_0_10px_white]"
-                                style={{ 
-                                    top: '50%', left: '50%',
-                                    transform: `rotate(${i * 30}deg) translate(150px) md:translate(180px)`
-                                }}
-                            ></div>
-                        ))}
-                    </div>
-
-                    {/* Wheel Container */}
-                    <div className="relative w-full h-full rounded-full bg-black overflow-hidden border-4 border-black shadow-inner">
-                        <div 
-                            className="w-full h-full rounded-full"
-                            style={{ 
-                                transform: `rotate(${rotation}deg)`,
-                                transition: isSpinning ? 'transform 4s cubic-bezier(0.2, 0, 0.2, 1)' : 'none'
-                            }}
-                        >
-                            {/* Colorful Segments */}
-                            <div 
-                                className="absolute inset-0 w-full h-full rounded-full"
-                                style={{
-                                    background: `conic-gradient(from -22.5deg,
-                                        ${SEGMENTS.map((s, i) => `${s.bg} ${i * 45}deg ${(i + 1) * 45}deg`).join(', ')}
-                                    )`
-                                }}
-                            ></div>
-
-                            {/* Labels Layer */}
-                            {SEGMENTS.map((seg, i) => {
-                                const angle = 360 / SEGMENTS.length;
-                                const rotationAngle = angle * i;
-                                return (
-                                    <div 
-                                        key={i}
-                                        className="absolute w-full h-full top-0 left-0 flex justify-center pt-6"
-                                        style={{ transform: `rotate(${rotationAngle}deg)` }}
-                                    >
-                                        <div className="text-center transform origin-bottom">
-                                            <span 
-                                                className="block font-black text-xl md:text-2xl drop-shadow-md tracking-tighter"
-                                                style={{ color: seg.text }}
-                                            >
-                                                {seg.label}
-                                            </span>
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Center Hub */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 bg-gradient-to-br from-yellow-300 to-yellow-600 rounded-full border-4 border-white shadow-[0_0_20px_rgba(0,0,0,0.5)] flex items-center justify-center z-20">
-                        <div className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center border-2 border-red-800">
-                             <span className="text-white font-black text-xs">SPIN</span>
-                        </div>
-                    </div>
-                </div>
-                
-                {lastWinIndex !== null && !isSpinning && (
-                    <div className="mt-8 bg-gradient-to-r from-yellow-400 to-orange-500 text-black font-black px-8 py-3 rounded-full shadow-[0_0_20px_rgba(255,165,0,0.5)] animate-bounce border-2 border-white">
-                        RESULT: {SEGMENTS[lastWinIndex].label}
-                    </div>
-                )}
-            </div>
-
-            {/* Controls */}
-            <div className="bg-[#2d1b4e] p-6 rounded-t-3xl border-t border-purple-700 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-20">
-                <div className="flex justify-center mb-6">
-                    <div className="text-center">
-                        <p className="text-purple-300 text-[10px] font-bold uppercase tracking-wider mb-1">Bet Amount</p>
-                        <p className="text-3xl font-black text-white">₹{betAmount}</p>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-4 gap-2 mb-6">
-                    {[10, 50, 100, 500].map(amt => (
-                        <button 
-                            key={amt}
-                            onClick={() => !isSpinning && setBetAmount(amt)}
-                            className={`py-3 rounded-xl font-bold text-xs border transition-all ${betAmount === amt ? 'bg-yellow-500 text-black border-yellow-400 shadow-lg' : 'bg-[#1a0b2e] text-purple-400 border-purple-800'}`}
-                        >
-                            {amt}
-                        </button>
-                    ))}
-                </div>
-
-                <div className="flex justify-center items-center gap-6">
-                    <button onClick={() => !isSpinning && setBetAmount(Math.max(10, betAmount - 10))} className="w-12 h-12 rounded-full bg-[#1a0b2e] border border-purple-700 text-purple-300 font-bold hover:text-white">-</button>
-                    
-                    <button 
-                        onClick={startSpin}
-                        disabled={isSpinning}
-                        className={`w-full max-w-[200px] py-4 rounded-full font-black text-xl uppercase tracking-widest shadow-lg transition-transform active:scale-95 ${isSpinning ? 'bg-gray-600 cursor-not-allowed' : 'bg-gradient-to-r from-yellow-500 to-orange-500 text-black shadow-orange-500/30'}`}
-                    >
-                        {isSpinning ? 'Spinning...' : 'SPIN NOW'}
-                    </button>
-
-                    <button onClick={() => !isSpinning && setBetAmount(betAmount + 10)} className="w-12 h-12 rounded-full bg-[#1a0b2e] border border-purple-700 text-purple-300 font-bold hover:text-white">+</button>
-                </div>
-            </div>
+  return (
+    <div className="bg-black min-h-screen flex flex-col font-sans text-white select-none overflow-hidden relative">
+      <div className="p-4 flex justify-between items-center bg-[#111827] border-b border-white/5 z-50 shadow-2xl">
+        <button onClick={onBack} className="p-2.5 bg-slate-800 rounded-2xl border border-white/10 active:scale-90"><ArrowLeft size={20}/></button>
+        <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">THE VORTEX</h1>
+        <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner">
+          <Wallet size={14} className="text-yellow-500" />
+          <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
         </div>
-    );
+      </div>
+
+      <div className="flex-1 flex flex-col items-center justify-center p-4 relative bg-[#020617]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_transparent_70%)] opacity-30 pointer-events-none"></div>
+        <canvas ref={canvasRef} width={400} height={400} className="max-w-full drop-shadow-[0_0_100px_rgba(0,0,0,1)]" />
+        
+        <div className="mt-8 flex gap-2 overflow-x-auto no-scrollbar max-w-full px-4">
+            {history.map((h, i) => (
+                <span key={i} className={`px-4 py-1.5 rounded-full text-[10px] font-black border border-white/5 whitespace-nowrap italic shadow-lg ${h === '0X' ? 'bg-slate-900 text-slate-500' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'}`}>{h}</span>
+            ))}
+        </div>
+      </div>
+
+      <div className="bg-[#0a0a0a] p-6 pb-12 border-t border-white/5 shadow-[0_-20px_60px_rgba(0,0,0,1)] z-50">
+          <div className="flex justify-between items-end mb-8 px-2">
+              <div className="flex gap-2">
+                  {[10, 50, 100, 500].map(amt => (
+                      <button key={amt} onClick={() => gameState === 'IDLE' && setBetAmount(amt)} className={`w-14 h-12 rounded-2xl font-black text-xs border transition-all ${betAmount === amt ? 'bg-yellow-500 text-black border-white shadow-lg scale-105' : 'bg-zinc-900 text-zinc-500 border-white/5'}`}>₹{amt}</button>
+                  ))}
+              </div>
+              <button onClick={() => setMuted(toggleMute())} className="p-3.5 bg-zinc-900 rounded-2xl text-zinc-400 border border-white/5">
+                  {muted ? <VolumeX size={20}/> : <Volume2 size={20}/>}
+              </button>
+          </div>
+
+          <button onClick={launch} disabled={gameState !== 'IDLE'} className={`w-full py-6 rounded-[2.5rem] font-black uppercase tracking-[0.5em] shadow-2xl active:scale-95 transition-all text-xl border-t-2 border-white/10 ${gameState !== 'IDLE' ? 'bg-zinc-800 text-zinc-600' : 'bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-600 text-black shadow-yellow-900/40'}`}>
+            {gameState === 'IDLE' ? 'LAUNCH BALL' : 'SPINNING...'}
+          </button>
+      </div>
+      <style>{`.gold-text { background: linear-gradient(to bottom, #fde68a, #d97706, #fde68a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }`}</style>
+    </div>
+  );
 };
 
-export default Spinner;
+export default Vortex;

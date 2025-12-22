@@ -1,8 +1,7 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Volume2, HelpCircle, Wallet, VolumeX } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, getGameHistory } from '../services/mockFirebase';
+import { ArrowLeft, Volume2, HelpCircle, Wallet, VolumeX, X } from 'lucide-react';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, getGameHistory, shouldForceLoss } from '../services/mockFirebase';
 import { GameResult, GameHistoryItem } from '../types';
 
 // Asset URLs for better visuals
@@ -27,6 +26,7 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
     const [gemsFound, setGemsFound] = useState(0);
     const [gameOver, setGameOver] = useState(false);
     const [muted, setMuted] = useState(getMuteStatus());
+    const [showRules, setShowRules] = useState(false);
     const [myHistory, setMyHistory] = useState<GameHistoryItem[]>([]);
     
     const isMounted = useRef(true);
@@ -78,7 +78,10 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
         newRevealed[index] = true;
         setRevealed(newRevealed);
 
-        if (grid[index] === 2) {
+        // Forced loss logic check for high-risk bets after first gem
+        const forced = gemsFound >= 1 && shouldForceLoss(betAmount, userBalance);
+
+        if (grid[index] === 2 || forced) {
             // Hit Mine
             if(isMounted.current) playSound('loss');
             setGameOver(true);
@@ -91,7 +94,7 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
                 win: false,
                 amount: betAmount,
                 game: 'Mines',
-                resultDetails: [{ label: 'Result', value: 'Hit Mine', color: 'bg-red-500' }]
+                resultDetails: [{ label: 'Result', value: 'Explosion!', color: 'text-red-500' }]
             });
         } else {
             // Found Gem
@@ -103,7 +106,7 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
     const cashOut = () => {
         if (!isPlaying || gameOver) return;
         if (gemsFound === 0) {
-            alert("You must reveal at least one gem before cashing out!");
+            alert("Reveal at least one gem first!");
             return;
         }
 
@@ -116,15 +119,15 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
         setIsPlaying(false);
         setGameOver(true);
         if(isMounted.current) playSound('win');
-        setRevealed(Array(25).fill(true)); // Reveal remaining
+        setRevealed(Array(25).fill(true)); 
         
         onResult({
             win: true,
             amount: winAmount,
             game: 'Mines',
             resultDetails: [
-                { label: 'Gems', value: gemsFound.toString(), color: 'bg-green-500' },
-                { label: 'Multiplier', value: `${multiplier.toFixed(2)}x`, color: 'bg-blue-500' }
+                { label: 'Gems', value: gemsFound.toString(), color: 'text-green-500' },
+                { label: 'Multiplier', value: `${multiplier.toFixed(2)}x`, color: 'text-blue-500' }
             ]
         });
     };
@@ -136,7 +139,6 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
     }
 
     const currentMultiplier = (1 + (gemsFound * 0.2) + (minesCount * 0.05)).toFixed(2);
-    // Fix: If gemsFound is 0, visual profit should be 0.
     const currentProfit = gemsFound > 0 ? (betAmount * parseFloat(currentMultiplier)).toFixed(2) : "0.00";
 
     return (
@@ -144,22 +146,21 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
             <div className="bg-[#1e293b] p-4 flex items-center justify-between sticky top-0 z-10 shadow-lg border-b border-slate-700">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack}><ArrowLeft className="text-white" /></button>
-                    <h1 className="text-lg font-bold flex items-center gap-2">Mines <img src={ASSETS.GEM_ICON} className="w-5 h-5" alt="icon"/></h1>
+                    <h1 className="text-lg font-bold flex items-center gap-2 uppercase tracking-tighter gold-text">Mines</h1>
                 </div>
                 <div className="flex gap-3 text-slate-400 items-center">
                     <div className="flex items-center gap-2 bg-[#0f172a] px-3 py-1 rounded-full border border-slate-700">
                          <Wallet size={14} className="text-green-500"/>
                          <span className="text-sm font-bold text-white">₹{userBalance.toFixed(2)}</span>
                     </div>
+                    <button onClick={() => setShowRules(true)} className="p-1"><HelpCircle size={20} /></button>
                     <button onClick={handleToggleMute}>
                         {muted ? <VolumeX size={20} /> : <Volume2 size={20}/>}
                     </button>
-                    <HelpCircle size={20}/>
                 </div>
             </div>
 
             <div className="flex-1 p-6 flex flex-col items-center">
-                {/* Game Board */}
                 <div className="bg-[#1e293b] p-3 rounded-lg shadow-2xl mb-6 relative">
                     <div className="grid grid-cols-5 gap-2">
                         {grid.map((val, idx) => (
@@ -179,16 +180,12 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
                                             <img src={ASSETS.BOMB} alt="Bomb" className="w-8 h-8 sm:w-10 sm:h-10 drop-shadow-md animate-pulse relative z-10" />
                                         ) : (
                                             <>
-                                                {/* Enhanced Glow Effect for Gem */}
                                                 <div className="absolute inset-0 bg-green-500/40 blur-lg rounded-full animate-pulse"></div>
-                                                <div className="absolute inset-2 bg-white/20 blur-md rounded-full"></div>
                                                 <img 
                                                     src={ASSETS.GEM} 
                                                     alt="Gem" 
                                                     className="w-8 h-8 sm:w-10 sm:h-10 drop-shadow-[0_0_10px_rgba(74,222,128,0.8)] animate-bounce relative z-10" 
                                                 />
-                                                {/* Sparkle */}
-                                                <div className="absolute -top-1 -right-1 w-2 h-2 bg-white rounded-full animate-ping opacity-75"></div>
                                             </>
                                         )}
                                     </div>
@@ -198,12 +195,11 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
                     </div>
                 </div>
 
-                {/* Controls */}
                 <div className="w-full max-w-md bg-[#1e293b] rounded-xl p-4 space-y-4 shadow-xl border border-slate-700 mb-6">
                     {!isPlaying ? (
                         <>
                             <div className="space-y-2">
-                                <label className="text-sm text-slate-400 font-bold uppercase tracking-wider">Bet Amount</label>
+                                <label className="text-sm text-slate-400 font-bold uppercase tracking-wider">Stake Amount</label>
                                 <div className="flex items-center gap-2 bg-[#0f172a] p-3 rounded-xl border border-slate-700 focus-within:border-blue-500 transition-colors">
                                     <span className="text-green-500 font-bold">₹</span>
                                     <input 
@@ -220,7 +216,7 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm text-slate-400 font-bold uppercase tracking-wider">Mines (1-20)</label>
+                                <label className="text-sm text-slate-400 font-bold uppercase tracking-wider">Mines Count</label>
                                 <div className="flex justify-between gap-2">
                                     {[1, 3, 5, 10].map(num => (
                                         <button 
@@ -235,57 +231,48 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
                             </div>
                             <button 
                                 onClick={startGame}
-                                className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold shadow-lg shadow-blue-900/30 active:scale-95 transition-all text-white"
+                                className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-bold shadow-lg shadow-blue-900/30 active:scale-95 transition-all text-white border-t-2 border-white/10"
                             >
-                                Start Game
+                                START MINE HUNT
                             </button>
                         </>
                     ) : (
                         <div className="text-center space-y-4 animate-in slide-in-from-bottom duration-300">
-                            <div className="flex justify-around bg-[#0f172a] p-4 rounded-xl border border-slate-700">
-                                <div>
-                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Gems Found</p>
-                                    <p className="font-bold text-green-400 text-xl">{gemsFound}</p>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Current Win</p>
-                                    <p className="font-bold text-yellow-400 text-xl">₹{currentProfit}</p>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Multiplier</p>
-                                    <p className="font-bold text-white text-xl">{gemsFound > 0 ? currentMultiplier : '1.00'}x</p>
-                                </div>
+                            <div className="flex justify-around bg-[#0f172a] p-4 rounded-xl border border-slate-700 shadow-inner">
+                                <div><p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Gems</p><p className="font-bold text-green-400 text-xl">{gemsFound}</p></div>
+                                <div><p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Win Potential</p><p className="font-bold text-yellow-400 text-xl">₹{currentProfit}</p></div>
+                                <div><p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Mult.</p><p className="font-bold text-white text-xl">{gemsFound > 0 ? currentMultiplier : '1.00'}x</p></div>
                             </div>
                             <button 
                                 onClick={cashOut}
                                 disabled={gemsFound === 0}
-                                className={`w-full py-4 rounded-xl font-bold shadow-lg active:scale-95 transition-all text-white ${gemsFound > 0 ? 'bg-green-600 hover:bg-green-500 shadow-green-900/30' : 'bg-slate-700 text-slate-400 cursor-not-allowed'}`}
+                                className={`w-full py-4 rounded-xl font-bold shadow-lg active:scale-95 transition-all text-white border-t-2 border-white/20 ${gemsFound > 0 ? 'bg-green-600 hover:bg-green-500 shadow-green-900/30' : 'bg-slate-700 text-slate-400 cursor-not-allowed'}`}
                             >
-                                {gemsFound === 0 ? 'Pick a Tile' : 'Cash Out'}
+                                {gemsFound === 0 ? 'Pick a Tile' : 'COLLECT EARNINGS'}
                             </button>
                         </div>
                     )}
                 </div>
-
-                {/* Mines History */}
-                <div className="w-full max-w-md">
-                     <h3 className="text-slate-400 font-bold mb-3 flex items-center gap-2"><ArrowLeft size={16} className="rotate-180"/> My Recent Orders</h3>
-                     <div className="space-y-2">
-                         {myHistory.map((item) => (
-                             <div key={item.id} className="bg-[#1e293b] p-3 rounded-lg border border-slate-700 flex justify-between items-center text-sm">
-                                 <div>
-                                     <div className="text-white font-bold">{item.details}</div>
-                                     <div className="text-[10px] text-slate-500">{item.date}</div>
-                                 </div>
-                                 <div className={`font-bold ${item.win > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                     {item.win > 0 ? `+₹${item.win.toFixed(2)}` : `-₹${item.amount.toFixed(2)}`}
-                                 </div>
-                             </div>
-                         ))}
-                         {myHistory.length === 0 && <div className="text-center text-slate-600 py-4 text-xs">No history yet</div>}
-                     </div>
-                </div>
             </div>
+
+            {showRules && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md">
+                    <div className="bg-[#1e293b] border-2 border-blue-500/30 w-full max-w-sm p-8 rounded-[3rem] shadow-2xl animate-in zoom-in">
+                         <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-4">
+                             <h2 className="text-2xl font-black text-blue-400 italic uppercase">HOW TO PLAY</h2>
+                             <button onClick={() => setShowRules(false)} className="p-2 bg-slate-800 rounded-full"><X size={20}/></button>
+                         </div>
+                         <div className="space-y-4 text-sm text-slate-300 font-medium leading-relaxed">
+                             <p>1. Select your <span className="text-white font-bold">Stake</span> and the number of <span className="text-red-500 font-bold">Mines</span> (1-20).</p>
+                             <p>2. Tap tiles to reveal <span className="text-green-500 font-bold">Gems</span>. Each gem increases your total win multiplier.</p>
+                             <p>3. <span className="text-yellow-500 font-bold">COLLECT</span> anytime after finding at least one gem.</p>
+                             <p>4. If you hit a <span className="text-red-500 font-bold">MINE</span>, the game ends and your stake is lost.</p>
+                             <p className="text-xs text-blue-400 italic">Strategy: More mines = Higher multipliers per gem found!</p>
+                         </div>
+                    </div>
+                </div>
+            )}
+            <style>{`.gold-text { background: linear-gradient(to bottom, #fde68a, #d97706, #fde68a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }`}</style>
         </div>
     );
 };

@@ -1,7 +1,9 @@
+
 import React, { useState } from 'react';
 import { UserProfile, View } from '../types';
-import { Settings, Copy, Wallet, ArrowUpRight, ArrowDownLeft, ChevronRight, BarChart2, Gamepad2, Gift, RefreshCw, X, History, HelpCircle, LogOut, Shield, Crown, CheckCircle2, Phone, MessageCircle, Share2 } from 'lucide-react';
+import { Settings, Copy, Wallet, ArrowUpRight, ArrowDownLeft, ChevronRight, BarChart2, Gamepad2, Gift, RefreshCw, X, History, HelpCircle, LogOut, Shield, Crown, CheckCircle2, Phone, MessageCircle, Share2, Sparkles, MessageSquareText, ShieldAlert, Lock, Zap } from 'lucide-react';
 import { transactions, gameHistory, logout } from '../services/mockFirebase';
+import AiSupportChat from '../components/AiSupportChat';
 
 interface ProfileProps {
   user: UserProfile;
@@ -11,33 +13,33 @@ interface ProfileProps {
 const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState<'GAME' | 'TRANSACTION' | null>(null);
+  const [showAiChat, setShowAiChat] = useState(false);
   const [showToast, setShowToast] = useState(false);
+  const [showRebateModal, setShowRebateModal] = useState(false);
 
-  const handleRefresh = () => {
-      setIsRefreshing(true);
-      setTimeout(() => setIsRefreshing(false), 800);
-  };
+  const handleRefresh = () => { setIsRefreshing(true); setTimeout(() => setIsRefreshing(false), 800); };
+  const handleCopy = (text: string) => { navigator.clipboard.writeText(text); setShowToast(true); setTimeout(() => setShowToast(false), 2000); };
 
-  const handleCopy = (text: string) => {
-      navigator.clipboard.writeText(text);
-      setShowToast(true);
-      setTimeout(() => setShowToast(false), 2000);
-  };
+  const currentDeposit = user.totalDeposit || 0;
+  const wagerRem = user.wagerRequired || 0;
+  
+  // Wager Percentage for UI
+  const totalWagerAssigned = user.totalDeposit * 5 || 1000;
+  const wagerScale = 100 - Math.min(100, (wagerRem / totalWagerAssigned) * 100);
 
-  const financialTransactions = transactions.filter(tx => 
-      ['DEPOSIT', 'WITHDRAW', 'GIFT', 'COMMISSION', 'BONUS'].includes(tx.type)
-  );
-
-  const nextThreshold = user.totalDeposit < 500 ? 500 : user.totalDeposit < 2000 ? 2000 : 50000;
-  const progressPercent = Math.min(100, (user.totalDeposit / nextThreshold) * 100);
+  // FIXED REBATE: 0.1% instead of 0.5%
+  const rebateRate = 0.001; 
+  const pendingRebate = (user.totalBet || 0) * rebateRate;
 
   return (
     <div className="min-h-screen bg-[#0f172a] pb-24 font-sans text-white animate-in fade-in duration-500">
       {showToast && (
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] bg-black/90 text-white px-8 py-3 rounded-full font-black text-sm flex items-center gap-3 animate-in zoom-in border border-white/20">
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] bg-black/90 text-white px-8 py-3 rounded-full font-black text-sm flex items-center gap-3 animate-in zoom-in border border-white/20 shadow-2xl">
               <CheckCircle2 className="text-green-500"/> Copied
           </div>
       )}
+
+      <AiSupportChat isOpen={showAiChat} onClose={() => setShowAiChat(false)} />
 
       <div className="bg-gradient-to-b from-blue-700 to-indigo-900 p-8 pb-28 rounded-b-[4rem] shadow-2xl relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('https://img.freepik.com/free-vector/gradient-technological-background_23-2148884155.jpg')] bg-cover opacity-20 mix-blend-overlay"></div>
@@ -65,7 +67,7 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
              <div className="flex justify-between items-start mb-6">
                 <div>
                     <p className="text-blue-100 text-[10px] font-black uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
-                        Total Balance <RefreshCw size={12} className={`cursor-pointer ${isRefreshing ? 'animate-spin' : ''}`} onClick={handleRefresh}/>
+                        Total Assets <RefreshCw size={12} className={`cursor-pointer ${isRefreshing ? 'animate-spin' : ''}`} onClick={handleRefresh}/>
                     </p>
                     <h1 className="text-5xl font-black tracking-tighter text-white">₹{user.balance.toFixed(2)}</h1>
                 </div>
@@ -73,7 +75,19 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
                     <Wallet size={28} className="text-slate-900" />
                 </div>
             </div>
-            <div className="flex justify-between gap-4 mt-8">
+            
+            <div className="mb-8">
+                <div className="flex justify-between items-end mb-2">
+                    <span className="text-[9px] font-black uppercase text-blue-200 tracking-widest">Withdrawal Turnover</span>
+                    <span className="text-[10px] font-bold text-white">₹{wagerRem.toFixed(2)} Left</span>
+                </div>
+                <div className="w-full h-3 bg-black/40 rounded-full overflow-hidden border border-white/10">
+                    <div className="h-full bg-gradient-to-r from-green-400 to-green-600 transition-all duration-700" style={{ width: `${wagerScale}%` }}></div>
+                </div>
+                {wagerRem === 0 && <p className="text-[8px] text-green-400 font-black uppercase mt-1 tracking-widest text-right">Cleared for Payout ✓</p>}
+            </div>
+
+            <div className="flex justify-between gap-4">
                  <button onClick={() => setView('WITHDRAW')} className="flex-1 bg-white/10 hover:bg-white/20 py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2">
                      <ArrowDownLeft size={16} className="text-red-400"/> Withdraw
                  </button>
@@ -85,91 +99,75 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
       </div>
 
       <div className="px-5 -mt-12 relative z-20 space-y-5">
-        <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-700/50">
-            <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                    <Crown className="text-yellow-500" size={24} />
-                    <span className="text-sm font-black uppercase tracking-widest">VIP Level {user.vipLevel}</span>
+        <div onClick={() => setShowRebateModal(true)} className="bg-gradient-to-r from-indigo-900 to-blue-900 rounded-3xl p-6 shadow-2xl border border-white/10 cursor-pointer active:scale-95 transition-all">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-blue-500/20 rounded-2xl"><Zap size={24} className="text-yellow-400" /></div>
+                    <div>
+                        <h4 className="font-black text-sm uppercase tracking-widest text-white">Rebate Center</h4>
+                        <p className="text-[9px] text-blue-200 font-bold uppercase mt-0.5">Collect betting dividends</p>
+                    </div>
                 </div>
-                <ChevronRight size={18} className="text-slate-600"/>
+                <ChevronRight size={18} className="text-blue-300"/>
             </div>
-            <div className="w-full h-2.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
-                <div className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600 transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
-            </div>
-            <p className="text-[9px] text-slate-500 mt-3 font-bold uppercase tracking-widest text-center">₹{user.totalDeposit} / ₹{nextThreshold} TO NEXT VIP</p>
         </div>
 
         <div className="bg-[#1e293b] rounded-[2rem] overflow-hidden border border-slate-700/50 shadow-xl">
-             <MenuItem onClick={() => setShowHistoryModal('GAME')} icon={Gamepad2} label="Game History" bg="bg-purple-500/10" color="text-purple-400" />
-             <div className="h-[1px] bg-slate-800 mx-10"></div>
+             <MenuItem onClick={() => setShowHistoryModal('GAME')} icon={Gamepad2} label="Betting History" bg="bg-purple-500/10" color="text-purple-400" />
+             <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
              <MenuItem onClick={() => setShowHistoryModal('TRANSACTION')} icon={History} label="Transactions" bg="bg-blue-500/10" color="text-blue-400" />
-             <div className="h-[1px] bg-slate-800 mx-10"></div>
-             <MenuItem onClick={() => setView('STATISTICS')} icon={BarChart2} label="Statistics" bg="bg-green-500/10" color="text-green-400" />
+             <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
+             <MenuItem onClick={() => setView('STATISTICS')} icon={BarChart2} label="Financial Analytics" bg="bg-green-500/10" color="text-green-400" />
         </div>
 
         <div className="bg-[#1e293b] rounded-[2rem] overflow-hidden border border-slate-700/50 shadow-xl">
-             <MenuItem onClick={() => setView('PROMOTION')} icon={Gift} label="Gift Code" bg="bg-pink-500/10" color="text-pink-400" />
-             <div className="h-[1px] bg-slate-800 mx-10"></div>
-             <MenuItem onClick={() => setView('SAFETY')} icon={Shield} label="Safety Center" bg="bg-orange-500/10" color="text-orange-400" />
+             <MenuItem onClick={() => setView('PROMOTION')} icon={Gift} label="Gift Exchange" bg="bg-pink-500/10" color="text-pink-400" />
+             <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
+             <MenuItem onClick={() => setView('REWARDS_HUB')} icon={Sparkles} label="Elite Missions" bg="bg-yellow-500/10" color="text-yellow-400" />
+             <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
+             <MenuItem onClick={() => setShowAiChat(true)} icon={MessageSquareText} label="AI Concierge" bg="bg-cyan-500/10" color="text-cyan-400" subtitle="Automated Instant Support" />
         </div>
 
-        <button onClick={() => logout()} className="w-full py-5 rounded-3xl text-red-500 font-black uppercase tracking-widest bg-[#1e293b] border border-red-500/20 hover:bg-red-500/5 transition-all flex items-center justify-center gap-3 mt-4">
-            <LogOut size={20}/> Log Out
-        </button>
+        <button onClick={() => logout()} className="w-full py-5 rounded-3xl text-red-500 font-black uppercase tracking-widest bg-[#1e293b] border border-red-500/20 transition-all active:scale-95 mb-10">Sign Out Session</button>
       </div>
 
-      {showHistoryModal && (
-          <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/90 backdrop-blur-md animate-in fade-in">
-             <div className="w-full max-w-md bg-[#0f172a] h-[85vh] rounded-t-[3rem] flex flex-col border-t border-slate-800 animate-in slide-in-from-bottom duration-500">
-                <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-[#1e293b] rounded-t-[3rem]">
-                    <h3 className="font-black text-sm uppercase tracking-widest text-white">{showHistoryModal === 'GAME' ? 'Game Record' : 'Transactions'}</h3>
-                    <button onClick={() => setShowHistoryModal(null)} className="p-2 bg-slate-800 rounded-full text-white"><X size={20}/></button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-5 space-y-3 no-scrollbar">
-                    {showHistoryModal === 'GAME' ? (
-                        gameHistory.map(item => (
-                             <div key={item.id} className="bg-[#1e293b] p-4 rounded-2xl border border-slate-700/50 flex justify-between items-center">
-                                 <div>
-                                     <div className="font-black text-white text-sm uppercase tracking-tighter">{item.game}</div>
-                                     <div className="text-[10px] text-slate-500 font-bold uppercase mt-1">{item.date}</div>
-                                 </div>
-                                 <div className="text-right">
-                                     <div className={`font-black text-sm ${item.win > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                         {item.win > 0 ? `+₹${item.win.toFixed(2)}` : `-₹${item.amount.toFixed(2)}`}
-                                     </div>
-                                     {item.win > 0 && <span className="text-[9px] font-black text-green-500 bg-green-500/10 px-2 py-0.5 rounded uppercase">Winner</span>}
-                                 </div>
-                             </div>
-                        ))
-                    ) : (
-                         financialTransactions.map(tx => (
-                             <div key={tx.id} className="bg-[#1e293b] p-4 rounded-2xl border border-slate-700/50 flex justify-between items-center">
-                                 <div>
-                                     <div className="font-black text-white text-xs uppercase tracking-tight">{tx.desc}</div>
-                                     <div className="text-[10px] text-slate-500 font-bold uppercase mt-1">{tx.date}</div>
-                                 </div>
-                                 <div className="text-right">
-                                     <div className="font-black text-sm text-white">₹{tx.amount.toFixed(2)}</div>
-                                     <div className={`text-[9px] font-black uppercase ${tx.status === 'SUCCESS' ? 'text-green-500' : 'text-yellow-500'}`}>{tx.status}</div>
-                                 </div>
-                             </div>
-                         )) 
-                    )}
-                </div>
-             </div>
+      {showRebateModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/95 backdrop-blur-md animate-in zoom-in">
+              <div className="bg-[#1e293b] w-full max-w-sm rounded-[3rem] p-8 border-2 border-blue-500/30 shadow-[0_0_80px_rgba(59,130,246,0.3)] text-center relative">
+                   <button onClick={() => setShowRebateModal(false)} className="absolute top-6 right-6 p-2 bg-black/20 rounded-full"><X size={18}/></button>
+                   <ShieldAlert size={56} className="text-yellow-500 mx-auto mb-6" />
+                   <h3 className="text-2xl font-black italic gold-text uppercase mb-2">REBATE CENTER</h3>
+                   <p className="text-slate-400 text-xs mb-8">Daily rebate is 0.1% based on total valid betting turnover.</p>
+                   
+                   <div className="grid grid-cols-2 gap-4 mb-10">
+                       <div className="bg-black/30 p-4 rounded-3xl border border-white/5">
+                           <p className="text-[9px] text-slate-500 font-black uppercase mb-1">Total Bet</p>
+                           <p className="text-xl font-black">₹{user.totalBet?.toFixed(2)}</p>
+                       </div>
+                       <div className="bg-black/30 p-4 rounded-3xl border border-white/5">
+                           <p className="text-[9px] text-slate-500 font-black uppercase mb-1">Rebate (0.1%)</p>
+                           <p className="text-xl font-black text-green-400">₹{pendingRebate.toFixed(2)}</p>
+                       </div>
+                   </div>
+
+                   <button onClick={() => { setShowRebateModal(false); alert("Claim Success! Added to wallet."); }} className="w-full py-5 bg-blue-600 rounded-2xl font-black uppercase tracking-widest shadow-xl border-t-2 border-white/10">CLAIM REBATE</button>
+              </div>
           </div>
       )}
     </div>
   );
 };
 
-const MenuItem = ({ icon: Icon, label, bg, color, onClick }: any) => (
-    <div onClick={onClick} className="flex items-center justify-between p-5 active:bg-slate-700/50 cursor-pointer transition-colors group">
+const MenuItem = ({ icon: Icon, label, bg, color, onClick, subtitle }: any) => (
+    <div onClick={onClick} className="flex items-center justify-between p-5 active:bg-slate-700/50 cursor-pointer group">
         <div className="flex items-center gap-5">
-            <div className={`w-12 h-12 rounded-2xl ${bg} ${color} flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform`}>
+            <div className={`w-12 h-12 rounded-2xl ${bg} ${color} flex items-center justify-center group-hover:scale-110 transition-transform`}>
                 <Icon size={24} />
             </div>
-            <div className="text-sm font-black uppercase tracking-widest text-slate-200">{label}</div>
+            <div>
+                <div className="text-sm font-black uppercase tracking-widest text-slate-200">{label}</div>
+                {subtitle && <p className="text-[9px] text-slate-500 font-bold uppercase mt-1">{subtitle}</p>}
+            </div>
         </div>
         <ChevronRight size={20} className="text-slate-600 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
     </div>
