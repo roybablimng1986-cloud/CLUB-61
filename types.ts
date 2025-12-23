@@ -18,7 +18,6 @@ export interface UserProfile {
   invitedBy?: string;
   totalCommission?: number;
   wagerRequired: number;
-  // Binding Status
   isBankBound?: boolean;
   isUpiBound?: boolean;
   isTelegramJoined?: boolean;
@@ -26,10 +25,13 @@ export interface UserProfile {
   upiDetails?: { upiId: string };
 }
 
-export interface RouletteBet {
-    type: 'NUMBER' | 'COLOR' | 'ODD_EVEN' | 'RANGE';
-    value: string | number;
-    amount: number;
+export interface AviatorState {
+  phase: 'WAITING' | 'FLYING' | 'CRASHED';
+  multiplier: number;
+  timeLeft: number;
+  history: number[];
+  crashPoint: number;
+  startTime?: number;
 }
 
 export interface GameResult {
@@ -118,4 +120,10 @@ export interface CommissionItem {
     amount: number;
     date: string;
     type: string;
+}
+
+export interface RouletteBet {
+    type: 'NUMBER' | 'COLOR' | 'ODD_EVEN' | 'RANGE';
+    value: string | number;
+    amount: number;
 }

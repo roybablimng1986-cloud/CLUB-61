@@ -64,7 +64,7 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
             isMounted.current = false;
             unsub();
         };
-    }, [myBets]);
+    }, []);
 
     const handleRevealingSequence = async (state: DragonTigerState) => {
         await new Promise(r => setTimeout(r, 600));
@@ -187,7 +187,7 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
                 <div className="bg-black/40 p-2 flex items-center gap-2 overflow-x-auto no-scrollbar border-b border-white/5 relative z-40">
                     <History size={14} className="text-yellow-500 shrink-0"/>
                     <div className="flex gap-1.5">
-                        {gameState.history.map((h, i) => (
+                        {(gameState.history || []).map((h, i) => (
                             <span key={i} className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black border border-white/10 shrink-0 ${h === 'D' ? 'bg-red-600' : h === 'T' ? 'bg-orange-600' : 'bg-green-600'} text-white shadow-lg`}>{h}</span>
                         ))}
                     </div>

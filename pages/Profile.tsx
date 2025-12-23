@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserProfile, View } from '../types';
 import { Settings, Copy, Wallet, ArrowUpRight, ArrowDownLeft, ChevronRight, BarChart2, Gamepad2, Gift, RefreshCw, X, History, HelpCircle, LogOut, Shield, Crown, CheckCircle2, Phone, MessageCircle, Share2, Sparkles, MessageSquareText, ShieldAlert, Lock, Zap } from 'lucide-react';
-import { transactions, gameHistory, logout } from '../services/mockFirebase';
+import { logout, subscribeToBalance } from '../services/mockFirebase';
 import AiSupportChat from '../components/AiSupportChat';
 
 interface ProfileProps {
@@ -16,20 +16,24 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
   const [showAiChat, setShowAiChat] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [showRebateModal, setShowRebateModal] = useState(false);
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [txData, setTxData] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Load fresh data whenever profile is viewed
+    const h = localStorage.getItem('TIRANGA_HISTORY_' + user.uid);
+    const t = localStorage.getItem('TIRANGA_TX_' + user.uid);
+    setHistoryData(h ? JSON.parse(h) : []);
+    setTxData(t ? JSON.parse(t) : []);
+  }, [showHistoryModal]);
 
   const handleRefresh = () => { setIsRefreshing(true); setTimeout(() => setIsRefreshing(false), 800); };
   const handleCopy = (text: string) => { navigator.clipboard.writeText(text); setShowToast(true); setTimeout(() => setShowToast(false), 2000); };
 
-  const currentDeposit = user.totalDeposit || 0;
   const wagerRem = user.wagerRequired || 0;
-  
-  // Wager Percentage for UI
-  const totalWagerAssigned = user.totalDeposit * 5 || 1000;
+  const totalWagerAssigned = user.totalDeposit * 1 || 1000;
   const wagerScale = 100 - Math.min(100, (wagerRem / totalWagerAssigned) * 100);
-
-  // FIXED REBATE: 0.1% instead of 0.5%
-  const rebateRate = 0.001; 
-  const pendingRebate = (user.totalBet || 0) * rebateRate;
+  const pendingRebate = (user.totalBet || 0) * 0.001;
 
   return (
     <div className="min-h-screen bg-[#0f172a] pb-24 font-sans text-white animate-in fade-in duration-500">
@@ -78,13 +82,12 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
             
             <div className="mb-8">
                 <div className="flex justify-between items-end mb-2">
-                    <span className="text-[9px] font-black uppercase text-blue-200 tracking-widest">Withdrawal Turnover</span>
+                    <span className="text-[9px] font-black uppercase text-blue-200 tracking-widest">Turnover Process</span>
                     <span className="text-[10px] font-bold text-white">₹{wagerRem.toFixed(2)} Left</span>
                 </div>
                 <div className="w-full h-3 bg-black/40 rounded-full overflow-hidden border border-white/10">
                     <div className="h-full bg-gradient-to-r from-green-400 to-green-600 transition-all duration-700" style={{ width: `${wagerScale}%` }}></div>
                 </div>
-                {wagerRem === 0 && <p className="text-[8px] text-green-400 font-black uppercase mt-1 tracking-widest text-right">Cleared for Payout ✓</p>}
             </div>
 
             <div className="flex justify-between gap-4">
@@ -130,6 +133,58 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
 
         <button onClick={() => logout()} className="w-full py-5 rounded-3xl text-red-500 font-black uppercase tracking-widest bg-[#1e293b] border border-red-500/20 transition-all active:scale-95 mb-10">Sign Out Session</button>
       </div>
+
+      {showHistoryModal && (
+          <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/95 backdrop-blur-md animate-in fade-in">
+              <div className="bg-[#1e293b] w-full max-w-md h-[85vh] rounded-t-[3rem] p-6 flex flex-col border-t border-slate-700 shadow-2xl animate-in slide-in-from-bottom duration-500">
+                  <div className="flex justify-between items-center mb-8 border-b border-slate-800 pb-6">
+                      <h3 className="text-white font-black text-sm uppercase tracking-widest gold-text">
+                        {showHistoryModal === 'GAME' ? 'Betting Archive' : 'Financial Ledger'}
+                      </h3>
+                      <button onClick={() => setShowHistoryModal(null)} className="p-3 bg-slate-800 rounded-full"><X className="text-slate-400" size={20}/></button>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 pb-10">
+                      {showHistoryModal === 'GAME' ? (
+                          historyData.length > 0 ? historyData.map((item, i) => (
+                              <div key={i} className="bg-black/20 p-4 rounded-2xl border border-white/5 flex justify-between items-center">
+                                  <div>
+                                      <div className="text-xs font-black text-white uppercase tracking-tighter">{item.game}</div>
+                                      <div className="text-[9px] text-slate-500 font-bold mt-0.5">{item.date}</div>
+                                  </div>
+                                  <div className="text-right">
+                                      <div className={`text-sm font-black ${item.win > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                          {item.win > 0 ? `+₹${item.win.toFixed(2)}` : `-₹${item.amount.toFixed(2)}`}
+                                      </div>
+                                      <div className="text-[8px] text-slate-600 font-black uppercase tracking-tight italic">{item.details}</div>
+                                  </div>
+                              </div>
+                          )) : <div className="text-center py-20 text-slate-600 font-black uppercase text-xs italic tracking-widest">No Logs Found</div>
+                      ) : (
+                          txData.length > 0 ? txData.map((tx, i) => (
+                              <div key={i} className="bg-black/20 p-4 rounded-2xl border border-white/5 flex justify-between items-center">
+                                  <div className="flex items-center gap-3">
+                                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${['DEPOSIT','WIN','BONUS','GIFT'].includes(tx.type) ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+                                          {['DEPOSIT','WIN','BONUS','GIFT'].includes(tx.type) ? <ArrowUpRight size={20}/> : <ArrowDownLeft size={20}/>}
+                                      </div>
+                                      <div>
+                                          <div className="text-xs font-black text-white uppercase tracking-tighter">{tx.desc}</div>
+                                          <div className="text-[9px] text-slate-500 font-bold mt-0.5">{tx.date}</div>
+                                      </div>
+                                  </div>
+                                  <div className="text-right">
+                                      <div className={`text-sm font-black ${['DEPOSIT','WIN','BONUS','GIFT'].includes(tx.type) ? 'text-green-500' : 'text-red-500'}`}>
+                                          {['DEPOSIT','WIN','BONUS','GIFT'].includes(tx.type) ? '+' : '-'}₹{tx.amount.toFixed(2)}
+                                      </div>
+                                      <div className={`text-[8px] font-black uppercase tracking-widest ${tx.status === 'SUCCESS' ? 'text-green-500' : 'text-yellow-500'}`}>{tx.status}</div>
+                                  </div>
+                              </div>
+                          )) : <div className="text-center py-20 text-slate-600 font-black uppercase text-xs italic tracking-widest">No Transactions</div>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
 
       {showRebateModal && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/95 backdrop-blur-md animate-in zoom-in">

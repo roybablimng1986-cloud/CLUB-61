@@ -24,8 +24,8 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
 
     // Device Management Dummy State
     const [devices, setDevices] = useState([
-        { id: 1, name: 'Current Device', type: 'mobile', status: 'Online', lastActive: 'Now' },
-        { id: 2, name: 'Android 13 - Chrome', type: 'mobile', status: 'Offline', lastActive: '2 days ago' }
+        { id: 1, name: 'Current Session', type: 'mobile', status: 'Online', lastActive: 'Now' },
+        { id: 2, name: 'Chrome - Linux', type: 'laptop', status: 'Offline', lastActive: '3 hours ago' }
     ]);
 
     const handleSetWithdrawPassword = () => {
@@ -39,7 +39,7 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
         }
         const success = setWithdrawalPassword(newWithdrawPassword);
         if (success) {
-            setMsg('Password set successfully!');
+            setMsg('Security PIN set successfully!');
             setTimeout(() => {
                 setShowWithdrawPasswordModal(false);
                 setMsg('');
@@ -55,23 +55,23 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
 
     return (
         <div className="bg-[#0f172a] min-h-screen font-sans text-white">
-            <div className="bg-[#1e293b] p-4 flex items-center gap-4 border-b border-slate-700">
-                <button onClick={() => setView('ACCOUNT')}><ArrowLeft className="text-white" /></button>
-                <h1 className="text-lg font-bold text-white">Safety Center</h1>
+            <div className="bg-[#1e293b] p-4 flex items-center gap-4 border-b border-slate-700 shadow-lg">
+                <button onClick={() => setView('ACCOUNT')} className="p-2 bg-slate-800 rounded-xl"><ArrowLeft className="text-white" /></button>
+                <h1 className="text-lg font-black uppercase gold-text italic tracking-widest">Safety Hub</h1>
             </div>
 
             <div className="p-4 space-y-4">
                 <div className="bg-[#1e293b] rounded-xl overflow-hidden border border-slate-700/50 shadow-lg">
                     <div onClick={() => setShowLoginPasswordModal(true)}>
-                        <MenuItem icon={Key} label="Login Password" subtitle="Check your active security key" />
+                        <MenuItem icon={Key} label="Login Credentials" subtitle="Active account security key" />
                     </div>
                     <div className="h-[1px] bg-slate-700/50 mx-14"></div>
                     <div onClick={() => setShowWithdrawPasswordModal(true)}>
                         <MenuItem 
                             icon={ShieldCheck} 
                             label="Withdrawal PIN" 
-                            subtitle={isWithdrawPasswordSet ? "PIN is active" : "Required for cashouts"} 
-                            value={isWithdrawPasswordSet ? "Set" : "Action Needed"}
+                            subtitle={isWithdrawPasswordSet ? "Security PIN is active" : "Verification required for cashouts"} 
+                            value={isWithdrawPasswordSet ? "SECURED" : "SETUP"}
                             color={isWithdrawPasswordSet ? "text-green-500" : "text-yellow-500"}
                         />
                     </div>
@@ -79,7 +79,7 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
 
                 <div className="bg-[#1e293b] rounded-xl overflow-hidden border border-slate-700/50">
                      <div onClick={() => setShowDeviceModal(true)}>
-                        <MenuItem icon={Smartphone} label="Connected Devices" subtitle="Session Management" />
+                        <MenuItem icon={Smartphone} label="Connected Devices" subtitle="Session and device management" />
                      </div>
                 </div>
             </div>
@@ -89,7 +89,7 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in">
                     <div className="bg-[#1e293b] w-full max-w-sm rounded-[2rem] p-8 border border-slate-700 shadow-2xl relative overflow-hidden">
                         <div className="flex justify-between items-center mb-8">
-                            <h3 className="text-white font-black text-sm uppercase tracking-widest">Setup Secure PIN</h3>
+                            <h3 className="text-white font-black text-sm uppercase tracking-widest gold-text">Setup Secure PIN</h3>
                             <button onClick={() => setShowWithdrawPasswordModal(false)} className="p-2 hover:bg-slate-800 rounded-full transition-colors"><X className="text-slate-400" size={18}/></button>
                         </div>
                         
@@ -98,9 +98,9 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
                                 <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border-2 border-green-500/30">
                                     <ShieldCheck size={40} className="text-green-500"/>
                                 </div>
-                                <h4 className="text-white font-black text-xl mb-3">Security Active</h4>
+                                <h4 className="text-white font-black text-xl mb-3">Verified Active</h4>
                                 <p className="text-slate-400 text-sm leading-relaxed px-4">
-                                    Your 6-digit withdrawal PIN is already configured and verified.
+                                    Your withdrawal PIN is encrypted and active. It will be required for all future cashouts.
                                 </p>
                             </div>
                         ) : (
@@ -139,7 +139,7 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
                                     onClick={handleSetWithdrawPassword}
                                     className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all mt-4"
                                 >
-                                    Activate PIN
+                                    Activate Security PIN
                                 </button>
                             </div>
                         )}
@@ -151,11 +151,11 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in">
                     <div className="bg-[#1e293b] w-full max-w-sm rounded-[2rem] p-8 border border-slate-700 shadow-2xl">
                         <div className="flex justify-between items-center mb-8">
-                            <h3 className="text-white font-black text-sm uppercase tracking-widest">Active Credentials</h3>
+                            <h3 className="text-white font-black text-sm uppercase tracking-widest gold-text">Security Vault</h3>
                             <button onClick={() => setShowLoginPasswordModal(false)} className="p-2 hover:bg-slate-800 rounded-full"><X className="text-slate-400" size={18}/></button>
                         </div>
                         <div className="bg-[#0f172a] p-8 rounded-3xl border border-slate-800 text-center shadow-inner">
-                            <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-3">Your Security Key</p>
+                            <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-3">Your Login Password</p>
                             <h2 className="text-3xl font-mono font-black text-blue-400 tracking-wider">{user.password}</h2>
                         </div>
                     </div>
@@ -166,7 +166,7 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center z-[100] animate-in fade-in">
                     <div className="bg-[#1e293b] w-full max-w-md h-[70vh] rounded-t-[3rem] flex flex-col border-t border-slate-700 shadow-2xl animate-in slide-in-from-bottom duration-300">
                         <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-[#1e293b] rounded-t-[3rem]">
-                            <h3 className="font-black text-sm uppercase tracking-widest text-white">Device History</h3>
+                            <h3 className="font-black text-sm uppercase tracking-widest text-white gold-text">Active Sessions</h3>
                             <button onClick={() => setShowDeviceModal(false)} className="p-3 bg-slate-800 rounded-full hover:bg-slate-700"><X size={20} className="text-slate-400"/></button>
                         </div>
                         
@@ -190,7 +190,7 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
                                             onClick={() => handleRemoveDevice(device.id)}
                                             className="px-4 py-2 bg-red-600/10 text-red-500 text-[10px] font-black uppercase rounded-xl border border-red-500/20 active:scale-90"
                                         >
-                                            Logout
+                                            Sign Out
                                         </button>
                                     )}
                                 </div>

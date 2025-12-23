@@ -5,7 +5,7 @@ import { submitDepositRequest } from '../services/mockFirebase';
 
 const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [step, setStep] = useState(1);
-    const [amount, setAmount] = useState(500);
+    const [amount, setAmount] = useState(50);
     const [method, setMethod] = useState<'UPI' | 'PhonePe'>('UPI');
     const [utr, setUtr] = useState('');
     const [error, setError] = useState('');
@@ -51,9 +51,9 @@ const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    <h3 className="text-[10px] font-black text-slate-500 mb-4 uppercase tracking-[0.3em]">Elite Amounts</h3>
+                    <h3 className="text-[10px] font-black text-slate-500 mb-4 uppercase tracking-[0.3em]">Elite Amounts (Min ₹50)</h3>
                     <div className="grid grid-cols-3 gap-3 mb-6">
-                        {[500, 1000, 2000, 5000, 10000, 50000].map(a => (
+                        {[50, 100, 500, 1000, 5000, 10000].map(a => (
                             <button key={a} onClick={() => setAmount(a)} className={`py-4 rounded-2xl font-black text-sm transition-all border ${amount === a ? 'bg-blue-600 border-white text-white' : 'bg-[#1e293b] border-slate-800 text-slate-400'}`}>₹{a}</button>
                         ))}
                     </div>
@@ -63,7 +63,12 @@ const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         <input type="number" value={amount} onChange={(e) => setAmount(Number(e.target.value))} className="bg-transparent w-full outline-none font-black text-3xl" placeholder="Custom"/>
                     </div>
 
-                    <button onClick={() => setStep(2)} className="w-full bg-gradient-to-r from-blue-600 to-blue-500 py-6 rounded-3xl font-black text-lg shadow-2xl active:scale-95 transition-all uppercase tracking-[0.4em] border-t-2 border-white/20">CONTINUE</button>
+                    <button 
+                        onClick={() => amount >= 50 ? setStep(2) : alert("Min deposit is ₹50")} 
+                        className="w-full bg-gradient-to-r from-blue-600 to-blue-500 py-6 rounded-3xl font-black text-lg shadow-2xl active:scale-95 transition-all uppercase tracking-[0.4em] border-t-2 border-white/20"
+                    >
+                        CONTINUE
+                    </button>
                 </div>
             )}
 
@@ -102,7 +107,7 @@ const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         <CheckCircle2 size={64} className="text-green-500" />
                     </div>
                     <h2 className="text-3xl font-black italic gold-text uppercase tracking-tighter mb-4">LOGGED TO LEDGER</h2>
-                    <p className="text-slate-400 text-sm mb-12 px-8">Your refill for <span className="text-white font-bold">₹{amount}</span> is being verified. 5x wager requirement applied.</p>
+                    <p className="text-slate-400 text-sm mb-12 px-8">Your refill for <span className="text-white font-bold">₹{amount}</span> is being verified. 1x wager requirement applied.</p>
                     <button onClick={onBack} className="w-full bg-blue-600 py-5 rounded-3xl font-black text-white shadow-xl uppercase tracking-widest">DONE</button>
                 </div>
             )}

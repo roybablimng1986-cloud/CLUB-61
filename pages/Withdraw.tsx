@@ -100,7 +100,6 @@ const Withdraw: React.FC<Props> = ({ onBack, userBalance }) => {
                     </div>
                 </div>
 
-                {/* Bound Detail Snapshot */}
                 <div className="bg-black/40 border-2 border-white/5 rounded-3xl p-6 shadow-inner">
                     <div className="flex justify-between items-center mb-4">
                         <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Linked Channel</h4>
@@ -130,7 +129,7 @@ const Withdraw: React.FC<Props> = ({ onBack, userBalance }) => {
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 gap-6">
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase text-slate-500 ml-4 tracking-widest">Withdrawal Amount</label>
+                            <label className="text-[10px] font-black uppercase text-slate-500 ml-4 tracking-widest">Withdrawal Amount (Min ₹110)</label>
                             <div className="bg-[#111827] border-2 border-slate-800 rounded-3xl p-5 flex items-center gap-4 shadow-inner focus-within:border-blue-500 transition-colors">
                                 <span className="text-yellow-500 font-black text-2xl">₹</span>
                                 <input 
@@ -172,7 +171,7 @@ const Withdraw: React.FC<Props> = ({ onBack, userBalance }) => {
                         Confirm Payout
                     </button>
                     
-                    <p className="text-center text-[9px] text-slate-600 uppercase font-black tracking-widest px-8 leading-relaxed">Bound accounts cannot be changed. All withdrawals are final once verified on the blockchain.</p>
+                    <p className="text-center text-[9px] text-slate-600 uppercase font-black tracking-widest px-8 leading-relaxed">Bound accounts cannot be changed. All withdrawals are final once verified.</p>
                 </div>
             </div>
         </div>

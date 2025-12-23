@@ -31,11 +31,15 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
     
     const isMounted = useRef(true);
 
+    /* Fixed getGameHistory call: it requires a callback and returns an unsubscribe function */
     useEffect(() => {
         isMounted.current = true;
-        setMyHistory(getGameHistory('Mines').slice(0, 10));
+        const unsubHistory = getGameHistory('Mines', (data) => {
+            if(isMounted.current) setMyHistory(data.slice(0, 10));
+        });
         return () => {
             isMounted.current = false;
+            unsubHistory();
             stopAllSounds();
         };
     }, []);
@@ -132,10 +136,9 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
         });
     };
 
+    /* Fixed updateHistoryLocal: Real-time listeners in mockFirebase now handle syncing automatically. */
     const updateHistoryLocal = () => {
-        setTimeout(() => {
-            if (isMounted.current) setMyHistory(getGameHistory('Mines').slice(0, 10));
-        }, 500);
+        // Automatically handled by getGameHistory snapshot listener in useEffect
     }
 
     const currentMultiplier = (1 + (gemsFound * 0.2) + (minesCount * 0.05)).toFixed(2);

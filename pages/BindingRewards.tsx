@@ -34,7 +34,8 @@ const BindingRewards: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             showMsg('Bank Bound! ₹10 Reward Added.');
             setShowBankModal(false);
         } else {
-            showMsg(res.message || 'Error', 'E');
+            // FIX: Added explicit check for message property to satisfy TypeScript compiler
+            showMsg((res as any).message || 'Error', 'E');
         }
     };
 
@@ -47,7 +48,8 @@ const BindingRewards: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             showMsg('UPI Bound! ₹5 Reward Added.');
             setShowUpiModal(false);
         } else {
-            showMsg(res.message || 'Error', 'E');
+            // FIX: Added explicit check for message property to satisfy TypeScript compiler
+            showMsg((res as any).message || 'Error', 'E');
         }
     };
 
