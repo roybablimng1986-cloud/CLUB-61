@@ -38,7 +38,8 @@ const SlotMachine: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     if (isSpinning || userBalance < betAmount) return;
 
     setIsSpinning(true);
-    playSound('spin');
+    // FIX: Changed invalid sound name 'spin' to 'slot_reel'
+    playSound('slot_reel');
     updateBalance(-betAmount, 'BET', 'Slot Machine Spin');
 
     let count = 0;

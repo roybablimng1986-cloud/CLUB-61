@@ -28,7 +28,8 @@ const StreetRace: React.FC<{ onBack: () => void; userBalance: number; onResult: 
     if (!selectedBike || userBalance < betAmount) return;
     updateBalance(-betAmount, 'BET', 'Street Race Stake');
     setGameState('RACING');
-    playSound('spin');
+    // FIX: Changed invalid sound name 'spin' to 'race_rev'
+    playSound('race_rev');
     setProgress([0, 0, 0, 0]);
 
     const interval = setInterval(() => {

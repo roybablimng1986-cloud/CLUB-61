@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { UserProfile, View } from '../types';
-import { Settings, Copy, Wallet, ArrowUpRight, ArrowDownLeft, ChevronRight, BarChart2, Gamepad2, Gift, RefreshCw, X, History, HelpCircle, LogOut, Shield, Crown, CheckCircle2, Phone, MessageCircle, Share2, Sparkles, MessageSquareText, ShieldAlert, Lock, Zap } from 'lucide-react';
-import { logout, subscribeToBalance } from '../services/mockFirebase';
+import { UserProfile, View, Transaction, GameHistoryItem } from '../types';
+import { Settings, Copy, Wallet, ArrowUpRight, ArrowDownLeft, ChevronRight, BarChart2, Gamepad2, Gift, RefreshCw, X, History, HelpCircle, LogOut, Shield, Crown, CheckCircle2, Phone, MessageCircle, Share2, Sparkles, MessageSquareText, ShieldAlert, Lock, Zap, Star } from 'lucide-react';
+import { logout, subscribeToBalance, getGameHistory, getTransactionHistory } from '../services/mockFirebase';
 import AiSupportChat from '../components/AiSupportChat';
 
 interface ProfileProps {
@@ -16,24 +16,58 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
   const [showAiChat, setShowAiChat] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [showRebateModal, setShowRebateModal] = useState(false);
-  const [historyData, setHistoryData] = useState<any[]>([]);
-  const [txData, setTxData] = useState<any[]>([]);
+  const [historyData, setHistoryData] = useState<GameHistoryItem[]>([]);
+  const [txData, setTxData] = useState<Transaction[]>([]);
 
   useEffect(() => {
-    // Load fresh data whenever profile is viewed
-    const h = localStorage.getItem('TIRANGA_HISTORY_' + user.uid);
-    const t = localStorage.getItem('TIRANGA_TX_' + user.uid);
-    setHistoryData(h ? JSON.parse(h) : []);
-    setTxData(t ? JSON.parse(t) : []);
+    let unsubG: any, unsubT: any;
+    if (showHistoryModal === 'GAME') unsubG = getGameHistory('ALL', (data) => setHistoryData(data));
+    if (showHistoryModal === 'TRANSACTION') unsubT = getTransactionHistory((data) => setTxData(data));
+    return () => { if(unsubG) unsubG(); if(unsubT) unsubT(); };
   }, [showHistoryModal]);
 
   const handleRefresh = () => { setIsRefreshing(true); setTimeout(() => setIsRefreshing(false), 800); };
   const handleCopy = (text: string) => { navigator.clipboard.writeText(text); setShowToast(true); setTimeout(() => setShowToast(false), 2000); };
 
-  const wagerRem = user.wagerRequired || 0;
-  const totalWagerAssigned = user.totalDeposit * 1 || 1000;
-  const wagerScale = 100 - Math.min(100, (wagerRem / totalWagerAssigned) * 100);
+  // WAGER PROGRESS LOGIC
+  const totalWagerAssigned = (user.totalDeposit || 0) * 6.8 || 0;
+  const currentWagerLeft = user.wagerRequired || 0;
+  
+  let wagerScale = 0;
+  if (totalWagerAssigned > 0) {
+      const completed = Math.max(0, totalWagerAssigned - currentWagerLeft);
+      wagerScale = Math.min(100, (completed / totalWagerAssigned) * 100);
+  } else if (currentWagerLeft === 0) {
+      wagerScale = 100;
+  }
+  
   const pendingRebate = (user.totalBet || 0) * 0.001;
+
+  const vipThresholds = [
+      { lv: 1, amount: 500, name: 'Bronze' },
+      { lv: 2, amount: 2000, name: 'Silver' },
+      { lv: 3, amount: 50000, name: 'Gold' },
+      { lv: 4, amount: 100000, name: 'Platinum' },
+      { lv: 5, amount: 400000, name: 'Diamond' }
+  ];
+
+  const getVIPBadge = (lv: number) => {
+      const badges = [
+          { name: 'Elite', color: 'bg-zinc-700', icon: Shield },
+          { name: 'Bronze', color: 'bg-orange-800', icon: Star },
+          { name: 'Silver', color: 'bg-slate-400', icon: Shield },
+          { name: 'Gold', color: 'bg-yellow-500', icon: Crown },
+          { name: 'Platinum', color: 'bg-blue-400', icon: Sparkles },
+          { name: 'Diamond', color: 'bg-purple-600', icon: Zap }
+      ];
+      const b = badges[lv] || badges[0];
+      return (
+          <div className={`${b.color} px-3 py-1 rounded-full flex items-center gap-1.5 border border-white/20 shadow-lg`}>
+              <b.icon size={12} className="text-white fill-white" />
+              <span className="text-[10px] font-black uppercase text-white tracking-tighter">{b.name} Lv.{lv}</span>
+          </div>
+      );
+  };
 
   return (
     <div className="min-h-screen bg-[#0f172a] pb-24 font-sans text-white animate-in fade-in duration-500">
@@ -57,10 +91,11 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
                     </div>
                 </div>
                 <div>
+                    <div className="mb-2">{getVIPBadge(user.vipLevel || 0)}</div>
                     <h2 className="text-2xl font-black text-white italic tracking-tighter">{user.username}</h2>
-                    <div className="flex items-center gap-2 mt-2">
-                        <span className="text-blue-100 text-[10px] font-black bg-black/30 px-3 py-1 rounded-full border border-white/10 uppercase tracking-widest">UID: {user.uid.slice(-8)}</span>
-                        <Copy size={12} className="text-blue-300 cursor-pointer" onClick={() => handleCopy(user.uid)} />
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="text-blue-300 text-[9px] font-bold font-mono">ID: {user.uid.slice(-6)}</span>
+                        <Copy size={12} className="text-blue-400 cursor-pointer" onClick={() => handleCopy(user.uid)} />
                     </div>
                 </div>
            </div>
@@ -82,12 +117,13 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
             
             <div className="mb-8">
                 <div className="flex justify-between items-end mb-2">
-                    <span className="text-[9px] font-black uppercase text-blue-200 tracking-widest">Turnover Process</span>
-                    <span className="text-[10px] font-bold text-white">₹{wagerRem.toFixed(2)} Left</span>
+                    <span className="text-[9px] font-black uppercase text-blue-200 tracking-widest">Wager Progress</span>
+                    <span className="text-[10px] font-bold text-white">₹{currentWagerLeft.toFixed(0)} Remaining</span>
                 </div>
-                <div className="w-full h-3 bg-black/40 rounded-full overflow-hidden border border-white/10">
+                <div className="w-full h-3 bg-black/40 rounded-full overflow-hidden border border-white/10 shadow-inner">
                     <div className="h-full bg-gradient-to-r from-green-400 to-green-600 transition-all duration-700" style={{ width: `${wagerScale}%` }}></div>
                 </div>
+                <p className="text-[8px] text-slate-500 font-bold uppercase mt-2 text-right">Completion: {wagerScale.toFixed(1)}%</p>
             </div>
 
             <div className="flex justify-between gap-4">
@@ -102,6 +138,24 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
       </div>
 
       <div className="px-5 -mt-12 relative z-20 space-y-5">
+        {/* VIP Level Details Section */}
+        <div className="bg-[#1e293b] rounded-[2rem] p-6 shadow-xl border border-slate-700/50">
+            <h3 className="text-xs font-black uppercase tracking-widest text-yellow-500 mb-4 flex items-center gap-2">
+                <Star size={14} className="fill-yellow-500" /> VIP Level Privileges
+            </h3>
+            <div className="space-y-3">
+                {vipThresholds.map((v) => (
+                    <div key={v.lv} className={`flex justify-between items-center p-3 rounded-xl border ${user.vipLevel >= v.lv ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-[10px] font-black">LV{v.lv}</div>
+                            <span className="text-xs font-bold text-slate-200">{v.name} Elite</span>
+                        </div>
+                        <span className="text-xs font-mono font-black text-yellow-500">₹{v.amount.toLocaleString()}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+
         <div onClick={() => setShowRebateModal(true)} className="bg-gradient-to-r from-indigo-900 to-blue-900 rounded-3xl p-6 shadow-2xl border border-white/10 cursor-pointer active:scale-95 transition-all">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -120,13 +174,11 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
              <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
              <MenuItem onClick={() => setShowHistoryModal('TRANSACTION')} icon={History} label="Transactions" bg="bg-blue-500/10" color="text-blue-400" />
              <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
-             <MenuItem onClick={() => setView('STATISTICS')} icon={BarChart2} label="Financial Analytics" bg="bg-green-500/10" color="text-green-400" />
+             <MenuItem onClick={() => setView('REWARDS_HUB')} icon={Sparkles} label="Rewards Hub" bg="bg-yellow-500/10" color="text-yellow-400" subtitle="Bind bank and upi for rewards" />
         </div>
 
         <div className="bg-[#1e293b] rounded-[2rem] overflow-hidden border border-slate-700/50 shadow-xl">
              <MenuItem onClick={() => setView('PROMOTION')} icon={Gift} label="Gift Exchange" bg="bg-pink-500/10" color="text-pink-400" />
-             <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
-             <MenuItem onClick={() => setView('REWARDS_HUB')} icon={Sparkles} label="Elite Missions" bg="bg-yellow-500/10" color="text-yellow-400" />
              <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
              <MenuItem onClick={() => setShowAiChat(true)} icon={MessageSquareText} label="AI Concierge" bg="bg-cyan-500/10" color="text-cyan-400" subtitle="Automated Instant Support" />
         </div>
@@ -141,7 +193,7 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
                       <h3 className="text-white font-black text-sm uppercase tracking-widest gold-text">
                         {showHistoryModal === 'GAME' ? 'Betting Archive' : 'Financial Ledger'}
                       </h3>
-                      <button onClick={() => setShowHistoryModal(null)} className="p-3 bg-slate-800 rounded-full"><X className="text-slate-400" size={20}/></button>
+                      <button onClick={() => setShowHistoryModal(null)} className="p-3 bg-slate-800 rounded-full"><X size={20} className="text-slate-400"/></button>
                   </div>
                   
                   <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 pb-10">

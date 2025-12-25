@@ -30,7 +30,8 @@ const EgyptSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
     if (spinning || userBalance < bet) return;
     updateBalance(-bet, 'BET', 'Egyptian Gold');
     setSpinning(true);
-    playSound('spin');
+    // FIX: Changed invalid sound name 'spin' to 'slot_reel'
+    playSound('slot_reel');
 
     let count = 0;
     const interval = setInterval(() => {

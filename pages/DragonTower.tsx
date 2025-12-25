@@ -37,7 +37,8 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
     if (gameState !== 'PLAYING') return;
     setGameState('REVEALING');
     setRevealedIdx(idx);
-    playSound('tick');
+    // FIX: Changed invalid sound name 'tick' to 'tower_step'
+    playSound('tower_step');
     await new Promise(r => setTimeout(r, 800));
     
     const trapIdx = gridData[currentLv + 1];
@@ -91,7 +92,7 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
               </div>
               <h2 className="text-5xl font-black italic gold-text uppercase mb-2">WASTED</h2>
               <p className="text-red-400 font-bold tracking-widest mb-10">YOU HIT THE FIRE</p>
-              <div className="bg-black/40 px-10 py-4 rounded-2xl border border-red-500/30 mb-10">
+              <div className="bg-black/40 px-10 py-4 rounded-2xl border border-red-500/30 mb-10 text-center">
                   <p className="text-[10px] text-red-500 font-black uppercase text-center mb-1">Loss</p>
                   <p className="text-3xl font-black text-white">₹{bet.toFixed(2)}</p>
               </div>

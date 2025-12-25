@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Wallet as WalletIcon, ArrowUpRight, ArrowDownLeft, History, X, CheckCircle2 } from 'lucide-react';
-import { transactions, approveTransaction } from '../services/mockFirebase';
+// FIX: Switched from invalid 'transactions' import to 'getTransactionHistory' listener function
+import { getTransactionHistory, approveTransaction } from '../services/mockFirebase';
 import { View, Transaction } from '../types';
 
 interface WalletProps {
@@ -11,6 +12,16 @@ interface WalletProps {
 
 const Wallet: React.FC<WalletProps> = ({ setView, userBalance }) => {
     const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+    // FIX: Added state to store transaction data locally after fetching from Firebase
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+    // FIX: Set up reactive subscription to the user's transaction history on mount
+    useEffect(() => {
+        const unsub = getTransactionHistory((data) => {
+            setTransactions(data);
+        });
+        return () => { if (unsub) unsub(); };
+    }, []);
 
     // Filter out game logic (BET and WIN) from Wallet history as requested
     const financialTransactions = transactions.filter(tx => 

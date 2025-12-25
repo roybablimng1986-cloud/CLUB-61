@@ -9,7 +9,7 @@ const LEVELS = [1.5, 3.2, 6.8, 14.5, 32.0, 75.0, 200.0, 500.0];
 const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
   const [bet, setBet] = useState(10);
   const [currentLv, setCurrentLv] = useState(-1);
-  const [gameState, setGameState] = useState<'IDLE' | 'PLAYING' | 'REVEALING' | 'LOST'>('IDLE');
+  const [gameState, setGameState] = useState<'IDLE' | 'PLAYING' | 'REVEALING' | 'LOST' | 'WON'>('IDLE');
   const [showRules, setShowRules] = useState(false);
   const [revealedIdx, setRevealedIdx] = useState<number | null>(null);
 
@@ -26,7 +26,8 @@ const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
     if (gameState !== 'PLAYING') return;
     setGameState('REVEALING');
     setRevealedIdx(idx);
-    playSound('tick');
+    // FIX: Changed invalid sound name 'tick' to 'tower_step'
+    playSound('tower_step');
 
     await new Promise(r => setTimeout(r, 800));
 
@@ -102,7 +103,7 @@ const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
                     <span className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Current Win Potential</span>
                     <h3 className="text-3xl font-black gold-text">₹{(bet * (currentLv === -1 ? 1 : LEVELS[currentLv])).toFixed(2)}</h3>
                 </div>
-                <button onClick={() => cashout()} disabled={currentLv === -1 || gameState === 'REVEALING'} className={`w-full py-5 rounded-[2rem] font-black text-xl shadow-xl transition-all ${currentLv === -1 ? 'bg-slate-800 text-slate-600' : 'bg-yellow-500 text-black shadow-yellow-500/20'}`}>
+                <button onClick={() => cashout()} disabled={currentLv === -1 || gameState === 'REVEALING'} className={`w-full py-5 rounded-[2rem] font-black text-xl shadow-xl transition-all ${currentLv === -1 ? 'bg-zinc-800 text-zinc-600' : 'bg-yellow-500 text-black shadow-yellow-500/40 border-t-2 border-white/30'}`}>
                     {currentLv === -1 ? 'PICK A FLOOR' : `CASH OUT`}
                 </button>
             </div>
@@ -110,10 +111,10 @@ const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
       </div>
 
       {showRules && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-              <div className="bg-slate-900 border border-indigo-500/30 w-full max-w-sm p-8 rounded-[2.5rem] shadow-2xl">
-                   <div className="flex justify-between items-center mb-8">
-                       <h2 className="text-2xl font-black italic gold-text">TOWER RULES</h2>
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+              <div className="bg-slate-900 border border-indigo-500/30 w-full max-w-sm p-6 rounded-[2.5rem] animate-in zoom-in">
+                   <div className="flex justify-between items-center mb-6">
+                       <h2 className="text-xl font-black italic gold-text">TOWER RULES</h2>
                        <button onClick={() => setShowRules(false)} className="p-2 bg-slate-800 rounded-full"><X/></button>
                    </div>
                    <div className="space-y-4 text-sm text-slate-300 leading-relaxed">

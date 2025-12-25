@@ -1,5 +1,5 @@
 
-export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_DOG' | 'GAME_LUCKY_WHEEL' | 'GAME_DRAGON_TIGER' | 'GAME_PLINKO' | 'GAME_HEAD_TAILS' | 'GAME_MOTO_RACING' | 'GAME_SLOTS' | 'GAME_ANDAR_BAHAR' | 'GAME_HILO' | 'GAME_LIMBO' | 'GAME_DRAGON_TOWER' | 'GAME_KENO' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_DICE' | 'GAME_ROULETTE' | 'GAME_SICBO' | 'GAME_BACCARAT' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'REWARDS_HUB' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS';
+export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_DOG' | 'GAME_VORTEX' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS' | 'REWARDS_HUB' | 'GAME_DRAGON_TIGER' | 'GAME_ROULETTE' | 'GAME_SICBO' | 'GAME_BACCARAT' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'GAME_HEAD_TAILS' | 'GAME_LIMBO' | 'GAME_PLINKO' | 'GAME_HILO' | 'GAME_DRAGON_TOWER' | 'GAME_KENO' | 'GAME_DICE' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_MOTO_RACING';
 
 export interface UserProfile {
   uid: string;
@@ -34,18 +34,6 @@ export interface AviatorState {
   startTime?: number;
 }
 
-export interface GameResult {
-    win: boolean;
-    amount: number;
-    game: string;
-    period?: string;
-    resultDetails?: {
-        label: string;
-        value: string;
-        color?: string;
-    }[];
-}
-
 export interface WinGoHistory {
   period: string;
   number: number;
@@ -59,16 +47,6 @@ export interface WinGoGameState {
   history: WinGoHistory[];
   status: 'BETTING' | 'REVEALING';
   lastResult: WinGoHistory | null;
-}
-
-export interface DragonTigerState {
-  period: string;
-  timeLeft: number;
-  status: 'BETTING' | 'LOCKED' | 'RESULT';
-  dragonCard: number | null;
-  tigerCard: number | null;
-  history: ('D' | 'T' | 'Tie')[];
-  liveBets: { username: string; target: 'D' | 'T' | 'Tie'; amount: number }[];
 }
 
 export interface Transaction {
@@ -120,6 +98,28 @@ export interface CommissionItem {
     amount: number;
     date: string;
     type: string;
+    desc?: string;
+}
+
+export interface GameResult {
+    win: boolean;
+    amount: number;
+    game: string;
+    period?: string;
+    resultDetails?: {
+        label: string;
+        value: string;
+        color?: string;
+    }[];
+}
+
+export interface DragonTigerState {
+    status: 'BETTING' | 'LOCKED' | 'RESULT';
+    timeLeft: number;
+    period: string;
+    dragonCard: number | null;
+    tigerCard: number | null;
+    history: ('D' | 'T' | 'Tie')[];
 }
 
 export interface RouletteBet {

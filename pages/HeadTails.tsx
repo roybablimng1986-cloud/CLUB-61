@@ -40,7 +40,8 @@ const HeadTails: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     
     setIsFlipping(true);
     playSound('click');
-    playSound('spin');
+    // FIX: Changed invalid sound name 'spin' to 'wheel_spin'
+    playSound('wheel_spin');
     updateBalance(-betAmount, 'BET', 'Head & Tails Stake');
 
     // 1. Result Logic (Determined immediately but shown after animation)

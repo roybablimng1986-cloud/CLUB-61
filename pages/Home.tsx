@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { View } from '../types';
 import { Flame, Tv, Volume2, Share2, ShieldAlert, Gift, ChevronRight, X, Sparkles, Trophy, Search } from 'lucide-react';
-import { transactions, subscribeToBalance } from '../services/mockFirebase';
+// FIX: Removed unused 'transactions' import which was causing a build error
+import { subscribeToBalance } from '../services/mockFirebase';
 
 interface HomeProps {
   setView: (view: View) => void;

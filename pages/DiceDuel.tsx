@@ -29,7 +29,8 @@ const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
     
     updateBalance(-bet, 'BET', 'Dice Duel');
     setIsRolling(true);
-    playSound('spin');
+    // FIX: Changed invalid sound name 'spin' to 'wheel_spin'
+    playSound('wheel_spin');
 
     let count = 0;
     const interval = setInterval(() => {

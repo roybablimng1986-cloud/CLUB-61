@@ -46,7 +46,8 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
         if (!results.includes(n)) {
             results.push(n);
             setDrawn([...results]);
-            playSound('tick');
+            // FIX: Changed invalid sound name 'tick' to 'wingo_tick'
+            playSound('wingo_tick');
             await new Promise(r => setTimeout(r, 100));
         }
     }
@@ -143,7 +144,7 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
       </div>
 
       {showRules && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-sm">
               <div className="bg-[#0a1a1a] border border-emerald-500/30 w-full max-w-sm p-8 rounded-[2.5rem] shadow-2xl">
                    <div className="flex justify-between items-center mb-8">
                        <h2 className="text-2xl font-black italic gold-text">KENO PAYTABLE</h2>
@@ -181,7 +182,7 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
               20% { opacity: 1; scale: 1.2; }
               100% { transform: translate(-50%, -150px); opacity: 0; scale: 1.5; }
           }
-          .animate-float-up { animation: float-up 1.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+          .animate-float-up { animation: float-up 3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
       `}</style>
     </div>
   );

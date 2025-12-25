@@ -46,7 +46,8 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     }
 
     setIsSpinning(true);
-    playSound('spin');
+    // FIX: Changed invalid sound name 'spin' to 'wheel_spin'
+    playSound('wheel_spin');
     // Instant Deduction
     updateBalance(-betAmount, 'BET', 'Lucky Wheel Stake');
 
@@ -153,7 +154,7 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
 
             {/* Center Core */}
             <div className="absolute inset-0 flex items-center justify-center z-30 pointer-events-none">
-                <div className="w-24 h-24 rounded-full bg-zinc-900 border-4 border-zinc-800 shadow-[inset_0_0_30px_rgba(0,0,0,0.8)] flex items-center justify-center overflow-hidden">
+                <div className="w-24 h-24 rounded-full bg-zinc-900 border-4 border-zinc-800 shadow-[inset_0_0_30px_rgba(0,0,0,0.8)] flex items-center justify-center overflow-hidden relative">
                     <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-transparent"></div>
                     <RotateCw size={32} className={`text-yellow-500 ${isSpinning ? 'animate-spin' : ''}`} />
                 </div>
@@ -195,7 +196,7 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
           <button 
             onClick={handleSpin}
             disabled={isSpinning}
-            className={`w-full py-6 rounded-[2rem] font-black uppercase tracking-[0.4em] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-4 text-xl border-t-2 border-white/20 ${isSpinning ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white'}`}
+            className={`w-full py-6 rounded-[2rem] font-black uppercase tracking-[0.4em] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-4 text-xl border-t-2 border-white/10 ${isSpinning ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-600 text-white'}`}
           >
             <Trophy size={28} className={isSpinning ? '' : 'animate-bounce'} />
             {isSpinning ? 'SPINNING...' : 'SPIN NOW'}

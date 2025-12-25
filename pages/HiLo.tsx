@@ -26,7 +26,7 @@ const createDeck = (): Card[] => {
 
 const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [betAmount, setBetAmount] = useState(10);
-  const [gameState, setGameState] = useState<'IDLE' | 'PLAYING' | 'REVEALING' | 'LOST'>('IDLE');
+  const [gameState, setGameState] = useState<'IDLE' | 'PLAYING' | 'REVEALING' | 'LOST' | 'WON'>('IDLE');
   const [currentCard, setCurrentCard] = useState<Card | null>(null);
   const [nextCard, setNextCard] = useState<Card | null>(null);
   const [multiplier, setMultiplier] = useState(1.0);
@@ -66,7 +66,8 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     if (gameState !== 'PLAYING' || !currentCard) return;
 
     setGameState('REVEALING');
-    playSound('tick');
+    // FIX: Changed invalid sound name 'tick' to 'wingo_tick'
+    playSound('wingo_tick');
 
     if (deckRef.current.length < 5) deckRef.current = createDeck();
     const revealedCard = deckRef.current.pop()!;
@@ -140,7 +141,7 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
             <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">HI-LO ROYALE</h1>
             <p className="text-[7px] text-zinc-300 font-bold uppercase tracking-[0.4em]">Elite Prediction</p>
         </div>
-        <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20">
+        <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner">
           <Wallet size={14} className="text-yellow-500" />
           <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
         </div>

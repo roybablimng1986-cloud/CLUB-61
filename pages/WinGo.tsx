@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, History as HistoryIcon, X, Wallet, Volume2, VolumeX, HelpCircle, ChevronRight } from 'lucide-react';
+import { ArrowLeft, History as HistoryIcon, X, Wallet, Volume2, VolumeX, HelpCircle, Clock } from 'lucide-react';
 import { WinGoGameState, GameResult, GameHistoryItem } from '../types';
 import { subscribeToWinGo, updateBalance, stopAllSounds, toggleMute, getMuteStatus, playSound, shouldForceLoss, getGameHistory, addGameHistory } from '../services/mockFirebase';
 
@@ -12,17 +12,15 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   const [betMoney, setBetMoney] = useState(1);
   const [betMultiplier, setBetMultiplier] = useState(1);
   const [muted, setMuted] = useState(getMuteStatus());
-  const [showRules, setShowRules] = useState(false);
   const [insufficientBalance, setInsufficientBalance] = useState(false);
   const [pendingBets, setPendingBets] = useState<{target: string; amount: number; period: number}[]>([]);
   const [myHistory, setMyHistory] = useState<GameHistoryItem[]>([]);
   
-  const tickAudioRef = useRef<HTMLAudioElement | null>(null);
   const isMounted = useRef(true);
 
+  // Sync My Record history
   useEffect(() => {
     isMounted.current = true;
-    tickAudioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2578/2578-preview.mp3');
     const unsubHistory = getGameHistory('WinGo', (data) => {
         if(isMounted.current) setMyHistory(data);
     });
@@ -34,20 +32,28 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
         if (!isMounted.current) return;
         setGameState(state);
         
-        if (!muted && state.timeLeft <= 5 && state.timeLeft > 0) tickAudioRef.current?.play().catch(()=>{});
-        
+        if (state.timeLeft <= 5 && state.timeLeft > 0 && state.status === 'BETTING') {
+            playSound('wingo_tick');
+        }
+
+        // Round just finished
         if (state.timeLeft === 30 && state.lastResult) {
-            const currentRoundBets = pendingBets.filter(b => b.period.toString() === state.lastResult!.period);
+            playSound('wingo_draw');
+            const finishedPeriod = state.lastResult.period;
+            
+            // Extract bets for the just finished period
+            const currentRoundBets = pendingBets.filter(b => b.period.toString() === finishedPeriod);
+            
             if (currentRoundBets.length > 0) {
-                let totalWin = 0; let totalBet = 0; let win = false;
-                const num = state.lastResult!.number;
+                let totalWin = 0; let totalBet = 0; let hasWin = false;
+                const num = state.lastResult.number;
 
                 currentRoundBets.forEach(bet => {
                     totalBet += bet.amount;
                     let betWin = false, mult = 0;
-                    const isForced = shouldForceLoss(bet.amount, userBalance);
+                    const forcedLoss = shouldForceLoss(bet.amount, userBalance);
                     
-                    if (!isForced) {
+                    if (!forcedLoss) {
                         if (bet.target === 'Green' && [1,3,5,7,9].includes(num)) { betWin = true; mult = num===5?1.5:2; }
                         else if (bet.target === 'Red' && [0,2,4,6,8].includes(num)) { betWin = true; mult = num===0?1.5:2; }
                         else if (bet.target === 'Violet' && [0,5].includes(num)) { betWin = true; mult = 4.5; }
@@ -55,24 +61,29 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
                         else if (bet.target === 'Small' && num < 5) { betWin = true; mult = 2; }
                         else if (bet.target === num.toString()) { betWin = true; mult = 9; }
                     }
-                    if (betWin) { win = true; totalWin += bet.amount * mult; }
-                    addGameHistory('WinGo', bet.amount, betWin ? bet.amount * mult : 0, `P:${state.lastResult!.period} | Bet:${bet.target} | Res:${num}`);
+
+                    if (betWin) { hasWin = true; totalWin += bet.amount * mult; }
+                    addGameHistory('WinGo', bet.amount, betWin ? bet.amount * mult : 0, `P:${finishedPeriod} | Bet:${bet.target} | Res:${num}`);
                 });
 
                 if (totalWin > 0) updateBalance(totalWin, 'WIN', 'WinGo Win');
-                onResult({ win, amount: win ? totalWin : totalBet, game: 'WinGo', period: state.lastResult.period, resultDetails: [{ label: 'Number', value: state.lastResult.number.toString() }] });
-                setPendingBets(prev => prev.filter(b => b.period.toString() !== state.lastResult!.period));
+                onResult({ win: hasWin, amount: hasWin ? totalWin : totalBet, game: 'WinGo', period: finishedPeriod, resultDetails: [{ label: 'Result', value: state.lastResult.number.toString() }] });
+                
+                // Clear the bets that just finished
+                setPendingBets(prev => prev.filter(b => b.period.toString() !== finishedPeriod));
             }
         }
     });
     return () => unsubscribe();
-  }, [pendingBets, muted]);
+  }, [pendingBets, userBalance]);
 
   const confirmBet = () => {
       const total = betMoney * betMultiplier;
       if (total > userBalance) { setInsufficientBalance(true); setTimeout(() => setInsufficientBalance(false), 400); return; }
-      updateBalance(-total);
+      updateBalance(-total, 'BET', `WinGo Bet: ${selectedBetTarget}`);
       setBetDrawerOpen(false);
+      
+      // Correctly track pending bet with CURRENT period
       setPendingBets(prev => [...prev, { target: selectedBetTarget!, amount: total, period: gameState!.period }]);
       playSound('click');
   };
@@ -90,7 +101,6 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
             <h1 className="text-lg font-black italic gold-text uppercase">WINGO 30S</h1>
         </div>
         <div className="flex items-center gap-2">
-            <button onClick={() => setShowRules(true)} className="p-2 text-slate-400 active:scale-90"><HelpCircle size={22}/></button>
             <button onClick={()=>{setMuted(toggleMute())}} className="p-2 text-white">
                 {muted?<VolumeX size={22}/>:<Volume2 size={22}/>}
             </button>
@@ -168,18 +178,35 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
                   </div>
               ) : (
                   <div className="space-y-3">
+                      {/* PENDING / PROCESSING SECTION */}
+                      {pendingBets.map((pb, i) => (
+                          <div key={`p-${i}`} className="bg-blue-600/10 p-4 rounded-2xl border border-blue-500/30 flex justify-between items-center animate-pulse">
+                              <div>
+                                  <div className="text-[10px] font-black text-blue-400 uppercase tracking-tighter">Period: {pb.period}</div>
+                                  <div className="text-[8px] text-slate-300 font-bold mt-0.5 uppercase">STAKE: {pb.target}</div>
+                              </div>
+                              <div className="text-right flex items-center gap-2">
+                                  <div className="text-sm font-black text-yellow-500">₹{pb.amount}</div>
+                                  <Clock size={12} className="text-yellow-500"/>
+                                  <div className="text-[8px] text-yellow-500 font-black uppercase">Processing</div>
+                              </div>
+                          </div>
+                      ))}
+                      
+                      {/* FINISHED LOGS SECTION */}
                       {(myHistory || []).length > 0 ? myHistory.map((item, i) => (
                           <div key={i} className="bg-black/20 p-4 rounded-2xl border border-white/5 flex justify-between items-center animate-in fade-in">
                               <div>
-                                  <div className="text-[10px] font-black text-white uppercase tracking-tighter">{item.game}</div>
-                                  <div className="text-[8px] text-slate-500 font-bold mt-0.5">{item.date}</div>
+                                  <div className="text-[10px] font-black text-white uppercase tracking-tighter">{item.details.split(' | ')[0]}</div>
+                                  <div className="text-[9px] text-slate-500 font-bold mt-0.5">{item.date}</div>
+                                  <div className="text-[8px] text-slate-400 uppercase font-black mt-1">Bet: {item.details.split(' | ')[1]?.split(':')[1]}</div>
                               </div>
                               <div className="text-right">
-                                  <div className={`text-xs font-black ${item.win > 0 ? 'text-green-500' : 'text-red-500'}`}>{item.win > 0 ? `+₹${item.win.toFixed(2)}` : `-₹${item.amount.toFixed(2)}`}</div>
-                                  <div className="text-[7px] text-slate-600 font-black uppercase tracking-tight">{item.details}</div>
+                                  <div className={`text-sm font-black ${item.win > 0 ? 'text-green-500' : 'text-red-500'}`}>{item.win > 0 ? `+₹${item.win.toFixed(2)}` : `-₹${item.amount.toFixed(2)}`}</div>
+                                  <div className="text-[8px] text-slate-600 font-black uppercase tracking-tight">{item.win > 0 ? 'SUCCESS' : 'SETTLED'}</div>
                               </div>
                           </div>
-                      )) : (
+                      )) : pendingBets.length === 0 && (
                           <div className="text-center py-20 text-slate-600 font-black uppercase text-[10px] italic tracking-widest opacity-40">No Stakes found</div>
                       )}
                   </div>

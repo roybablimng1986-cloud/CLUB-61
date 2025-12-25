@@ -28,7 +28,8 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
       if (gameState === 'BETTING') {
           if (timeLeft > 0) {
               setTimeLeft(prev => prev - 1);
-              if (timeLeft <= 5) playSound('tick');
+              // FIX: Changed invalid sound name 'tick' to 'wingo_tick'
+              if (timeLeft <= 5) playSound('wingo_tick');
           } else {
               setConfirmBet(null);
               shakeDice();
@@ -45,7 +46,8 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
 
   const shakeDice = () => {
     setGameState('SHAKING');
-    playSound('spin');
+    // FIX: Changed invalid sound name 'spin' to 'wheel_spin'
+    playSound('wheel_spin');
     
     let count = 0;
     const shakeInterval = setInterval(() => {

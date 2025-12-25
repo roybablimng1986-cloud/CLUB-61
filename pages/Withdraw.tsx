@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Wallet, Building2, Smartphone, AlertCircle, ShieldCheck, Lock } from 'lucide-react';
+import { ArrowLeft, Building2, Smartphone, AlertCircle, ShieldCheck, Lock, ChevronDown, Plus } from 'lucide-react';
 import { handleWithdraw, subscribeToBalance } from '../services/mockFirebase';
 import { UserProfile } from '../types';
 
@@ -15,6 +15,10 @@ const Withdraw: React.FC<Props> = ({ onBack, userBalance }) => {
     const [method, setMethod] = useState<'BANK' | 'UPI'>('BANK');
     const [message, setMessage] = useState('');
     const [user, setUser] = useState<UserProfile | null>(null);
+    const [useBound, setUseBound] = useState(true);
+
+    const [newBank, setNewBank] = useState({ accountName: '', accountNo: '', ifsc: '' });
+    const [newUpi, setNewUpi] = useState('');
 
     useEffect(() => {
         const unsub = subscribeToBalance(u => setUser(u));
@@ -25,7 +29,7 @@ const Withdraw: React.FC<Props> = ({ onBack, userBalance }) => {
         if (!user) return;
 
         if (user.totalDeposit <= 0) {
-            setMessage('First-time withdrawal requires at least one previous deposit.');
+            setMessage('Account verification required: Minimum 1 deposit needed.');
             return;
         }
         
@@ -45,9 +49,28 @@ const Withdraw: React.FC<Props> = ({ onBack, userBalance }) => {
             return;
         }
 
-        const res = await handleWithdraw(val, method, password, {});
+        let withdrawDetails = {};
+        if (useBound) {
+            if (method === 'BANK' && user.isBankBound) withdrawDetails = user.bankDetails!;
+            else if (method === 'UPI' && user.isUpiBound) withdrawDetails = user.upiDetails!;
+            else {
+                setMessage('No bound account found. Please enter manually.');
+                setUseBound(false);
+                return;
+            }
+        } else {
+            if (method === 'BANK') {
+                if (!newBank.accountNo) { setMessage('Enter bank details'); return; }
+                withdrawDetails = newBank;
+            } else {
+                if (!newUpi) { setMessage('Enter UPI ID'); return; }
+                withdrawDetails = { upiId: newUpi };
+            }
+        }
+
+        const res = await handleWithdraw(val, method, password, withdrawDetails);
         if (res.success) {
-            setMessage('Request Submitted! Processing (10-30 mins)');
+            setMessage('Request Submitted! Assets arriving in 10-30 mins.');
             setAmount('');
             setPassword('');
         } else {
@@ -70,7 +93,7 @@ const Withdraw: React.FC<Props> = ({ onBack, userBalance }) => {
                     <h2 className="text-5xl font-black italic tracking-tighter">₹{userBalance.toFixed(2)}</h2>
                     <div className="mt-8 grid grid-cols-2 gap-4">
                          <div className="bg-black/30 p-3 rounded-2xl border border-white/5">
-                            <p className="text-[8px] text-slate-500 uppercase font-black tracking-widest">Assets Vested</p>
+                            <p className="text-[8px] text-slate-500 uppercase font-black tracking-widest">Total Vested</p>
                             <p className="text-sm font-bold text-green-500">₹{user?.totalDeposit?.toFixed(2) || '0.00'}</p>
                          </div>
                          <div className="bg-black/30 p-3 rounded-2xl border border-white/5">
@@ -81,48 +104,69 @@ const Withdraw: React.FC<Props> = ({ onBack, userBalance }) => {
                 </div>
 
                 <div className="space-y-4">
-                    <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] ml-2">Release Method</h3>
+                    <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] ml-2">Select Method</h3>
                     <div className="grid grid-cols-2 gap-4">
                         <button 
                             onClick={() => setMethod('BANK')}
                             className={`py-6 rounded-3xl border-2 flex flex-col items-center gap-3 transition-all active:scale-95 ${method === 'BANK' ? 'border-blue-500 bg-blue-500/10 text-blue-400 shadow-xl' : 'border-slate-800 bg-[#111827] text-slate-500 opacity-60'}`}
                         >
                             <Building2 size={32}/>
-                            <span className="text-[10px] font-black uppercase tracking-widest">Wire Transfer</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest">Bank Card</span>
                         </button>
                         <button 
                             onClick={() => setMethod('UPI')}
                             className={`py-6 rounded-3xl border-2 flex flex-col items-center gap-3 transition-all active:scale-95 ${method === 'UPI' ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400 shadow-xl' : 'border-slate-800 bg-[#111827] text-slate-500 opacity-60'}`}
                         >
                             <Smartphone size={32}/>
-                            <span className="text-[10px] font-black uppercase tracking-widest">Quick UPI</span>
+                            <span className="text-[10px] font-black uppercase tracking-widest">UPI ID</span>
                         </button>
                     </div>
                 </div>
 
-                <div className="bg-black/40 border-2 border-white/5 rounded-3xl p-6 shadow-inner">
-                    <div className="flex justify-between items-center mb-4">
-                        <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Linked Channel</h4>
-                        <ShieldCheck size={16} className="text-green-500" />
+                <div className="space-y-4">
+                    <div className="flex justify-between items-center ml-2">
+                        <h3 className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Account Source</h3>
+                        <button onClick={() => setUseBound(!useBound)} className="text-[10px] text-blue-400 font-bold uppercase">{useBound ? "Use New Account" : "Use Bound Account"}</button>
                     </div>
-                    {method === 'BANK' ? (
-                        user?.isBankBound ? (
-                            <div className="space-y-1">
-                                <p className="text-sm font-black text-white">{user.bankDetails?.accountName}</p>
-                                <p className="text-xs text-slate-500 font-mono">**** {user.bankDetails?.accountNo.slice(-4)} | {user.bankDetails?.ifsc}</p>
+
+                    {useBound ? (
+                        <div className="bg-black/40 border-2 border-white/5 rounded-3xl p-6 shadow-inner">
+                            <div className="flex justify-between items-center mb-4">
+                                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Linked Channel</h4>
+                                <ShieldCheck size={16} className="text-green-500" />
                             </div>
-                        ) : (
-                            <p className="text-xs text-red-500 font-bold uppercase italic tracking-tighter">Channel not bound. Please setup in Rewards Hub.</p>
-                        )
+                            {method === 'BANK' ? (
+                                user?.isBankBound ? (
+                                    <div className="space-y-1">
+                                        <p className="text-sm font-black text-white">{user.bankDetails?.accountName}</p>
+                                        <p className="text-xs text-slate-500 font-mono">**** {user.bankDetails?.accountNo.slice(-4)} | {user.bankDetails?.ifsc}</p>
+                                    </div>
+                                ) : <p className="text-xs text-slate-600 italic">No bank bound. Enter details below.</p>
+                            ) : (
+                                user?.isUpiBound ? (
+                                    <div className="space-y-1">
+                                        <p className="text-sm font-black text-white">{user.upiDetails?.upiId}</p>
+                                        <p className="text-xs text-slate-500 uppercase font-black">Elite UPI Channel</p>
+                                    </div>
+                                ) : <p className="text-xs text-slate-600 italic">No UPI bound. Enter details below.</p>
+                            )}
+                        </div>
                     ) : (
-                        user?.isUpiBound ? (
-                            <div className="space-y-1">
-                                <p className="text-sm font-black text-white">{user.upiDetails?.upiId}</p>
-                                <p className="text-xs text-slate-500 uppercase font-black">Fast Settlement Channel</p>
+                        <div className="bg-[#111827] border-2 border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
+                            <div className="flex items-center gap-2 mb-2 text-yellow-500/80">
+                                <Plus size={14}/>
+                                <span className="text-[10px] font-black uppercase tracking-widest">Entering One-Time Details</span>
                             </div>
-                        ) : (
-                            <p className="text-xs text-red-500 font-bold uppercase italic tracking-tighter">Channel not bound. Please setup in Rewards Hub.</p>
-                        )
+                            {method === 'BANK' ? (
+                                <div className="space-y-4">
+                                    <input type="text" placeholder="Account Holder Name" value={newBank.accountName} onChange={e=>setNewBank({...newBank, accountName: e.target.value})} className="w-full bg-[#0a0f1d] border border-slate-700 rounded-xl p-3 text-xs outline-none focus:border-blue-500" />
+                                    <input type="text" placeholder="Account Number" value={newBank.accountNo} onChange={e=>setNewBank({...newBank, accountNo: e.target.value})} className="w-full bg-[#0a0f1d] border border-slate-700 rounded-xl p-3 text-xs outline-none focus:border-blue-500" />
+                                    <input type="text" placeholder="IFSC Code" value={newBank.ifsc} onChange={e=>setNewBank({...newBank, ifsc: e.target.value})} className="w-full bg-[#0a0f1d] border border-slate-700 rounded-xl p-3 text-xs outline-none focus:border-blue-500" />
+                                </div>
+                            ) : (
+                                <input type="text" placeholder="Enter UPI ID (e.g. name@bank)" value={newUpi} onChange={e=>setNewUpi(e.target.value)} className="w-full bg-[#0a0f1d] border border-slate-700 rounded-xl p-3 text-xs outline-none focus:border-blue-500" />
+                            )}
+                        </div>
                     )}
                 </div>
 
@@ -142,7 +186,7 @@ const Withdraw: React.FC<Props> = ({ onBack, userBalance }) => {
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase text-slate-500 ml-4 tracking-widest">Withdrawal Security PIN</label>
+                            <label className="text-[10px] font-black uppercase text-slate-500 ml-4 tracking-widest">6-Digit Security PIN</label>
                             <div className="bg-[#111827] border-2 border-slate-800 rounded-3xl p-5 flex items-center gap-4 shadow-inner focus-within:border-indigo-500 transition-colors">
                                 <Lock size={24} className="text-slate-600" />
                                 <input 
@@ -171,7 +215,11 @@ const Withdraw: React.FC<Props> = ({ onBack, userBalance }) => {
                         Confirm Payout
                     </button>
                     
-                    <p className="text-center text-[9px] text-slate-600 uppercase font-black tracking-widest px-8 leading-relaxed">Bound accounts cannot be changed. All withdrawals are final once verified.</p>
+                    <div className="bg-red-950/20 p-4 rounded-2xl border border-red-500/10">
+                        <p className="text-center text-[9px] text-slate-600 uppercase font-black tracking-widest leading-relaxed">
+                            SECURITY ALERT: Bank accounts and UPI IDs are tracked platform-wide. Cross-account usage is strictly prohibited and results in automatic rejection.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>

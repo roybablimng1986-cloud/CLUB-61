@@ -6,25 +6,7 @@ import WinGo from './pages/WinGo';
 import Aviator from './pages/Aviator';
 import Mines from './pages/Mines';
 import DogRoad from './pages/DogRoad';
-import LuckyWheel from './pages/LuckyWheel';
-import DragonTiger from './pages/DragonTiger';
-import Plinko from './pages/Plinko';
-import HeadTails from './pages/HeadTails';
-import MotoRacing from './pages/MotoRacing';
-import SlotMachine from './pages/SlotMachine';
-import AndarBahar from './pages/AndarBahar';
-import HiLo from './pages/HiLo';
-import Limbo from './pages/Limbo';
-import DragonTower from './pages/DragonTower';
-import Keno from './pages/Keno';
-import FruitSlot from './pages/FruitSlot';
-import EgyptSlot from './pages/EgyptSlot';
-import DiceDuel from './pages/DiceDuel';
-import Roulette from './pages/Roulette';
-import SicBo from './pages/SicBo';
-import Baccarat from './pages/Baccarat';
-import StreetRace from './pages/StreetRace';
-import VaultBreaker from './pages/VaultBreaker';
+import Vortex from './pages/Vortex';
 import Profile from './pages/Profile';
 import Referral from './pages/Referral';
 import Promotion from './pages/Promotion';
@@ -33,11 +15,32 @@ import Withdraw from './pages/Withdraw';
 import Wallet from './pages/Wallet';
 import SafetyCenter from './pages/SafetyCenter';
 import GameStatistics from './pages/GameStatistics';
+import DragonTiger from './pages/DragonTiger';
+import Roulette from './pages/Roulette';
+import SicBo from './pages/SicBo';
+import Baccarat from './pages/Baccarat';
+import StreetRace from './pages/StreetRace';
+import VaultBreaker from './pages/VaultBreaker';
+import SlotMachine from './pages/SlotMachine';
+import HeadTails from './pages/HeadTails';
+import Limbo from './pages/Limbo';
+import Plinko from './pages/Plinko';
+import HiLo from './pages/HiLo';
+import DragonTower from './pages/DragonTower';
+import Keno from './pages/Keno';
+import AndarBahar from './pages/AndarBahar';
+import DiceDuel from './pages/DiceDuel';
+import FruitSlot from './pages/FruitSlot';
+import EgyptSlot from './pages/EgyptSlot';
+import MotoRacing from './pages/MotoRacing';
+import Penalty from './pages/Penalty';
+import Cricket from './pages/Cricket';
+import Tower from './pages/Tower';
 import BindingRewards from './pages/BindingRewards';
 import Auth from './pages/Auth';
 import GameResultPopup from './components/GameResultPopup';
 import { View, UserProfile, GameResult } from './types';
-import { subscribeToBalance, startGlobalEngines, stopAllSounds } from './services/mockFirebase';
+import { subscribeToBalance, startGlobalEngines, checkAuth, stopAllSounds } from './services/mockFirebase';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('HOME');
@@ -46,7 +49,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => { 
-      startGlobalEngines(); // Initialise global 24/7 game engines
+      startGlobalEngines(); 
   }, []);
 
   useEffect(() => { 
@@ -58,56 +61,50 @@ export default function App() {
         setUser(updatedUser);
         setIsLoading(false);
     });
-    return () => { if (unsubscribe) unsubscribe(); };
+    return () => unsubscribe();
   }, []);
 
-  if (isLoading) {
-      return (
-          <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center">
-              <div className="w-12 h-12 border-[6px] border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-      );
-  }
-
-  if (!user) {
-      return <Auth />;
-  }
+  if (isLoading) return <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center"><div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div></div>;
+  if (!user && currentView !== 'LOGIN' && currentView !== 'REGISTER') return <Auth />;
 
   const renderContent = () => {
+    if (!user) return <Auth />;
+    
     switch (currentView) {
       case 'HOME': return <Home setView={setCurrentView} />;
       case 'GAME_WINGO': return <WinGo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} setView={setCurrentView} />;
       case 'GAME_AVIATOR': return <Aviator onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_MINES': return <Mines onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_DOG': return <DogRoad onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_LUCKY_WHEEL': return <LuckyWheel onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_DRAGON_TIGER': return <DragonTiger onBack={() => setCurrentView('HOME')} userBalance={user.balance} username={user.username} onResult={setGameResult} />;
-      case 'GAME_PLINKO': return <Plinko onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_HEAD_TAILS': return <HeadTails onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_MOTO_RACING': return <MotoRacing onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_SLOTS': return <SlotMachine onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_ANDAR_BAHAR': return <AndarBahar onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_HILO': return <HiLo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_LIMBO': return <Limbo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_DRAGON_TOWER': return <DragonTower onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_KENO': return <Keno onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_FRUIT_SLOT': return <FruitSlot onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_EGYPT_SLOT': return <EgyptSlot onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_DICE': return <DiceDuel onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_ROULETTE': return <Roulette onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_SICBO': return <SicBo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_BACCARAT': return <Baccarat onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_STREET_RACE': return <StreetRace onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_VAULT': return <VaultBreaker onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_SLOTS': return <SlotMachine onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_DOG': return <DogRoad onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_HEAD_TAILS': return <HeadTails onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_LIMBO': return <Limbo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_PLINKO': return <Plinko onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_HILO': return <HiLo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_DRAGON_TOWER': return <DragonTower onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_KENO': return <Keno onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_ANDAR_BAHAR': return <AndarBahar onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_DICE': return <DiceDuel onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_FRUIT_SLOT': return <FruitSlot onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_EGYPT_SLOT': return <EgyptSlot onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_MOTO_RACING': return <MotoRacing onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_VORTEX': return <Vortex onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_TOWER': return <Tower onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'ACCOUNT': return <Profile user={user} setView={setCurrentView} />;
       case 'REFERRAL': return <Referral user={user} />;
       case 'PROMOTION': return <Promotion />;
       case 'WALLET': return <Wallet setView={setCurrentView} userBalance={user.balance} />;
-      case 'REWARDS_HUB': return <BindingRewards onBack={() => setCurrentView('ACCOUNT')} />;
       case 'DEPOSIT': return <Deposit onBack={() => setCurrentView('WALLET')} />;
       case 'WITHDRAW': return <Withdraw onBack={() => setCurrentView('WALLET')} userBalance={user.balance} />;
       case 'SAFETY': return <SafetyCenter setView={setCurrentView} user={user} />;
       case 'STATISTICS': return <GameStatistics setView={setCurrentView} />;
+      case 'REWARDS_HUB': return <BindingRewards onBack={() => setCurrentView('ACCOUNT')} />;
       default: return <Home setView={setCurrentView} />;
     }
   };

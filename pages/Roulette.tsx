@@ -32,7 +32,8 @@ const Roulette: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
         if (status === 'BETTING') {
             if (timeLeft > 0) {
                 setTimeLeft(prev => prev - 1);
-                if (timeLeft <= 5) playSound('tick');
+                // FIX: Changed invalid sound name 'tick' to 'wingo_tick'
+                if (timeLeft <= 5) playSound('wingo_tick');
             } else {
                 setStatus('LOCKED');
                 setConfirmDrawer(null);
@@ -54,7 +55,8 @@ const Roulette: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
 
   const spin = () => {
     setStatus('SPINNING');
-    playSound('spin');
+    // FIX: Changed invalid sound name 'spin' to 'wheel_spin'
+    playSound('wheel_spin');
 
     const result = WHEEL_ORDER[Math.floor(Math.random() * WHEEL_ORDER.length)];
     const resultIdx = WHEEL_ORDER.indexOf(result);

@@ -84,7 +84,8 @@ const MotoRacing: React.FC<{ onBack: () => void; userBalance: number; onResult: 
 
   const startRace = () => {
     setGameState('RACING');
-    playSound('spin');
+    // FIX: Changed invalid sound name 'spin' to 'race_rev'
+    playSound('race_rev');
     const interval = window.setInterval(() => {
       setBikePositions(prev => {
         const next = [...prev];

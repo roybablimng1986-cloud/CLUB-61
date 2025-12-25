@@ -157,7 +157,8 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     if (gameState !== 'IDLE' || userBalance < betAmount) return;
     setGameState('SPINNING');
     updateBalance(-betAmount, 'BET', 'Vortex Launch');
-    playSound('click'); playSound('spin');
+    // FIX: Changed invalid sound name 'spin' to 'wheel_spin'
+    playSound('click'); playSound('wheel_spin');
     
     ballAngle.current = Math.random() * Math.PI * 2;
     ballRadius.current = 168;

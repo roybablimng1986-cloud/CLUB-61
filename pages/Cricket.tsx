@@ -31,7 +31,8 @@ const Cricket: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
 
     setStatus('BOWLING');
     updateBalance(-betAmount, 'BET', `Cricket Bet on ${selectedTarget === 0 ? 'Wicket' : selectedTarget + ' Runs'}`);
-    playSound('spin');
+    // FIX: Changed invalid sound name 'spin' to 'sports_kick'
+    playSound('sports_kick');
 
     setTimeout(() => {
         if (!isMounted.current) return;
