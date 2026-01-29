@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, History, Volume2, VolumeX, Timer, X } from 'lucide-react';
+import { ArrowLeft, Wallet, History, Volume2, VolumeX, Timer, X, Play } from 'lucide-react';
 import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, shouldForceLoss } from '../services/mockFirebase';
 import { GameResult } from '../types';
 
@@ -10,15 +10,15 @@ interface Props {
   onResult: (r: GameResult) => void;
 }
 
-type Card = { rank: string; suit: string; value: number; id: string };
-const SUITS = ['♠', '♣', '♥', '♦'];
+type Card = { rank: string; suit: string; color: string; id: string };
+const SUITS = [{ s: '♠', c: 'text-slate-900' }, { s: '♣', c: 'text-slate-900' }, { s: '♥', c: 'text-red-600' }, { s: '♦', c: 'text-red-600' }];
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 
 const createDeck = (): Card[] => {
     let deck: Card[] = [];
     SUITS.forEach(suit => {
-        RANKS.forEach((rank, idx) => {
-            deck.push({ rank, suit, value: idx + 1, id: `${rank}${suit}-${Math.random()}` });
+        RANKS.forEach((rank) => {
+            deck.push({ rank, suit: suit.s, color: suit.c, id: `${rank}${suit.s}-${Math.random()}` });
         });
     });
     return deck.sort(() => Math.random() - 0.5);
@@ -31,10 +31,10 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [joker, setJoker] = useState<Card | null>(null);
   const [andarCards, setAndarCards] = useState<Card[]>([]);
   const [baharCards, setBaharCards] = useState<Card[]>([]);
-  const [history, setHistory] = useState<('A' | 'B')[]>(['A', 'B', 'B', 'A', 'B', 'A']);
+  const [history, setHistory] = useState<('A' | 'B')[]>([]);
   const [muted, setMuted] = useState(getMuteStatus());
   const [timeLeft, setTimeLeft] = useState(15);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [betConfirmed, setBetConfirmed] = useState(false);
   
   const isMounted = useRef(true);
 
@@ -43,34 +43,26 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     const interval = setInterval(() => {
         if (!isMounted.current) return;
         
-        if (gameState === 'BETTING') {
+        if (gameState === 'BETTING' && betConfirmed) {
             if (timeLeft > 0) {
                 setTimeLeft(prev => prev - 1);
-                // FIX: Changed invalid sound name 'tick' to 'wingo_tick'
                 if (timeLeft <= 5) playSound('wingo_tick');
             } else {
-                if (selectedSide && showConfirm === false) { // Auto confirm if they picked but didn't click
-                   startRound();
-                } else {
-                   setTimeLeft(15); // Reset if nobody bet
-                }
+                startRound();
             }
         }
     }, 1000);
     return () => { isMounted.current = false; clearInterval(interval); stopAllSounds(); };
-  }, [gameState, selectedSide, showConfirm]);
+  }, [gameState, timeLeft, betConfirmed]);
 
-  const initiateBet = (side: 'ANDAR' | 'BAHAR') => {
-      if (gameState !== 'BETTING') return;
-      setSelectedSide(side);
-      setShowConfirm(true);
-      playSound('click');
-  }
+  const handlePlaceBet = () => {
+    if (!selectedSide) { alert("Select a Side First!"); return; }
+    if (userBalance < betAmount) { alert("Insufficient Balance!"); return; }
+    setBetConfirmed(true);
+    playSound('click');
+  };
 
   const startRound = async () => {
-    if (!selectedSide || userBalance < betAmount) return;
-    
-    setShowConfirm(false);
     setGameState('DEALING');
     updateBalance(-betAmount, 'BET', `Andar Bahar on ${selectedSide}`);
     playSound('click');
@@ -78,163 +70,136 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     const deck = createDeck();
     const jokerCard = deck.pop()!;
     setJoker(jokerCard);
-    setAndarCards([]);
-    setBaharCards([]);
 
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(r => setTimeout(r, 1000));
 
     let turn: 'A' | 'B' = 'A';
     let winner: 'ANDAR' | 'BAHAR' | null = null;
+    let currentAndar: Card[] = [];
+    let currentBahar: Card[] = [];
 
     while (!winner && deck.length > 0) {
         if (!isMounted.current) break;
         const nextCard = deck.pop()!;
-        // FIX: Changed invalid sound name 'tick' to 'wingo_tick'
-        playSound('wingo_tick');
+        playSound('dt_card');
 
         if (turn === 'A') {
-            setAndarCards(prev => [nextCard, ...prev]);
+            currentAndar = [nextCard, ...currentAndar];
+            setAndarCards([...currentAndar]);
             if (nextCard.rank === jokerCard.rank) winner = 'ANDAR';
             turn = 'B';
         } else {
-            setBaharCards(prev => [nextCard, ...prev]);
+            currentBahar = [nextCard, ...currentBahar];
+            setBaharCards([...currentBahar]);
             if (nextCard.rank === jokerCard.rank) winner = 'BAHAR';
             turn = 'A';
         }
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 700));
     }
 
     if (winner && isMounted.current) {
-        // Apply House Edge
-        let finalWinner = winner;
-        if (shouldForceLoss(betAmount, userBalance)) {
-            finalWinner = selectedSide === 'ANDAR' ? 'BAHAR' : 'ANDAR';
-        }
-
-        const isWin = selectedSide === finalWinner;
+        if (shouldForceLoss(betAmount, userBalance)) winner = selectedSide === 'ANDAR' ? 'BAHAR' : 'ANDAR';
+        
+        const isWin = selectedSide === winner;
         const winAmount = isWin ? betAmount * 1.95 : 0;
         
         setGameState('RESULT');
         if (isWin) { updateBalance(winAmount, 'WIN', 'Andar Bahar Win'); playSound('win'); }
         else playSound('loss');
 
-        setHistory(prev => [finalWinner === 'ANDAR' ? ('A' as const) : ('B' as const), ...prev].slice(0, 15));
-        
-        onResult({ 
-            win: isWin, 
-            amount: isWin ? winAmount : betAmount, 
-            game: 'Andar Bahar',
-            resultDetails: [{label: 'Winning Side', value: finalWinner}]
-        });
-
-        addGameHistory('Andar Bahar', betAmount, winAmount, `Match: ${jokerCard.rank} on ${finalWinner}`);
+        setHistory(prev => [winner === 'ANDAR' ? 'A' : 'B', ...prev].slice(0, 15));
+        // FIX: Changed winAmt to winAmount to correctly reference the variable declared on line 85
+        onResult({ win: isWin, amount: isWin ? winAmount : betAmount, game: 'Andar Bahar' });
+        addGameHistory('Andar Bahar', betAmount, winAmount, `Result: ${winner}`);
 
         setTimeout(() => {
-            if(isMounted.current) {
-                setGameState('BETTING');
-                setTimeLeft(15);
-                setJoker(null);
-                setAndarCards([]);
-                setBaharCards([]);
-                setSelectedSide(null);
+            if(isMounted.current) { 
+              setGameState('BETTING'); 
+              setTimeLeft(15); 
+              setJoker(null); 
+              setAndarCards([]); 
+              setBaharCards([]); 
+              setSelectedSide(null); 
+              setBetConfirmed(false);
             }
-        }, 3500);
+        }, 4000);
     }
   };
 
+  const FullCard: React.FC<{ card: Card }> = ({ card }) => (
+      <div className="w-16 h-24 sm:w-20 sm:h-28 bg-white rounded-xl flex flex-col items-center justify-center border-2 border-slate-300 shadow-2xl animate-in zoom-in duration-300 relative overflow-hidden shrink-0">
+          <div className={`absolute top-0.5 left-1 font-black text-xs ${card.color}`}>{card.rank}</div>
+          <div className={`text-3xl ${card.color}`}>{card.suit}</div>
+          <div className={`absolute bottom-0.5 right-1 font-black text-xs rotate-180 ${card.color}`}>{card.rank}</div>
+      </div>
+  );
+
   return (
     <div className="bg-[#064e3b] min-h-screen flex flex-col font-sans text-white select-none overflow-x-hidden relative">
-      <div className="p-3 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
-        <button onClick={onBack} className="p-2 bg-slate-800/80 rounded-2xl active:scale-90 transition-all border border-white/10"><ArrowLeft size={18}/></button>
-        <div className="text-center">
-            <h1 className="text-lg font-black italic gold-text tracking-widest uppercase">ANDAR BAHAR</h1>
-            <p className="text-[6px] text-zinc-300 font-bold uppercase tracking-[0.4em]">Fast Cycle Draw</p>
-        </div>
-        <div className="flex items-center gap-2 bg-black/50 px-3 py-1.5 rounded-2xl border border-yellow-500/20 shadow-inner">
-          <Wallet size={12} className="text-yellow-500" />
-          <span className="text-xs font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
-        </div>
+      <div className="p-4 flex justify-between items-center bg-black/40 border-b border-white/5 z-50">
+        <button onClick={onBack} disabled={gameState === 'DEALING'} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={18}/></button>
+        <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">ANDAR BAHAR</h1>
+        <div className="bg-black/50 px-3 py-1.5 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono shadow-inner">₹{userBalance.toFixed(2)}</div>
       </div>
 
-      <div className="flex-1 flex flex-col items-center p-2 relative">
-        <div className="mt-4 flex flex-col items-center gap-2">
-            <div className={`w-20 h-20 rounded-full border-4 flex flex-col items-center justify-center font-black ${gameState === 'BETTING' ? 'border-green-500 text-green-500' : 'border-red-600 text-red-600 animate-pulse'}`}>
-                <span className="text-[8px] opacity-60">TIME</span>
-                <span className="text-3xl leading-none">{timeLeft}s</span>
-            </div>
-            
-            <div className="w-24 h-32 rounded-2xl border-4 border-dashed border-yellow-500/30 flex items-center justify-center relative bg-black/30 mt-4 shadow-inner">
-                {joker ? (
-                    <div className="bg-white rounded-lg flex flex-col items-center justify-center w-20 h-28 border-2 border-yellow-400 shadow-2xl animate-in zoom-in">
-                        <span className={`text-2xl font-black ${joker.suit==='♥'||joker.suit==='♦'?'text-red-600':'text-black'}`}>{joker.rank}</span>
-                        <span className={`text-xl ${joker.suit==='♥'||joker.suit==='♦'?'text-red-600':'text-black'}`}>{joker.suit}</span>
-                    </div>
-                ) : <span className="text-yellow-500/20 font-black text-xl tracking-widest">TRUMP</span>}
+      <div className="flex-1 flex flex-col items-center p-4 relative overflow-y-auto no-scrollbar pb-80">
+        <div className={`w-16 h-16 rounded-full border-4 flex items-center justify-center font-black mb-6 ${gameState === 'BETTING' && betConfirmed ? 'border-green-500 text-green-500' : 'border-red-600 text-red-600 animate-pulse'}`}>
+            <span className="text-2xl font-mono">{betConfirmed ? timeLeft : '--'}s</span>
+        </div>
+        
+        <div className="mb-10 text-center">
+            <span className="text-[8px] font-black uppercase text-yellow-500/60 tracking-[0.4em] block mb-2">Trump</span>
+            <div className="flex justify-center h-28">
+              {joker ? <FullCard card={joker} /> : <div className="w-20 h-28 bg-black/40 border-4 border-dashed border-white/10 rounded-2xl flex items-center justify-center text-2xl text-white/5">?</div>}
             </div>
         </div>
 
-        <div className="w-full mt-6 grid grid-cols-2 gap-4 h-48 overflow-hidden pt-4">
-            <div className="flex flex-col items-center gap-2">
-                 <h4 className="text-[10px] font-black uppercase text-red-400 tracking-widest">Andar</h4>
-                 <div className="flex flex-col items-center relative w-full h-full">
-                    {andarCards.map((c, i) => (
-                        <div key={c.id} className="absolute bg-white rounded-md w-12 h-18 border border-slate-300 flex flex-col items-center justify-center shadow-lg animate-in slide-in-from-top" style={{ top: `${i * 12}px`, zIndex: 100 - i }}>
-                             <span className={`text-sm font-black ${c.suit==='♥'||c.suit==='♦'?'text-red-600':'text-black'}`}>{c.rank}</span>
-                        </div>
-                    ))}
-                 </div>
+        <div className="grid grid-cols-2 gap-4 w-full h-[320px] max-h-[320px]">
+            <div className="flex flex-col items-center bg-black/20 rounded-3xl p-4 border border-white/5 h-full overflow-hidden">
+                <span className="text-[9px] font-black uppercase text-red-400 tracking-widest mb-4 shrink-0">ANDAR</span>
+                <div className="relative w-full flex flex-wrap justify-center content-start gap-1 h-full overflow-y-auto no-scrollbar">
+                    {andarCards.map((c) => <FullCard key={c.id} card={c} />)}
+                </div>
             </div>
-            <div className="flex flex-col items-center gap-2">
-                 <h4 className="text-[10px] font-black uppercase text-blue-400 tracking-widest">Bahar</h4>
-                 <div className="flex flex-col items-center relative w-full h-full">
-                    {baharCards.map((c, i) => (
-                        <div key={c.id} className="absolute bg-white rounded-md w-12 h-18 border border-slate-300 flex flex-col items-center justify-center shadow-lg animate-in slide-in-from-top" style={{ top: `${i * 12}px`, zIndex: 100 - i }}>
-                             <span className={`text-sm font-black ${c.suit==='♥'||c.suit==='♦'?'text-red-600':'text-black'}`}>{c.rank}</span>
-                        </div>
-                    ))}
-                 </div>
+            <div className="flex flex-col items-center bg-black/20 rounded-3xl p-4 border border-white/5 h-full overflow-hidden">
+                <span className="text-[9px] font-black uppercase text-blue-400 tracking-widest mb-4 shrink-0">BAHAR</span>
+                <div className="relative w-full flex flex-wrap justify-center content-start gap-1 h-full overflow-y-auto no-scrollbar">
+                    {baharCards.map((c) => <FullCard key={c.id} card={c} />)}
+                </div>
             </div>
         </div>
       </div>
 
-      <div className="bg-[#111] p-6 pb-12 border-t border-white/10 shadow-[0_-20px_60px_rgba(0,0,0,0.8)]">
-        <div className="flex gap-4 mb-6">
-             <button onClick={() => initiateBet('ANDAR')} disabled={gameState !== 'BETTING'} className={`flex-1 h-28 rounded-3xl border-b-8 transition-all active:scale-95 flex flex-col items-center justify-center ${selectedSide === 'ANDAR' ? 'bg-red-600 border-red-800 shadow-xl' : 'bg-slate-800 border-slate-900 opacity-60'}`}>
-                <span className="text-2xl font-black italic tracking-tighter">ANDAR</span>
-                <span className="text-xs font-bold opacity-60">1.95X</span>
-             </button>
-             <button onClick={() => initiateBet('BAHAR')} disabled={gameState !== 'BETTING'} className={`flex-1 h-28 rounded-3xl border-b-8 transition-all active:scale-95 flex flex-col items-center justify-center ${selectedSide === 'BAHAR' ? 'bg-blue-600 border-blue-800 shadow-xl' : 'bg-slate-800 border-slate-900 opacity-60'}`}>
-                <span className="text-2xl font-black italic tracking-tighter">BAHAR</span>
-                <span className="text-xs font-bold opacity-60">1.95X</span>
-             </button>
-        </div>
-        <div className="flex gap-2 overflow-x-auto no-scrollbar mb-4">
-            {[10, 100, 500, 1000, 5000].map(a => <button key={a} onClick={() => gameState === 'BETTING' && setBetAmount(a)} className={`px-5 py-2.5 rounded-xl font-black text-xs transition-all ${betAmount === a ? 'bg-yellow-500 text-black shadow-lg scale-105' : 'bg-zinc-900 text-zinc-600'}`}>₹{a}</button>)}
-        </div>
+      <div className="fixed bottom-0 left-0 w-full bg-[#111] p-6 pb-12 border-t border-white/10 shadow-[0_-20px_60px_rgba(0,0,0,1)] z-[60]">
+        {!betConfirmed && gameState === 'BETTING' ? (
+            <div className="space-y-4 animate-in slide-in-from-bottom duration-300">
+                <div className="flex gap-4">
+                    <button onClick={() => setSelectedSide('ANDAR')} className={`flex-1 h-20 rounded-[1.5rem] border-b-4 flex flex-col items-center justify-center transition-all ${selectedSide === 'ANDAR' ? 'bg-red-600 border-red-800 ring-2 ring-white/20 shadow-xl scale-105' : 'bg-slate-800 border-slate-900 opacity-60'}`}>
+                        <span className="font-black italic">ANDAR</span>
+                        <span className="text-[8px] font-bold opacity-60">1.95X</span>
+                    </button>
+                    <button onClick={() => setSelectedSide('BAHAR')} className={`flex-1 h-20 rounded-[1.5rem] border-b-4 flex flex-col items-center justify-center transition-all ${selectedSide === 'BAHAR' ? 'bg-blue-600 border-blue-800 ring-2 ring-white/20 shadow-xl scale-105' : 'bg-slate-800 border-slate-900 opacity-60'}`}>
+                        <span className="font-black italic">BAHAR</span>
+                        <span className="text-[8px] font-bold opacity-60">1.95X</span>
+                    </button>
+                </div>
+                <div className="flex gap-2 overflow-x-auto no-scrollbar justify-center py-2">
+                    {[10, 100, 500, 1000, 5000].map(a => <button key={a} onClick={() => setBetAmount(a)} className={`px-4 py-2 rounded-xl font-black text-[10px] border transition-all ${betAmount === a ? 'bg-yellow-500 text-black border-white' : 'bg-zinc-900 text-zinc-600 border-white/5'}`}>₹{a >= 1000 ? (a/1000)+'K' : a}</button>)}
+                </div>
+                <button onClick={handlePlaceBet} className="w-full py-5 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-black uppercase tracking-widest rounded-2xl flex items-center justify-center gap-3 shadow-xl border-t-2 border-white/20 active:scale-95">
+                    <Play size={20}/> PLACE BET ₹{betAmount}
+                </button>
+            </div>
+        ) : (
+            <div className="text-center py-10">
+                <p className="text-sm font-black italic gold-text tracking-widest uppercase animate-pulse">
+                    {gameState === 'BETTING' ? `BET PLACED ON ${selectedSide} | ₹${betAmount}` : `DEALING IN PROGRESS...`}
+                </p>
+            </div>
+        )}
       </div>
-
-      {showConfirm && (
-          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/80 backdrop-blur-md">
-              <div className="bg-[#111] w-full max-w-md rounded-t-[3rem] p-10 border-t-2 border-yellow-500/40 animate-in slide-in-from-bottom duration-300">
-                  <div className="flex justify-between items-center mb-10">
-                      <div>
-                          <p className="text-[14px] text-zinc-500 font-black uppercase tracking-widest mb-1">Confirm Stake</p>
-                          <h3 className="text-5xl font-black italic gold-text tracking-tighter">{selectedSide}</h3>
-                      </div>
-                      <button onClick={() => setShowConfirm(false)} className="p-5 bg-zinc-900 rounded-full border border-white/10 active:scale-90 transition-transform"><X size={28}/></button>
-                  </div>
-                  <div className="bg-zinc-950 p-10 rounded-[3rem] mb-10 flex items-center justify-between border border-white/5 shadow-inner">
-                       <div className="flex flex-col"><span className="text-[14px] text-slate-500 uppercase font-black">Bet Amount</span><span className="text-5xl font-black">₹{betAmount}</span></div>
-                       <div className="w-20 h-20 rounded-full bg-yellow-500 flex items-center justify-center text-black font-black text-2xl shadow-2xl ring-4 ring-yellow-400/20">₹{betAmount >= 1000 ? `${betAmount/1000}k` : betAmount}</div>
-                  </div>
-                  <button onClick={startRound} className="w-full py-8 rounded-[3rem] bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600 text-black font-black uppercase tracking-[0.5em] text-3xl shadow-[0_20px_60px_rgba(234,179,8,0.4)] active:scale-95 transition-all border-t-2 border-white/30">CONFIRM STAKE</button>
-              </div>
-          </div>
-      )}
-
       <style>{`.gold-text { background: linear-gradient(to bottom, #fde68a, #d97706, #fde68a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }`}</style>
     </div>
   );
 };
-
 export default AndarBahar;

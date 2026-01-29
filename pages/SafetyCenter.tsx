@@ -28,7 +28,8 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
         { id: 2, name: 'Chrome - Linux', type: 'laptop', status: 'Offline', lastActive: '3 hours ago' }
     ]);
 
-    const handleSetWithdrawPassword = () => {
+    /* Fix: Update handleSetWithdrawPassword to be async to handle the database update */
+    const handleSetWithdrawPassword = async () => {
         if (newWithdrawPassword.length !== 6 || !/^\d{6}$/.test(newWithdrawPassword)) {
             setMsg('PIN must be exactly 6 digits.');
             return;
@@ -37,7 +38,8 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
             setMsg('Passwords do not match.');
             return;
         }
-        const success = setWithdrawalPassword(newWithdrawPassword);
+        /* Fix: Await the setWithdrawalPassword call */
+        const success = await setWithdrawalPassword(newWithdrawPassword);
         if (success) {
             setMsg('Security PIN set successfully!');
             setTimeout(() => {
@@ -46,6 +48,8 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
                 setNewWithdrawPassword('');
                 setConfirmWithdrawPassword('');
             }, 1500);
+        } else {
+            setMsg('Failed to update PIN. Please try again.');
         }
     };
 

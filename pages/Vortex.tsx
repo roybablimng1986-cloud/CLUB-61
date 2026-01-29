@@ -156,8 +156,7 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const launch = () => {
     if (gameState !== 'IDLE' || userBalance < betAmount) return;
     setGameState('SPINNING');
-    updateBalance(-betAmount, 'BET', 'Vortex Launch');
-    // FIX: Changed invalid sound name 'spin' to 'wheel_spin'
+    updateBalance(-betAmount, 'BET', 'Circle Spin');
     playSound('click'); playSound('wheel_spin');
     
     ballAngle.current = Math.random() * Math.PI * 2;
@@ -170,7 +169,6 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     if (gameState !== 'SPINNING') return;
     setGameState('LOCKED');
 
-    // Pocket match logic: find which pocket is under the ball's final angle
     const relativeAngle = (ballAngle.current - ringRotation.current) % (Math.PI * 2);
     const normalized = relativeAngle < 0 ? relativeAngle + Math.PI * 2 : relativeAngle;
     const idx = Math.floor( (normalized / (Math.PI * 2)) * POCKETS.length ) % POCKETS.length;
@@ -180,12 +178,12 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
 
     setTimeout(() => {
         if (!isMounted.current) return;
-        if (winAmt > 0) { updateBalance(winAmt, 'WIN', 'Vortex Win'); playSound('win'); } else { playSound('loss'); }
+        if (winAmt > 0) { updateBalance(winAmt, 'WIN', 'Circle Spin Win'); playSound('win'); } else { playSound('loss'); }
         setHistory(prev => [result.mult + 'X', ...prev].slice(0, 10));
         onResult({ 
             win: winAmt > 0, 
             amount: winAmt > 0 ? winAmt : betAmount, 
-            game: 'Vortex',
+            game: 'Circle Spin',
             resultDetails: [{ label: 'Pocket', value: result.mult + 'X', color: result.mult > 0 ? 'text-yellow-400' : 'text-slate-500' }]
         });
         setGameState('IDLE');
@@ -196,7 +194,7 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     <div className="bg-black min-h-screen flex flex-col font-sans text-white select-none overflow-hidden relative">
       <div className="p-4 flex justify-between items-center bg-[#111827] border-b border-white/5 z-50 shadow-2xl">
         <button onClick={onBack} className="p-2.5 bg-slate-800 rounded-2xl border border-white/10 active:scale-90"><ArrowLeft size={20}/></button>
-        <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">THE VORTEX</h1>
+        <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">CIRCLE SPIN</h1>
         <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner">
           <Wallet size={14} className="text-yellow-500" />
           <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>

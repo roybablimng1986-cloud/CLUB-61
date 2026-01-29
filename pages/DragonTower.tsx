@@ -37,7 +37,6 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
     if (gameState !== 'PLAYING') return;
     setGameState('REVEALING');
     setRevealedIdx(idx);
-    // FIX: Changed invalid sound name 'tick' to 'tower_step'
     playSound('tower_step');
     await new Promise(r => setTimeout(r, 800));
     
@@ -46,7 +45,6 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
     
     if (isWin) {
         playSound('win');
-        // When winning a row, we "reveal" the fire location of that row so the user sees it as they move up
         setRevealedRows(prev => [...prev, currentLv + 1]);
         setCurrentLv(prev => prev + 1);
         setGameState('PLAYING');
@@ -55,7 +53,7 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
     } else {
         playSound('loss');
         setGameState('LOST');
-        setRevealedRows(prev => [...prev, currentLv + 1]); // Show where you died
+        setRevealedRows(prev => [...prev, currentLv + 1]);
         addGameHistory('Dragon Tower', bet, 0, `Burned at Level ${currentLv + 2}`);
         
         onResult({
@@ -84,7 +82,6 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
 
   return (
     <div className="bg-[#0a0505] min-h-screen flex flex-col font-sans text-white overflow-hidden relative">
-      {/* Full Screen Result Overlays */}
       {gameState === 'LOST' && (
           <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-red-950/90 backdrop-blur-md animate-in fade-in duration-500">
               <div className="bg-red-600 p-6 rounded-full shadow-[0_0_50px_rgba(220,38,38,0.8)] mb-6 animate-bounce">
@@ -117,7 +114,7 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
 
       <div className="p-4 flex justify-between items-center bg-black/60 border-b border-orange-500/20 z-50 shadow-xl">
         <div className="flex items-center gap-3">
-            <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl"><ArrowLeft size={20}/></button>
+            <button onClick={onBack} disabled={gameState === 'PLAYING'} className="p-2 bg-slate-800 rounded-xl"><ArrowLeft size={20}/></button>
             <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-orange-500/20 shadow-inner">
                 <Wallet size={14} className="text-orange-500" />
                 <span className="text-sm font-black font-mono text-orange-500">₹{userBalance.toFixed(2)}</span>
@@ -128,7 +125,6 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar p-4 flex flex-col-reverse gap-4 bg-[#0a0505] relative">
-          {/* Background fire embers effect */}
           <div className="absolute inset-0 pointer-events-none opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
           
           {LEVELS.map((m, i) => (
@@ -177,7 +173,6 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
           ))}
       </div>
 
-      {/* Control Panel - Fix: Only show button if not LOST or WON */}
       <div className="bg-[#111] p-6 border-t border-white/10 pb-12 z-50">
         {gameState === 'IDLE' ? (
             <div className="space-y-4">
@@ -188,8 +183,8 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
                 </div>
                 <button onClick={start} className="w-full py-6 bg-gradient-to-r from-orange-600 to-red-600 rounded-[2.5rem] font-black text-xl shadow-xl active:scale-95 transition-all uppercase tracking-widest border-t-2 border-white/10">Climb Tower</button>
             </div>
-        ) : gameState === 'PLAYING' || gameState === 'REVEALING' ? (
-            <button onClick={() => cashout()} disabled={currentLv === -1 || gameState !== 'PLAYING'} className={`w-full py-5 rounded-[2rem] font-black text-xl shadow-xl transition-all ${currentLv === -1 ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-yellow-500 text-black shadow-yellow-500/40 border-t-2 border-white/30'}`}>
+        ) : gameState === 'PLAYING' ? (
+            <button onClick={() => cashout()} disabled={currentLv === -1} className={`w-full py-5 rounded-[2rem] font-black text-xl shadow-xl transition-all ${currentLv === -1 ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed' : 'bg-yellow-500 text-black shadow-yellow-500/40 border-t-2 border-white/30'}`}>
                 {currentLv === -1 ? 'PICK A TILE' : `CASH OUT ₹${(bet * LEVELS[currentLv]).toFixed(2)}`}
             </button>
         ) : null}

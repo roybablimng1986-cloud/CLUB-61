@@ -5,8 +5,25 @@ import Home from './pages/Home';
 import WinGo from './pages/WinGo';
 import Aviator from './pages/Aviator';
 import Mines from './pages/Mines';
-import DogRoad from './pages/DogRoad';
-import Vortex from './pages/Vortex';
+import DragonTiger from './pages/DragonTiger';
+import Roulette from './pages/Roulette';
+import SicBo from './pages/SicBo';
+import Baccarat from './pages/Baccarat';
+import StreetRace from './pages/StreetRace';
+import VaultBreaker from './pages/VaultBreaker';
+import HeadTails from './pages/HeadTails';
+import Limbo from './pages/Limbo';
+import Plinko from './pages/Plinko';
+import HiLo from './pages/HiLo';
+import DragonTower from './pages/DragonTower';
+import Keno from './pages/Keno';
+import DiceDuel from './pages/DiceDuel';
+import FruitSlot from './pages/FruitSlot';
+import EgyptSlot from './pages/EgyptSlot';
+import MotoRacing from './pages/MotoRacing';
+import Penalty from './pages/Penalty';
+import Cricket from './pages/Cricket';
+import Tower from './pages/Tower';
 import Profile from './pages/Profile';
 import Referral from './pages/Referral';
 import Promotion from './pages/Promotion';
@@ -15,32 +32,18 @@ import Withdraw from './pages/Withdraw';
 import Wallet from './pages/Wallet';
 import SafetyCenter from './pages/SafetyCenter';
 import GameStatistics from './pages/GameStatistics';
-import DragonTiger from './pages/DragonTiger';
-import Roulette from './pages/Roulette';
-import SicBo from './pages/SicBo';
-import Baccarat from './pages/Baccarat';
-import StreetRace from './pages/StreetRace';
-import VaultBreaker from './pages/VaultBreaker';
-import SlotMachine from './pages/SlotMachine';
-import HeadTails from './pages/HeadTails';
-import Limbo from './pages/Limbo';
-import Plinko from './pages/Plinko';
-import HiLo from './pages/HiLo';
-import DragonTower from './pages/DragonTower';
-import Keno from './pages/Keno';
-import AndarBahar from './pages/AndarBahar';
-import DiceDuel from './pages/DiceDuel';
-import FruitSlot from './pages/FruitSlot';
-import EgyptSlot from './pages/EgyptSlot';
-import MotoRacing from './pages/MotoRacing';
-import Penalty from './pages/Penalty';
-import Cricket from './pages/Cricket';
-import Tower from './pages/Tower';
 import BindingRewards from './pages/BindingRewards';
 import Auth from './pages/Auth';
+import Leaderboard from './pages/Leaderboard';
+import CyberBurst from './pages/CyberBurst';
+import DogRoad from './pages/DogRoad';
+import LiveChat from './pages/LiveChat';
+import Vortex from './pages/Vortex';
+import SlotMachine from './pages/SlotMachine';
+import AndarBahar from './pages/AndarBahar';
 import GameResultPopup from './components/GameResultPopup';
 import { View, UserProfile, GameResult } from './types';
-import { subscribeToBalance, startGlobalEngines, checkAuth, stopAllSounds } from './services/mockFirebase';
+import { subscribeToBalance, startGlobalEngines, stopAllSounds } from './services/mockFirebase';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('HOME');
@@ -64,8 +67,15 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  if (isLoading) return <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center"><div className="w-10 h-10 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div></div>;
-  if (!user && currentView !== 'LOGIN' && currentView !== 'REGISTER') return <Auth />;
+  if (isLoading) return (
+    <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center">
+      <div className="w-12 h-12 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  );
+
+  if (!user && currentView !== 'LOGIN' && currentView !== 'REGISTER') {
+    return <Auth />;
+  }
 
   const renderContent = () => {
     if (!user) return <Auth />;
@@ -81,21 +91,26 @@ export default function App() {
       case 'GAME_BACCARAT': return <Baccarat onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_STREET_RACE': return <StreetRace onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_VAULT': return <VaultBreaker onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_SLOTS': return <SlotMachine onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_DOG': return <DogRoad onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_HEAD_TAILS': return <HeadTails onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_LIMBO': return <Limbo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_FRUIT_SLOT': return <FruitSlot onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_EGYPT_SLOT': return <EgyptSlot onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_DICE': return <DiceDuel onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_MOTO_RACING': return <MotoRacing onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_PLINKO': return <Plinko onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_LIMBO': return <Limbo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_HILO': return <HiLo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_DRAGON_TOWER': return <DragonTower onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_KENO': return <Keno onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_ANDAR_BAHAR': return <AndarBahar onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_DICE': return <DiceDuel onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_FRUIT_SLOT': return <FruitSlot onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_EGYPT_SLOT': return <EgyptSlot onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_MOTO_RACING': return <MotoRacing onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_HEAD_TAILS': return <HeadTails onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_BURST': return <CyberBurst onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_DOG': return <DogRoad onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_VORTEX': return <Vortex onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_PENALTY': return <Penalty onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_CRICKET': return <Cricket onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_TOWER': return <Tower onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_SLOT_MACHINE': return <SlotMachine onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_ANDAR_BAHAR': return <AndarBahar onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'LEADERBOARD': return <Leaderboard onBack={() => setCurrentView('HOME')} />;
+      case 'CHAT': return <LiveChat onBack={() => setCurrentView('HOME')} />;
       case 'ACCOUNT': return <Profile user={user} setView={setCurrentView} />;
       case 'REFERRAL': return <Referral user={user} />;
       case 'PROMOTION': return <Promotion />;

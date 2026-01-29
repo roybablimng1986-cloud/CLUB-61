@@ -24,14 +24,12 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
     const [gemsFound, setGemsFound] = useState(0);
     const [gameOver, setGameOver] = useState(false);
     const [muted, setMuted] = useState(getMuteStatus());
-    const [showRules, setShowRules] = useState(false);
     
     const isMounted = useRef(true);
 
     useEffect(() => {
         isMounted.current = true;
-        const unsubHistory = getGameHistory('Mines', (data) => {});
-        return () => { isMounted.current = false; unsubHistory(); stopAllSounds(); };
+        return () => { isMounted.current = false; stopAllSounds(); };
     }, []);
 
     const startGame = () => {
@@ -62,7 +60,7 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
             setGameOver(true); setIsPlaying(false);
             setRevealed(Array(25).fill(true));
             addGameHistory('Mines', betAmount, 0, `Hit Mine`);
-            onResult({ win: false, amount: betAmount, game: 'Mines', resultDetails: [{ label: 'Result', value: 'Boom!' }] });
+            onResult({ win: false, amount: betAmount, game: 'Mines' });
         } else {
             playSound('mine_reveal');
             setGemsFound(prev => prev + 1);
@@ -82,7 +80,7 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
     };
 
     return (
-        <div className="bg-[#0f172a] min-h-screen flex flex-col pb-safe font-sans">
+        <div className="bg-[#0f172a] min-h-screen flex flex-col pb-safe font-sans select-none">
             <div className="bg-[#1e293b] p-4 flex items-center justify-between border-b border-slate-700 shadow-lg">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack}><ArrowLeft className="text-white" /></button>
@@ -113,23 +111,35 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
                     ))}
                 </div>
 
-                <div className="w-full max-w-md bg-[#1e293b] rounded-xl p-4 space-y-4 shadow-xl border border-slate-700">
+                <div className="w-full max-w-md bg-[#1e293b] rounded-2xl p-5 space-y-5 shadow-2xl border border-slate-700">
                     {!isPlaying ? (
                         <>
-                            <div className="flex gap-2">
-                                {[1, 3, 5, 10].map(num => (
-                                    <button key={num} onClick={() => setMinesCount(num)} className={`flex-1 py-3 rounded-xl font-bold ${minesCount === num ? 'bg-blue-600 text-white' : 'bg-[#0f172a] text-slate-400 border border-slate-700'}`}>{num} Mines</button>
-                                ))}
+                            <div className="flex flex-col gap-2">
+                                <p className="text-[10px] text-slate-500 font-black uppercase ml-1">Stake Amount</p>
+                                <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                                    {[10, 50, 100, 500, 1000].map(amt => (
+                                        <button key={amt} onClick={() => setBetAmount(amt)} className={`flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black border transition-all ${betAmount === amt ? 'bg-blue-600 border-white text-white' : 'bg-slate-900 border-slate-700 text-slate-500'}`}>₹{amt}</button>
+                                    ))}
+                                </div>
                             </div>
-                            <button onClick={startGame} className="w-full bg-blue-600 py-4 rounded-xl font-bold text-white shadow-lg active:scale-95 transition-all">START HUNT</button>
+                            <div className="flex flex-col gap-2">
+                                <p className="text-[10px] text-slate-500 font-black uppercase ml-1">Mines Count</p>
+                                <div className="flex gap-2">
+                                    {[1, 3, 5, 10, 20].map(num => (
+                                        <button key={num} onClick={() => setMinesCount(num)} className={`flex-1 py-3 rounded-xl font-bold text-xs ${minesCount === num ? 'bg-red-600 text-white border-white border' : 'bg-slate-900 text-slate-400 border border-slate-700'}`}>{num}</button>
+                                    ))}
+                                </div>
+                            </div>
+                            <button onClick={startGame} className="w-full bg-blue-600 py-4 rounded-xl font-black text-white shadow-lg active:scale-95 transition-all uppercase tracking-widest text-lg">START HUNT</button>
                         </>
                     ) : (
-                        <button onClick={cashOut} disabled={gemsFound === 0} className={`w-full py-4 rounded-xl font-bold shadow-lg text-white ${gemsFound > 0 ? 'bg-green-600 shadow-green-900/30' : 'bg-slate-700 opacity-50'}`}>
-                            {gemsFound === 0 ? 'Pick a Tile' : `COLLECT ₹${(betAmount * (1 + (gemsFound * 0.2) + (minesCount * 0.05))).toFixed(2)}`}
+                        <button onClick={cashOut} disabled={gemsFound === 0} className={`w-full py-5 rounded-xl font-black shadow-lg text-white transition-all active:scale-95 text-xl ${gemsFound > 0 ? 'bg-green-600 animate-pulse' : 'bg-slate-700 opacity-50 cursor-not-allowed'}`}>
+                            {gemsFound === 0 ? 'FIND GEMS' : `CASHOUT ₹${(betAmount * (1 + (gemsFound * 0.2) + (minesCount * 0.05))).toFixed(2)}`}
                         </button>
                     )}
                 </div>
             </div>
+            <style>{`.gold-text { background: linear-gradient(to bottom, #fde68a, #d97706, #fde68a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }`}</style>
         </div>
     );
 };

@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { Gift, ArrowLeft } from 'lucide-react';
-import { redeemGiftCode, getTransactionHistory } from '../services/mockFirebase';
+import { Gift, ArrowLeft, History } from 'lucide-react';
+import { redeemGiftCode, getTransactionHistory, playSound } from '../services/mockFirebase';
 import { Transaction } from '../types';
 
 const Promotion: React.FC = () => {
   const [code, setCode] = useState('');
-  const [message, setMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
+  const [message, setMessage] = useState<{type: 'success'|'error'|'info', text: string} | null>(null);
   const [giftHistory, setGiftHistory] = useState<Transaction[]>([]);
 
   useEffect(() => {
@@ -19,20 +19,31 @@ const Promotion: React.FC = () => {
   const handleRedeem = async () => {
       if (!code) return;
       
-      const amount = await redeemGiftCode(code);
-      if (amount > 0) {
-          setMessage({ type: 'success', text: `Success! ₹${amount} added.` });
+      const res = await redeemGiftCode(code);
+      if (res > 0) {
+          setMessage({ type: 'success', text: `Success! ₹${res} added to wallet.` });
+          playSound('win');
           setCode('');
+      } else if (res === -1) {
+          setMessage({ type: 'error', text: 'You have already used this code.' });
+          playSound('loss');
+      } else if (res === -2) {
+          setMessage({ type: 'error', text: 'Code limit has been reached.' });
+          playSound('loss');
+      } else if (res === -3) {
+          setMessage({ type: 'error', text: 'VIP Level insufficient for this reward.' });
+          playSound('loss');
       } else {
-          setMessage({ type: 'error', text: 'Invalid gift code or already used.' });
+          setMessage({ type: 'error', text: 'Invalid gift code.' });
+          playSound('loss');
       }
 
-      setTimeout(() => setMessage(null), 3000);
+      setTimeout(() => setMessage(null), 4000);
   };
 
   return (
     <div className="bg-[#1e293b] min-h-screen flex flex-col font-sans">
-      <div className="bg-[#1e293b] p-4 text-white text-center font-bold text-lg relative shadow-md">
+      <div className="bg-[#1e293b] p-4 text-white text-center font-black text-sm uppercase tracking-[0.2em] relative shadow-md">
         Gift Center
       </div>
       
@@ -47,61 +58,60 @@ const Promotion: React.FC = () => {
           </div>
       </div>
 
-      <div className="flex-1 bg-[#1e293b] -mt-6 rounded-t-3xl relative z-10 px-6 pt-10 pb-20">
-          <div className="text-white text-sm mb-6">
-              <p className="font-black uppercase tracking-widest text-slate-300">Exclusive Reward</p>
-              <p className="text-slate-400 text-xs">Redeem elite Mafia codes for instant assets.</p>
+      <div className="flex-1 bg-[#1e293b] -mt-6 rounded-t-[3rem] relative z-10 px-6 pt-10 pb-28 border-t border-white/10">
+          <div className="text-white text-sm mb-8 text-center">
+              <p className="font-black uppercase tracking-widest text-yellow-500">Exclusive Mafia Assets</p>
+              <p className="text-slate-400 text-[10px] mt-1 uppercase">Redeem secret codes for instant wallet boost.</p>
           </div>
 
           <div className="space-y-6">
-              <div>
-                  <label className="block text-slate-400 text-[10px] font-black uppercase mb-2 ml-1">Enter Secret Code</label>
+              <div className="bg-[#0f172a] rounded-[2rem] p-1 border border-white/5">
                   <input 
                       type="text" 
-                      placeholder="e.g. MAFIA100"
+                      placeholder="ENTER SECRET CODE"
                       value={code}
-                      onChange={(e) => setCode(e.target.value)}
-                      className="w-full bg-[#0f172a] text-white rounded-2xl py-5 px-6 border border-slate-700 outline-none focus:border-blue-500 transition-colors font-black tracking-widest"
+                      onChange={(e) => setCode(e.target.value.toUpperCase())}
+                      className="w-full bg-transparent text-white text-center rounded-[2rem] py-5 px-6 outline-none focus:text-yellow-400 transition-colors font-black tracking-[0.4em] uppercase"
                   />
               </div>
 
               {message && (
-                  <div className={`text-center text-xs font-black uppercase tracking-widest ${message.type === 'success' ? 'text-green-500' : 'text-red-500'}`}>
+                  <div className={`text-center text-[10px] font-black uppercase tracking-widest animate-in zoom-in ${message.type === 'success' ? 'text-green-500' : 'text-red-500'}`}>
                       {message.text}
                   </div>
               )}
 
               <button 
                   onClick={handleRedeem}
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 text-white font-black py-5 rounded-2xl shadow-xl transition-all active:scale-95 uppercase tracking-[0.3em]"
+                  className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 text-black font-black py-5 rounded-[2rem] shadow-xl transition-all active:scale-95 uppercase tracking-[0.3em] border-t-2 border-white/20"
               >
-                  Claim Code
+                  Claim Assets
               </button>
 
               <div className="mt-12">
-                  <h3 className="text-white flex items-center gap-3 font-black uppercase tracking-widest text-sm mb-6">
-                      <div className="p-2 bg-blue-500/10 rounded-lg"><Gift size={18} className="text-blue-500"/></div>
-                      Redemption History
+                  <h3 className="text-white flex items-center gap-3 font-black uppercase tracking-widest text-[10px] mb-6 opacity-60">
+                      <History size={16} className="text-yellow-500"/>
+                      Redemption Archive
                   </h3>
                   {giftHistory.length > 0 ? (
                       <div className="space-y-3">
                           {giftHistory.map((tx) => (
-                              <div key={tx.id} className="bg-[#0f172a] p-5 rounded-2xl border border-slate-700 flex justify-between items-center shadow-lg">
+                              <div key={tx.id} className="bg-[#0f172a] p-5 rounded-3xl border border-white/5 flex justify-between items-center shadow-lg">
                                   <div>
-                                      <p className="text-white font-black text-sm uppercase">{tx.desc}</p>
-                                      <p className="text-[9px] text-slate-500 font-bold mt-1">{tx.date}</p>
+                                      <p className="text-white font-black text-xs uppercase tracking-tighter italic">Mafia Bounty Claimed</p>
+                                      <p className="text-[9px] text-slate-500 font-bold mt-1 uppercase">{tx.date}</p>
                                   </div>
                                   <div className="text-right">
-                                      <span className="text-green-500 font-black text-lg">+₹{tx.amount}</span>
-                                      <p className="text-[8px] text-slate-600 font-black uppercase">Success</p>
+                                      <span className="text-green-500 font-black text-lg italic tracking-tighter">+₹{tx.amount}</span>
+                                      <p className="text-[8px] text-slate-700 font-black uppercase">Settled</p>
                                   </div>
                               </div>
                           ))}
                       </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-20 opacity-30">
-                        <div className="w-16 h-16 bg-slate-800 rounded-2xl mb-4 border border-white/5"></div>
-                        <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">No redemption logs</p>
+                    <div className="flex flex-col items-center justify-center py-20 opacity-10">
+                        <Gift size={48} className="mb-4" />
+                        <p className="text-[10px] font-black uppercase tracking-widest">No logs found</p>
                     </div>
                   )}
               </div>

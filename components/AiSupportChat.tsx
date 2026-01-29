@@ -10,7 +10,7 @@ interface Message {
 
 const AiSupportChat: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'model', text: 'Hello! I am your CLUB 61 AI Assistant. How can I help you today? I can answer questions about deposits, withdrawals, and game rules.' }
+    { role: 'model', text: 'Hello! I am your MAFIA CLUB AI Assistant. How can I help you today? I can answer questions about deposits, withdrawals, and game rules.' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,14 +29,13 @@ const AiSupportChat: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
     setLoading(true);
 
     try {
-      // Fix: Always create a new GoogleGenAI instance right before making an API call to ensure use of up-to-date configuration.
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: userMsg,
         config: {
-          systemInstruction: `You are the Official CLUB 61 Support Bot. 
-          CLUB 61 is an elite gaming platform. 
+          systemInstruction: `You are the Official MAFIA CLUB Support Bot. 
+          MAFIA CLUB is an elite gaming platform. 
           Rules:
           1. Deposits: Take 5-10 mins. Users must submit correct 12-digit UTR.
           2. Withdrawals: Take 10-30 mins. Minimum ₹110. Daily limit 3 times.
@@ -46,7 +45,6 @@ const AiSupportChat: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isO
         }
       });
 
-      // Fix: Access the .text property directly as per GenAI guidelines.
       setMessages(prev => [...prev, { role: 'model', text: response.text || "I'm having trouble connecting. Please try again later." }]);
     } catch (error) {
       setMessages(prev => [...prev, { role: 'model', text: "Service temporarily unavailable. Please try again later." }]);

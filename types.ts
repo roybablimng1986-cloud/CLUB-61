@@ -1,5 +1,5 @@
 
-export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_DOG' | 'GAME_VORTEX' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS' | 'REWARDS_HUB' | 'GAME_DRAGON_TIGER' | 'GAME_ROULETTE' | 'GAME_SICBO' | 'GAME_BACCARAT' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'GAME_HEAD_TAILS' | 'GAME_LIMBO' | 'GAME_PLINKO' | 'GAME_HILO' | 'GAME_DRAGON_TOWER' | 'GAME_KENO' | 'GAME_DICE' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_MOTO_RACING';
+export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_BURST' | 'GAME_VORTEX' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS' | 'REWARDS_HUB' | 'GAME_DRAGON_TIGER' | 'GAME_ROULETTE' | 'GAME_SICBO' | 'GAME_BACCARAT' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'GAME_HEAD_TAILS' | 'GAME_LIMBO' | 'GAME_PLINKO' | 'GAME_HILO' | 'GAME_DRAGON_TOWER' | 'GAME_KENO' | 'GAME_DICE' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_MOTO_RACING' | 'LEADERBOARD' | 'GAME_DOG' | 'CHAT' | 'GAME_PENALTY' | 'GAME_CRICKET' | 'GAME_TOWER' | 'GAME_SLOT_MACHINE' | 'GAME_ANDAR_BAHAR';
 
 export interface UserProfile {
   uid: string;
@@ -8,6 +8,7 @@ export interface UserProfile {
   name: string;
   username: string;
   phone: string;
+  email: string;
   avatar: string;
   totalDeposit: number;
   totalBet: number; 
@@ -21,8 +22,19 @@ export interface UserProfile {
   isBankBound?: boolean;
   isUpiBound?: boolean;
   isTelegramJoined?: boolean;
+  isBlocked?: boolean;
   bankDetails?: { accountName: string; accountNo: string; ifsc: string };
   upiDetails?: { upiId: string };
+}
+
+export interface ChatMessage {
+    id: string;
+    uid: string;
+    username: string;
+    text: string;
+    timestamp: number;
+    avatar: string;
+    vip: number;
 }
 
 export interface AviatorState {
@@ -31,7 +43,6 @@ export interface AviatorState {
   timeLeft: number;
   history: number[];
   crashPoint: number;
-  startTime?: number;
 }
 
 export interface WinGoHistory {
@@ -126,4 +137,19 @@ export interface RouletteBet {
     type: 'NUMBER' | 'COLOR' | 'ODD_EVEN' | 'RANGE';
     value: string | number;
     amount: number;
+}
+
+// Added GiftCode and AppSettings interfaces
+export interface GiftCode {
+  code: string;
+  amount: number;
+  limit: number;
+  usedCount: number;
+  minVip: number;
+  createdAt: number;
+}
+
+export interface AppSettings {
+  upiId: string;
+  disabledGames: Record<string, boolean>;
 }

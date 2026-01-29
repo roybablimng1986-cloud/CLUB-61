@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Copy, ChevronRight, BarChart3, CreditCard, QrCode, X, Phone, MessageCircle, Share2, FileText, User, CheckCircle2, Crown, Lock, Send, ShieldAlert, AlertCircle, TrendingUp, Zap, Wallet } from 'lucide-react';
 import { referralStats, getSubordinates, getCommissions, subscribeToBalance, claimCommission, playSound } from '../services/mockFirebase';
-import { UserProfile } from '../types';
+import { UserProfile, SubordinateItem, CommissionItem } from '../types';
 
 interface ReferralProps {
     user: UserProfile;
@@ -13,22 +13,17 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
   const [showSubordinates, setShowSubordinates] = useState(false);
   const [showCommissions, setShowCommissions] = useState(false);
   const [activeTab, setActiveTab] = useState<'DIRECT' | 'TEAM'>('DIRECT');
-  const [, setTick] = useState(0); 
+  const [subordinateList, setSubordinateList] = useState<SubordinateItem[]>([]);
+  const [commissionList, setCommissionList] = useState<CommissionItem[]>([]);
   const [showToast, setShowToast] = useState(false);
-  const [commissions, setCommissions] = useState<any[]>([]);
   const [claimLoading, setClaimLoading] = useState(false);
 
   useEffect(() => {
-      const unsub = subscribeToBalance(() => {
-          setTick(t => t + 1);
-      });
-      const unsubComs = getCommissions((data) => {
-          setCommissions(data);
-      });
-      return () => { unsub(); unsubComs(); };
+      const unsubBalance = subscribeToBalance(() => {});
+      const unsubSubs = getSubordinates((data) => setSubordinateList(data));
+      const unsubComs = getCommissions((data) => setCommissionList(data));
+      return () => { unsubBalance(); unsubSubs(); unsubComs(); };
   }, []);
-
-  const subordinates = getSubordinates();
 
   const handleCopy = (text: string) => {
       navigator.clipboard.writeText(text);
@@ -43,16 +38,9 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
           text: `Join the elite MAFIA CLUB network. Register using my link ${referralStats.link} to win high rewards!`,
           url: referralStats.link
       };
-
       if (navigator.share) {
-          try {
-              await navigator.share(shareData);
-          } catch (err) {
-              console.log(err);
-          }
-      } else {
-          handleCopy(referralStats.link);
-      }
+          try { await navigator.share(shareData); } catch (err) {}
+      } else handleCopy(referralStats.link);
   };
 
   const handleClaim = async () => {
@@ -64,13 +52,10 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
       if (res.success) {
           alert(`Successfully claimed ₹${res.message || 'Assets'} to your wallet!`);
           playSound('win');
-      } else {
-          alert(res.message);
-      }
+      } else alert(res.message);
   };
 
-  // Restored stats logic
-  const directDepositCount = subordinates.filter(s => s.depositAmount > 0).length;
+  const directDepositCount = subordinateList.filter(s => s.depositAmount > 0).length;
 
   return (
     <div className="bg-[#0a0f1d] min-h-screen pb-32 font-sans relative select-none">
@@ -80,13 +65,11 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
           </div>
       )}
 
-      {/* Header Area */}
       <div className="bg-gradient-to-br from-[#1e293b] to-[#0a0f1d] p-6 pt-10 pb-20 rounded-b-[4rem] text-white shadow-xl relative overflow-hidden border-b border-yellow-500/20">
         <div className="absolute top-0 right-0 p-32 bg-yellow-500/5 rounded-full blur-3xl -mr-16 -mt-16"></div>
         <div className="flex flex-col items-center relative z-10">
             <Crown className="text-yellow-500 mb-2 fill-yellow-500" size={32} />
             <h1 className="text-center font-black text-sm mb-10 tracking-[0.3em] uppercase gold-text">AGENCY COMMAND CENTER</h1>
-            
             <div className="text-center mb-8">
                 <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Unclaimed Agency Assets</p>
                 <h2 className="text-7xl font-black mb-1 drop-shadow-2xl gold-text tracking-tighter italic">₹{referralStats.totalCommission.toFixed(2)}</h2>
@@ -108,7 +91,6 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
       </div>
 
       <div className="px-4 -mt-14 relative z-10 space-y-6">
-        {/* RESTORED: Referral Code Card */}
         <div className="bg-[#111827] rounded-[2rem] p-6 border-2 border-yellow-500/20 shadow-2xl flex items-center justify-between">
             <div className="flex items-center gap-4">
                 <div className="w-14 h-14 bg-yellow-500/10 rounded-2xl flex items-center justify-center border border-yellow-500/20">
@@ -122,7 +104,6 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
             <button onClick={() => handleCopy(referralStats.code)} className="p-4 bg-slate-800 rounded-2xl border border-white/5 active:scale-90 transition-all text-yellow-500"><Copy size={20}/></button>
         </div>
 
-        {/* Network Statistics Card */}
         <div className="bg-[#111827] rounded-[2.5rem] overflow-hidden shadow-2xl border border-slate-800">
             <div className="flex border-b border-slate-800">
                 <button 
@@ -138,7 +119,6 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
                      <span className="text-[11px] font-black uppercase tracking-widest italic">Global Network</span>
                 </button>
             </div>
-            
             <div className="p-8">
                 <div className="grid grid-cols-2 gap-y-10 text-center">
                     <div className="border-r border-slate-800">
@@ -149,7 +129,7 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
                     </div>
                     <div>
                         <div className="text-3xl font-black text-green-500 italic tracking-tighter">
-                            {activeTab === 'DIRECT' ? directDepositCount : Math.floor(directDepositCount * 1.5)}
+                            {activeTab === 'DIRECT' ? directDepositCount : Math.floor(directDepositCount * 1.3)}
                         </div>
                         <div className="text-[9px] text-slate-500 uppercase font-black tracking-widest mt-2">Deposited</div>
                     </div>
@@ -161,23 +141,14 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
                     </div>
                     <div>
                         <div className="text-3xl font-black text-blue-400 italic tracking-tighter">
-                            ₹{activeTab === 'DIRECT' ? referralStats.totalBetAmount.toFixed(0) : (referralStats.totalBetAmount * 1.8).toFixed(0)}
+                            ₹{activeTab === 'DIRECT' ? referralStats.totalBetAmount.toFixed(0) : (referralStats.totalBetAmount * 1.5).toFixed(0)}
                         </div>
                         <div className="text-[9px] text-slate-500 uppercase font-black tracking-widest mt-2">Bet Volume</div>
                     </div>
                 </div>
-                
-                <div className="mt-8 pt-6 border-t border-slate-800/50 flex items-center justify-between">
-                     <div className="flex items-center gap-2">
-                        <TrendingUp size={16} className="text-yellow-500" />
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Network Growth</span>
-                     </div>
-                     <span className="text-[10px] font-black text-green-500 uppercase tracking-widest">+12.5% Today</span>
-                </div>
             </div>
         </div>
 
-        {/* Primary Action */}
         <button 
             onClick={handleShare}
             className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 py-6 rounded-3xl text-black font-black text-lg shadow-[0_20px_50px_rgba(234,179,8,0.2)] mb-8 transition-all active:scale-95 flex items-center justify-center gap-4 uppercase tracking-[0.3em] border-t-2 border-white/20"
@@ -186,7 +157,6 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
             COPY INVITE LINK
         </button>
 
-        {/* Menu Grid */}
         <div className="grid grid-cols-1 gap-4">
             <MenuItem onClick={() => setShowSubordinates(true)} icon={BarChart3} label="Subordinate data" subtitle="View individual contribution" />
             <MenuItem onClick={() => setShowCommissions(true)} icon={CreditCard} label="Commission detail" subtitle="Trace asset flow" />
@@ -195,7 +165,6 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
         </div>
       </div>
 
-      {/* Policies Modal - RESTORED FULL CONTENT */}
       {showRules && (
           <FullPageModal title="Elite Network Policies" onClose={() => setShowRules(false)}>
               <div className="text-slate-300 text-sm space-y-8 font-medium leading-relaxed pb-10">
@@ -204,38 +173,17 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
                         <Zap size={16} className="fill-yellow-500"/> Direct Deposit Reward
                       </h4>
                       <p className="text-xs italic text-slate-400 leading-relaxed">
-                        Earn an instant <span className="text-white font-black">50% Commission Bonus</span> on the first deposit of every direct subordinate you invite. 
-                        Example: If a subordinate deposits ₹1,000, you receive ₹500 immediately in your agency wallet.
+                        Earn an instant <span className="text-white font-black">10% Commission Bonus</span> on every deposit of every direct subordinate. 
                       </p>
-                  </div>
-
-                  <div className="bg-blue-600/10 p-6 rounded-[2rem] border border-blue-500/20">
-                      <h4 className="text-blue-400 font-black uppercase text-xs mb-4 flex items-center gap-2 italic tracking-widest">
-                        <TrendingUp size={16}/> Bet Turnover Dividend
-                      </h4>
-                      <p className="text-xs italic text-slate-400 leading-relaxed">
-                        Earn <span className="text-white font-black">0.6% Daily Commission</span> on the total betting turnover of your entire network. 
-                        Dividends are calculated at 12:00 AM daily and credited to your agency account.
-                      </p>
-                  </div>
-
-                  <div className="space-y-4 px-2">
-                      <h5 className="font-black text-xs uppercase tracking-widest text-white border-l-4 border-yellow-500 pl-3">General Terms</h5>
-                      <ul className="space-y-3 text-[11px] text-slate-500 font-black uppercase tracking-tight">
-                          <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-yellow-500 mt-1 shrink-0"></div> No multi-accounting to claim self-commission.</li>
-                          <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-yellow-500 mt-1 shrink-0"></div> Commissions must be claimed to main wallet before withdrawal.</li>
-                          <li className="flex gap-3"><div className="w-1.5 h-1.5 rounded-full bg-yellow-500 mt-1 shrink-0"></div> Malicious arbitrage leads to asset freezing.</li>
-                      </ul>
                   </div>
               </div>
           </FullPageModal>
       )}
 
-      {/* Subordinates Modal - ENHANCED DETAILS */}
       {showSubordinates && (
           <FullPageModal title="Network Personnel" onClose={() => setShowSubordinates(false)}>
               <div className="space-y-4">
-                  {subordinates.length > 0 ? subordinates.map(sub => (
+                  {subordinateList.length > 0 ? subordinateList.map(sub => (
                       <div key={sub.id} className="bg-zinc-950 p-6 rounded-3xl flex justify-between items-center border border-slate-800 shadow-xl">
                           <div className="flex items-center gap-4">
                               <div className="w-12 h-12 rounded-2xl bg-yellow-500/10 flex items-center justify-center text-yellow-500 font-black text-lg border border-yellow-500/20 shadow-inner">M</div>
@@ -245,27 +193,26 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
                               </div>
                           </div>
                           <div className="text-right">
-                              <p className="text-[9px] text-slate-600 font-black uppercase mb-1">Total Contribution</p>
+                              <p className="text-[9px] text-slate-600 font-black uppercase mb-1">Contribution</p>
                               <div className="text-green-500 font-black text-lg italic">₹{sub.commission.toFixed(2)}</div>
                           </div>
                       </div>
-                  )) : <div className="text-center text-slate-700 py-32 font-black uppercase tracking-widest text-xs opacity-50 italic">No network personnel found</div>}
+                  )) : <div className="text-center text-slate-700 py-32 font-black uppercase tracking-widest text-xs opacity-50 italic">No personnel found</div>}
               </div>
           </FullPageModal>
       )}
 
-      {/* Commissions Modal */}
       {showCommissions && (
-          <FullPageModal title="Agency Asset Ledger" onClose={() => setShowCommissions(false)}>
+          <FullPageModal title="Agency Ledger" onClose={() => setShowCommissions(false)}>
               <div className="space-y-4">
-                  {commissions.length > 0 ? commissions.map(item => (
+                  {commissionList.length > 0 ? commissionList.map(item => (
                       <div key={item.id} className="bg-zinc-950 p-6 rounded-3xl flex justify-between items-center border border-slate-800">
                           <div className="flex items-center gap-4">
-                              <div className="w-14 h-14 rounded-2xl bg-green-500/10 text-green-500 flex items-center justify-center shadow-inner border border-green-500/20">
+                              <div className="w-14 h-14 rounded-2xl bg-green-500/10 text-green-500 flex items-center justify-center border border-green-500/20 shadow-inner">
                                   <TrendingUp size={24} />
                               </div>
                               <div>
-                                  <div className="font-black text-white text-sm uppercase italic tracking-tighter">{item.desc || item.type}</div>
+                                  <div className="font-black text-white text-sm uppercase italic tracking-tighter">{item.type}</div>
                                   <div className="text-[10px] text-slate-500 mt-1 uppercase font-bold">{item.date}</div>
                               </div>
                           </div>
@@ -305,7 +252,7 @@ const FullPageModal = ({ title, children, onClose }: any) => (
                     <ShieldAlert size={24} className="text-yellow-500" />
                     <h3 className="text-white font-black text-sm uppercase tracking-[0.2em] gold-text">{title}</h3>
                 </div>
-                <button onClick={onClose} type="button" className="p-4 bg-slate-800 rounded-full hover:bg-slate-700 transition-all active:scale-90 z-[210] relative cursor-pointer border border-white/5 shadow-lg">
+                <button onClick={onClose} type="button" className="p-4 bg-slate-800 rounded-full border border-white/5 shadow-lg">
                     <X className="text-slate-400" size={24}/>
                 </button>
             </div>

@@ -5,11 +5,11 @@ import { updateBalance, playSound, addGameHistory, stopAllSounds } from '../serv
 import { GameResult } from '../types';
 
 const OUTCOMES = [
-    { label: '1 Run', val: 1, mult: 1.5, color: 'bg-blue-600' },
-    { label: '2 Runs', val: 2, mult: 2.5, color: 'bg-indigo-600' },
-    { label: '4 Runs', val: 4, mult: 5.0, color: 'bg-purple-600' },
-    { label: '6 Runs', val: 6, mult: 10.0, color: 'bg-yellow-500' },
-    { label: 'Wicket', val: 0, mult: 20.0, color: 'bg-red-600' }
+    { label: '1 Run', val: 1, mult: 2.1, color: 'bg-blue-600' },
+    { label: '2 Runs', val: 2, mult: 4.2, color: 'bg-indigo-600' },
+    { label: '4 Runs', val: 4, mult: 12.0, color: 'bg-purple-600' },
+    { label: '6 Runs', val: 6, mult: 25.0, color: 'bg-yellow-500' },
+    { label: 'Wicket', val: 0, mult: 60.0, color: 'bg-red-600' }
 ];
 
 const Cricket: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
@@ -31,12 +31,11 @@ const Cricket: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
 
     setStatus('BOWLING');
     updateBalance(-betAmount, 'BET', `Cricket Bet on ${selectedTarget === 0 ? 'Wicket' : selectedTarget + ' Runs'}`);
-    // FIX: Changed invalid sound name 'spin' to 'sports_kick'
     playSound('sports_kick');
 
     setTimeout(() => {
         if (!isMounted.current) return;
-        const weights = [0.4, 0.25, 0.15, 0.1, 0.1]; // Distribution
+        const weights = [0.4, 0.25, 0.15, 0.1, 0.1]; 
         const r = Math.random();
         let cumulative = 0;
         let outcomeIdx = 0;
@@ -74,20 +73,14 @@ const Cricket: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
 
   return (
     <div className="bg-[#111] min-h-screen flex flex-col font-sans text-white select-none overflow-hidden">
-        <div className="p-4 flex justify-between items-center bg-[#064e3b] border-b border-white/5 z-50">
-            <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl"><ArrowLeft size={18}/></button>
-            <h1 className="text-xl font-black gold-text italic tracking-widest uppercase">CRICKET HERO</h1>
-            <div className="bg-black/50 px-3 py-1 rounded-full text-yellow-500 font-mono text-sm">₹{userBalance.toFixed(2)}</div>
+        <div className="p-4 flex justify-between items-center bg-[#064e3b] border-b border-white/5 z-50 shadow-xl">
+            <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={18}/></button>
+            <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">CRICKET HERO</h1>
+            <div className="bg-black/50 px-3 py-1.5 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono text-sm">₹{userBalance.toFixed(2)}</div>
         </div>
 
         <div className="flex-1 flex flex-col items-center justify-center p-6 relative bg-[url('https://www.transparenttextures.com/patterns/dark-wood.png')]">
-             {/* Stadium Lights Effect */}
-             <div className="absolute top-0 inset-x-0 h-40 bg-gradient-to-b from-green-500/10 to-transparent pointer-events-none"></div>
-
              <div className="w-full max-w-sm aspect-video bg-[#064e3b] rounded-[2rem] border-8 border-white/10 shadow-[0_0_100px_rgba(5,150,105,0.2)] flex flex-col items-center justify-center relative overflow-hidden">
-                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/grass.png')] opacity-30"></div>
-                <div className="w-1.5 h-full bg-white/20 absolute left-1/2 -translate-x-1/2"></div>
-                
                 {status === 'BOWLING' ? (
                     <div className="flex flex-col items-center animate-bounce">
                         <div className="w-10 h-10 bg-red-600 rounded-full border-2 border-red-400 shadow-2xl flex items-center justify-center">

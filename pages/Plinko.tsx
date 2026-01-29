@@ -49,13 +49,11 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
         ball.x = ball.targetX; ball.y = ball.targetY; ball.progress = 0; ball.startPos = { x: ball.x, y: ball.y };
         if (ball.row < ROWS - 1) {
           pulsesRef.current.push({ row: ball.row, col: ball.col, startTime: Date.now() });
-          // FIX: Changed invalid sound name 'tick' to 'wingo_tick'
           playSound('wingo_tick');
           const nextRow = ball.row + 1; const moveRight = Math.random() > 0.49 ? 1 : 0;
           const nextCol = ball.col + moveRight; const coords = getPinCoords(nextRow, nextCol);
           return { ...ball, row: nextRow, col: nextCol, targetX: coords.x, targetY: coords.y };
         } else {
-          // FIX: Changed invalid sound name 'tick' to 'wingo_tick'
           if (ball.y < slotY) { playSound('wingo_tick'); return { ...ball, targetY: slotY + 25, targetX: ball.x, row: ROWS }; }
           else { handleBallLand(ball); return { ...ball, status: 'DONE' }; }
         }
@@ -105,7 +103,8 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
     playSound(multiplier >= 1 ? 'win' : 'click');
     const rid = Math.random().toString(36).substr(2, 5);
     setFloatingResults(prev => [...prev, { id: rid, mult: multiplier, amount: winAmount }]);
-    setTimeout(() => { setFloatingResults(prev => prev.filter(res => res.id !== rid)); }, 2500);
+    // FIX: Reduced timeout to 1 second as requested
+    setTimeout(() => { setFloatingResults(prev => prev.filter(res => res.id !== rid)); }, 1000);
     addGameHistory('Plinko', ball.bet, winAmount, `Hit ${multiplier}x`);
   };
 

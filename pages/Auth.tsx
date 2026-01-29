@@ -6,6 +6,7 @@ import { login, register } from '../services/mockFirebase';
 const Auth: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [username, setUsername] = useState('');
@@ -14,12 +15,19 @@ const Auth: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(''); setLoading(true);
+    
+    if (!phone || !email || !password) {
+        setError('Phone, Email and Password are required');
+        setLoading(false);
+        return;
+    }
+
     if (isLogin) {
-        const res = await login(phone, password);
+        const res = await login(phone, email, password);
         if (!res.success) setError(res.message || 'Invalid credentials');
     } else {
         if (!username) { setError('Username is required'); setLoading(false); return; }
-        const res = await register(phone, password, inviteCode, username);
+        const res = await register(phone, email, password, inviteCode, username);
         if (!res.success) setError(res.message || 'Registration failed');
     }
     setLoading(false);
@@ -61,6 +69,17 @@ const Auth: React.FC = () => {
                         placeholder="Phone Number" 
                         value={phone} 
                         onChange={e => setPhone(e.target.value)}
+                    />
+                </div>
+
+                <div className="bg-[#0a0f1d] rounded-xl flex items-center px-4 py-3 border border-slate-800 focus-within:border-yellow-500/50 transition-all">
+                    <Mail size={18} className="text-slate-500 mr-3"/>
+                    <input 
+                        type="email" 
+                        className="bg-transparent text-white w-full outline-none font-bold" 
+                        placeholder="Email Address" 
+                        value={email} 
+                        onChange={e => setEmail(e.target.value)}
                     />
                 </div>
 

@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { UserProfile, View, Transaction, GameHistoryItem } from '../types';
-import { Settings, Copy, Wallet, ArrowUpRight, ArrowDownLeft, ChevronRight, BarChart2, Gamepad2, Gift, RefreshCw, X, History, HelpCircle, LogOut, Shield, Crown, CheckCircle2, Phone, MessageCircle, Share2, Sparkles, MessageSquareText, ShieldAlert, Lock, Zap, Star } from 'lucide-react';
-import { logout, subscribeToBalance, getGameHistory, getTransactionHistory } from '../services/mockFirebase';
+import { Settings, Copy, Wallet, ArrowUpRight, ArrowDownLeft, ChevronRight, Gamepad2, RefreshCw, X, History, LogOut, Shield, Crown, CheckCircle2, Sparkles, ShieldAlert, Zap, Star } from 'lucide-react';
+import { logout, getGameHistory, getTransactionHistory, claimRebate, playSound } from '../services/mockFirebase';
 import AiSupportChat from '../components/AiSupportChat';
 
 interface ProfileProps {
@@ -20,36 +20,40 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
   const [txData, setTxData] = useState<Transaction[]>([]);
 
   useEffect(() => {
-    let unsubG: any, unsubT: any;
-    if (showHistoryModal === 'GAME') unsubG = getGameHistory('ALL', (data) => setHistoryData(data));
-    if (showHistoryModal === 'TRANSACTION') unsubT = getTransactionHistory((data) => setTxData(data));
-    return () => { if(unsubG) unsubG(); if(unsubT) unsubT(); };
+    let unsub: any;
+    if (showHistoryModal === 'GAME') unsub = getGameHistory('ALL', (data) => setHistoryData(data));
+    if (showHistoryModal === 'TRANSACTION') unsub = getTransactionHistory((data) => setTxData(data));
+    return () => { if(unsub) unsub(); };
   }, [showHistoryModal]);
 
   const handleRefresh = () => { setIsRefreshing(true); setTimeout(() => setIsRefreshing(false), 800); };
   const handleCopy = (text: string) => { navigator.clipboard.writeText(text); setShowToast(true); setTimeout(() => setShowToast(false), 2000); };
 
-  // WAGER PROGRESS LOGIC
-  const totalWagerAssigned = (user.totalDeposit || 0) * 6.8 || 0;
-  const currentWagerLeft = user.wagerRequired || 0;
+  const currentReq = user.wagerRequired || 0;
+  const initialReq = (user.totalDeposit || 0) * 5.4;
   
   let wagerScale = 0;
-  if (totalWagerAssigned > 0) {
-      const completed = Math.max(0, totalWagerAssigned - currentWagerLeft);
-      wagerScale = Math.min(100, (completed / totalWagerAssigned) * 100);
-  } else if (currentWagerLeft === 0) {
+  if (initialReq > 0) {
+      const completed = Math.max(0, initialReq - currentReq);
+      wagerScale = (completed / initialReq) * 100;
+  } else if (currentReq === 0) {
       wagerScale = 100;
   }
-  
+  if (currentReq <= 0) wagerScale = 100;
+
   const pendingRebate = (user.totalBet || 0) * 0.001;
 
-  const vipThresholds = [
-      { lv: 1, amount: 500, name: 'Bronze' },
-      { lv: 2, amount: 2000, name: 'Silver' },
-      { lv: 3, amount: 50000, name: 'Gold' },
-      { lv: 4, amount: 100000, name: 'Platinum' },
-      { lv: 5, amount: 400000, name: 'Diamond' }
-  ];
+  const handleClaimRebate = async () => {
+    if (pendingRebate <= 0) return;
+    const res = await claimRebate();
+    if (res.success) {
+        playSound('win');
+        alert(`Claim Success! ₹${res.amount?.toFixed(2)} added to wallet.`);
+        setShowRebateModal(false);
+    } else {
+        alert(res.message);
+    }
+  };
 
   const getVIPBadge = (lv: number) => {
       const badges = [
@@ -70,7 +74,7 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f172a] pb-24 font-sans text-white animate-in fade-in duration-500">
+    <div className="min-h-screen bg-[#0f172a] pb-24 font-sans text-white animate-in fade-in duration-500 select-none">
       {showToast && (
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] bg-black/90 text-white px-8 py-3 rounded-full font-black text-sm flex items-center gap-3 animate-in zoom-in border border-white/20 shadow-2xl">
               <CheckCircle2 className="text-green-500"/> Copied
@@ -94,12 +98,14 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
                     <div className="mb-2">{getVIPBadge(user.vipLevel || 0)}</div>
                     <h2 className="text-2xl font-black text-white italic tracking-tighter">{user.username}</h2>
                     <div className="flex items-center gap-2 mt-1">
-                        <span className="text-blue-300 text-[9px] font-bold font-mono">ID: {user.uid.slice(-6)}</span>
+                        <span className="text-blue-300 text-[9px] font-bold font-mono">ID: {user.uid ? user.uid.slice(-6) : '......'}</span>
                         <Copy size={12} className="text-blue-400 cursor-pointer" onClick={() => handleCopy(user.uid)} />
                     </div>
                 </div>
            </div>
-           <button onClick={() => setView('SAFETY')} className="p-3 bg-white/10 rounded-2xl backdrop-blur-md border border-white/10 text-white"><Settings size={22}/></button>
+           <div className="flex gap-2">
+                <button onClick={() => setView('SAFETY')} className="p-3 bg-white/10 rounded-2xl backdrop-blur-md border border-white/10 text-white active:scale-90"><Settings size={22}/></button>
+           </div>
         </div>
 
         <div className="relative z-10 bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-xl rounded-[2.5rem] p-8 border border-white/10 shadow-2xl">
@@ -117,13 +123,21 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
             
             <div className="mb-8">
                 <div className="flex justify-between items-end mb-2">
-                    <span className="text-[9px] font-black uppercase text-blue-200 tracking-widest">Wager Progress</span>
-                    <span className="text-[10px] font-bold text-white">₹{currentWagerLeft.toFixed(0)} Remaining</span>
+                    <span className="text-[9px] font-black uppercase text-blue-200 tracking-widest">Withdrawal Turnover</span>
+                    <span className={`text-[10px] font-bold ${currentReq <= 0 ? 'text-green-400' : 'text-white'}`}>
+                        {currentReq <= 0 ? 'COMPLETED' : `₹${currentReq.toFixed(0)} Left`}
+                    </span>
                 </div>
                 <div className="w-full h-3 bg-black/40 rounded-full overflow-hidden border border-white/10 shadow-inner">
-                    <div className="h-full bg-gradient-to-r from-green-400 to-green-600 transition-all duration-700" style={{ width: `${wagerScale}%` }}></div>
+                    <div 
+                        className="h-full bg-gradient-to-r from-green-400 to-emerald-600 transition-all duration-700" 
+                        style={{ width: `${wagerScale}%` }}
+                    ></div>
                 </div>
-                <p className="text-[8px] text-slate-500 font-bold uppercase mt-2 text-right">Completion: {wagerScale.toFixed(1)}%</p>
+                <div className="flex justify-between mt-2">
+                    <p className="text-[8px] text-slate-500 font-black uppercase tracking-widest">Progress</p>
+                    <p className="text-[8px] text-green-500 font-black uppercase tracking-widest">{wagerScale.toFixed(1)}%</p>
+                </div>
             </div>
 
             <div className="flex justify-between gap-4">
@@ -138,13 +152,18 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
       </div>
 
       <div className="px-5 -mt-12 relative z-20 space-y-5">
-        {/* VIP Level Details Section */}
         <div className="bg-[#1e293b] rounded-[2rem] p-6 shadow-xl border border-slate-700/50">
             <h3 className="text-xs font-black uppercase tracking-widest text-yellow-500 mb-4 flex items-center gap-2">
                 <Star size={14} className="fill-yellow-500" /> VIP Level Privileges
             </h3>
             <div className="space-y-3">
-                {vipThresholds.map((v) => (
+                {[
+                    { lv: 1, amount: 500, name: 'Bronze' },
+                    { lv: 2, amount: 2000, name: 'Silver' },
+                    { lv: 3, amount: 50000, name: 'Gold' },
+                    { lv: 4, amount: 100000, name: 'Platinum' },
+                    { lv: 5, amount: 400000, name: 'Diamond' }
+                ].map((v) => (
                     <div key={v.lv} className={`flex justify-between items-center p-3 rounded-xl border ${user.vipLevel >= v.lv ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-black/20 border-white/5 opacity-50'}`}>
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-[10px] font-black">LV{v.lv}</div>
@@ -175,12 +194,6 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
              <MenuItem onClick={() => setShowHistoryModal('TRANSACTION')} icon={History} label="Transactions" bg="bg-blue-500/10" color="text-blue-400" />
              <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
              <MenuItem onClick={() => setView('REWARDS_HUB')} icon={Sparkles} label="Rewards Hub" bg="bg-yellow-500/10" color="text-yellow-400" subtitle="Bind bank and upi for rewards" />
-        </div>
-
-        <div className="bg-[#1e293b] rounded-[2rem] overflow-hidden border border-slate-700/50 shadow-xl">
-             <MenuItem onClick={() => setView('PROMOTION')} icon={Gift} label="Gift Exchange" bg="bg-pink-500/10" color="text-pink-400" />
-             <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
-             <MenuItem onClick={() => setShowAiChat(true)} icon={MessageSquareText} label="AI Concierge" bg="bg-cyan-500/10" color="text-cyan-400" subtitle="Automated Instant Support" />
         </div>
 
         <button onClick={() => logout()} className="w-full py-5 rounded-3xl text-red-500 font-black uppercase tracking-widest bg-[#1e293b] border border-red-500/20 transition-all active:scale-95 mb-10">Sign Out Session</button>
@@ -248,7 +261,7 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
                    
                    <div className="grid grid-cols-2 gap-4 mb-10">
                        <div className="bg-black/30 p-4 rounded-3xl border border-white/5">
-                           <p className="text-[9px] text-slate-500 font-black uppercase mb-1">Total Bet</p>
+                           <p className="text-[9px] text-slate-500 font-black uppercase mb-1">Valid Turnover</p>
                            <p className="text-xl font-black">₹{user.totalBet?.toFixed(2)}</p>
                        </div>
                        <div className="bg-black/30 p-4 rounded-3xl border border-white/5">
@@ -257,10 +270,17 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
                        </div>
                    </div>
 
-                   <button onClick={() => { setShowRebateModal(false); alert("Claim Success! Added to wallet."); }} className="w-full py-5 bg-blue-600 rounded-2xl font-black uppercase tracking-widest shadow-xl border-t-2 border-white/10">CLAIM REBATE</button>
+                   <button 
+                    onClick={handleClaimRebate} 
+                    disabled={pendingRebate <= 0}
+                    className={`w-full py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl border-t-2 border-white/10 transition-all ${pendingRebate > 0 ? 'bg-blue-600 animate-pulse' : 'bg-zinc-800 text-zinc-600 grayscale opacity-50'}`}
+                   >
+                        CLAIM REBATE
+                   </button>
               </div>
           </div>
       )}
+      <style>{`.gold-text { background: linear-gradient(to bottom, #fde68a, #d97706, #fde68a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }`}</style>
     </div>
   );
 };
