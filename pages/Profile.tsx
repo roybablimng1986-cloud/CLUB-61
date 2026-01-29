@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { UserProfile, View, Transaction, GameHistoryItem } from '../types';
-import { Settings, Copy, Wallet, ArrowUpRight, ArrowDownLeft, ChevronRight, Gamepad2, RefreshCw, X, History, LogOut, Shield, Crown, CheckCircle2, Sparkles, ShieldAlert, Zap, Star } from 'lucide-react';
+import { Settings, Copy, Wallet, ArrowUpRight, ArrowDownLeft, ChevronRight, Gamepad2, RefreshCw, X, History, LogOut, Shield, Crown, CheckCircle2, Sparkles, ShieldAlert, Zap, Star, FileText } from 'lucide-react';
 import { logout, getGameHistory, getTransactionHistory, claimRebate, playSound } from '../services/mockFirebase';
 import AiSupportChat from '../components/AiSupportChat';
 
@@ -16,6 +16,8 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
   const [showAiChat, setShowAiChat] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [showRebateModal, setShowRebateModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const [historyData, setHistoryData] = useState<GameHistoryItem[]>([]);
   const [txData, setTxData] = useState<Transaction[]>([]);
 
@@ -29,8 +31,9 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
   const handleRefresh = () => { setIsRefreshing(true); setTimeout(() => setIsRefreshing(false), 800); };
   const handleCopy = (text: string) => { navigator.clipboard.writeText(text); setShowToast(true); setTimeout(() => setShowToast(false), 2000); };
 
+  // Wager Progress Logic
   const currentReq = user.wagerRequired || 0;
-  const initialReq = (user.totalDeposit || 0) * 5.4;
+  const initialReq = user.wagerTotal || (user.totalDeposit || 0); // Denominator is total task amount
   
   let wagerScale = 0;
   if (initialReq > 0) {
@@ -41,7 +44,10 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
   }
   if (currentReq <= 0) wagerScale = 100;
 
-  const pendingRebate = (user.totalBet || 0) * 0.001;
+  // Rebate Logic
+  const lastClaimedBet = user.rebateLastClaimedBet || 0;
+  const turnoverSinceLastClaim = Math.max(0, (user.totalBet || 0) - lastClaimedBet);
+  const pendingRebate = turnoverSinceLastClaim * 0.001;
 
   const handleClaimRebate = async () => {
     if (pendingRebate <= 0) return;
@@ -194,6 +200,10 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
              <MenuItem onClick={() => setShowHistoryModal('TRANSACTION')} icon={History} label="Transactions" bg="bg-blue-500/10" color="text-blue-400" />
              <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
              <MenuItem onClick={() => setView('REWARDS_HUB')} icon={Sparkles} label="Rewards Hub" bg="bg-yellow-500/10" color="text-yellow-400" subtitle="Bind bank and upi for rewards" />
+             <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
+             <MenuItem onClick={() => setShowPrivacyModal(true)} icon={FileText} label="Privacy Policy" bg="bg-cyan-500/10" color="text-cyan-400" />
+             <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
+             <MenuItem onClick={() => setShowTermsModal(true)} icon={ShieldAlert} label="Terms & Conditions" bg="bg-orange-500/10" color="text-orange-400" />
         </div>
 
         <button onClick={() => logout()} className="w-full py-5 rounded-3xl text-red-500 font-black uppercase tracking-widest bg-[#1e293b] border border-red-500/20 transition-all active:scale-95 mb-10">Sign Out Session</button>
@@ -257,15 +267,15 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
                    <button onClick={() => setShowRebateModal(false)} className="absolute top-6 right-6 p-2 bg-black/20 rounded-full"><X size={18}/></button>
                    <ShieldAlert size={56} className="text-yellow-500 mx-auto mb-6" />
                    <h3 className="text-2xl font-black italic gold-text uppercase mb-2">REBATE CENTER</h3>
-                   <p className="text-slate-400 text-xs mb-8">Daily rebate is 0.1% based on total valid betting turnover.</p>
+                   <p className="text-slate-400 text-xs mb-8">Daily rebate is 0.1% based on turnover since last claim.</p>
                    
                    <div className="grid grid-cols-2 gap-4 mb-10">
                        <div className="bg-black/30 p-4 rounded-3xl border border-white/5">
-                           <p className="text-[9px] text-slate-500 font-black uppercase mb-1">Valid Turnover</p>
-                           <p className="text-xl font-black">₹{user.totalBet?.toFixed(2)}</p>
+                           <p className="text-[9px] text-slate-500 font-black uppercase mb-1">New Turnover</p>
+                           <p className="text-xl font-black">₹{turnoverSinceLastClaim.toFixed(2)}</p>
                        </div>
                        <div className="bg-black/30 p-4 rounded-3xl border border-white/5">
-                           <p className="text-[9px] text-slate-500 font-black uppercase mb-1">Rebate (0.1%)</p>
+                           <p className="text-[9px] text-slate-500 font-black uppercase mb-1">Available Rebate</p>
                            <p className="text-xl font-black text-green-400">₹{pendingRebate.toFixed(2)}</p>
                        </div>
                    </div>
@@ -280,6 +290,37 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
               </div>
           </div>
       )}
+
+      {showPrivacyModal && (
+          <PolicyModal title="Privacy Policy" onClose={() => setShowPrivacyModal(false)}>
+              <div className="space-y-4 text-xs text-slate-400 leading-relaxed font-medium">
+                  <h4 className="text-white font-bold uppercase">1. Information Collection</h4>
+                  <p>We collect information that you provide directly to us when you create an account, participate in our features, and communicate with us. This includes your username, mobile number, and financial transaction details.</p>
+                  <h4 className="text-white font-bold uppercase">2. Use of Information</h4>
+                  <p>We use the information we collect to operate, maintain, and provide the features and functionality of the Service. We also use information for verification purposes and to ensure the safety of our elite community.</p>
+                  <h4 className="text-white font-bold uppercase">3. Data Security</h4>
+                  <p>Mafia Club implements high-level encryption for all sensitive data. We utilize firewalled servers and strict internal policies to prevent unauthorized access.</p>
+                  <h4 className="text-white font-bold uppercase">4. Cookies</h4>
+                  <p>Our application uses standard cookies to maintain session persistence and analyze traffic patterns within the arena.</p>
+              </div>
+          </PolicyModal>
+      )}
+
+      {showTermsModal && (
+          <PolicyModal title="Terms & Conditions" onClose={() => setShowTermsModal(false)}>
+              <div className="space-y-4 text-xs text-slate-400 leading-relaxed font-medium">
+                  <h4 className="text-white font-bold uppercase">1. User Agreement</h4>
+                  <p>By accessing Mafia Club, you agree to be bound by these terms. You must be at least 18 years of age to participate. Users are responsible for maintaining the confidentiality of their login and withdrawal PIN.</p>
+                  <h4 className="text-white font-bold uppercase">2. Prohibited Conduct</h4>
+                  <p>Collusion, automated betting systems, and arbitrage are strictly prohibited. Any operative found violating these rules will have their balance frozen and account purged immediately without prior warning.</p>
+                  <h4 className="text-white font-bold uppercase">3. Financial Transactions</h4>
+                  <p>Deposits require a valid 12-digit UTR for manual verification. Withdrawals are subject to turnover requirements. All payouts are final once processed.</p>
+                  <h4 className="text-white font-bold uppercase">4. Limitation of Liability</h4>
+                  <p>Mafia Club is not liable for losses incurred through normal gameplay or technical disruptions beyond our control.</p>
+              </div>
+          </PolicyModal>
+      )}
+
       <style>{`.gold-text { background: linear-gradient(to bottom, #fde68a, #d97706, #fde68a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }`}</style>
     </div>
   );
@@ -297,6 +338,21 @@ const MenuItem = ({ icon: Icon, label, bg, color, onClick, subtitle }: any) => (
             </div>
         </div>
         <ChevronRight size={20} className="text-slate-600 group-hover:text-blue-400 group-hover:translate-x-1 transition-all" />
+    </div>
+);
+
+const PolicyModal = ({ title, children, onClose }: any) => (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/95 backdrop-blur-md animate-in zoom-in">
+        <div className="bg-[#1e293b] w-full max-w-md rounded-[3rem] p-10 border border-white/10 shadow-2xl relative">
+            <div className="flex justify-between items-center mb-8 border-b border-slate-800 pb-4">
+                <h3 className="text-xl font-black italic gold-text uppercase">{title}</h3>
+                <button onClick={onClose} className="p-2 bg-slate-800 rounded-full"><X size={18}/></button>
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto no-scrollbar">
+                {children}
+            </div>
+            <button onClick={onClose} className="w-full mt-10 py-4 bg-blue-600 rounded-2xl font-black uppercase tracking-widest text-xs">I Understand</button>
+        </div>
     </div>
 );
 

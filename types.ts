@@ -19,6 +19,8 @@ export interface UserProfile {
   invitedBy?: string;
   totalCommission?: number;
   wagerRequired: number;
+  wagerTotal?: number; // Added to track progress bar denominator
+  rebateLastClaimedBet?: number; // Added to reset rebate after claim
   isBankBound?: boolean;
   isUpiBound?: boolean;
   isTelegramJoined?: boolean;
@@ -139,7 +141,6 @@ export interface RouletteBet {
     amount: number;
 }
 
-// Added GiftCode and AppSettings interfaces
 export interface GiftCode {
   code: string;
   amount: number;

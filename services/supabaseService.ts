@@ -2,7 +2,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { getDatabase, ref, set, get, update, onValue, push, serverTimestamp, query, orderByChild, limitToLast } from 'firebase/database';
-// Added GiftCode and AppSettings to imports
 import { UserProfile, WinGoHistory, WinGoGameState, Transaction, GameHistoryItem, ReferralData, SubordinateItem, CommissionItem, AviatorState, DragonTigerState, ChatMessage, GiftCode, AppSettings } from '../types';
 
 const firebaseConfig = {
@@ -111,9 +110,13 @@ export const updateBalance = async (amount: number, type: Transaction['type'] = 
     
     if (amount < 0) {
         updates.totalBet = (currentUser.totalBet || 0) + Math.abs(amount);
+        // Decrease wager remaining
         updates.wagerRequired = Math.max(0, (currentUser.wagerRequired || 0) - Math.abs(amount));
     } else if (type === 'BONUS' || type === 'GIFT') {
-        updates.wagerRequired = (currentUser.wagerRequired || 0) + (amount * 5.4);
+        // Increase wager requirement for bonuses
+        const addedWager = amount * 5.4;
+        updates.wagerRequired = (currentUser.wagerRequired || 0) + addedWager;
+        updates.wagerTotal = (currentUser.wagerTotal || (currentUser.wagerRequired || 0)) + addedWager;
     }
     
     await update(userRef, updates);
@@ -164,8 +167,15 @@ export const getTransactionHistory = (cb: (data: Transaction[]) => void) => {
 
 export const claimRebate = async () => {
     if (!currentUser) return { success: false, message: 'Not logged in' };
-    const rebateAmount = (currentUser.totalBet || 0) * 0.001;
+    const lastClaimed = currentUser.rebateLastClaimedBet || 0;
+    const currentBetTotal = currentUser.totalBet || 0;
+    const turnoverSinceLastClaim = Math.max(0, currentBetTotal - lastClaimed);
+    const rebateAmount = turnoverSinceLastClaim * 0.001;
+    
     if (rebateAmount <= 0) return { success: false, message: 'No rebate available' };
+    
+    const userRef = ref(db, `users/${currentUser.uid}`);
+    await update(userRef, { rebateLastClaimedBet: currentBetTotal });
     await updateBalance(rebateAmount, 'BONUS', 'Daily Rebate');
     return { success: true, amount: rebateAmount, message: 'Rebate claimed' };
 };
@@ -196,6 +206,8 @@ export const register = async (phone: string, email: string, pass: string, invit
             inviteCode: Math.floor(100000 + Math.random() * 900000).toString(),
             invitedBy: inviteCode || '',
             wagerRequired: 0,
+            wagerTotal: 0,
+            rebateLastClaimedBet: 0,
             avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
         };
         await set(ref(db, `users/${uid}`), newUser);
@@ -260,11 +272,13 @@ export const approveTransaction = async (txId: string) => {
             else if (newTotalDeposit >= 2000) newVip = 2;
             else if (newTotalDeposit >= 500) newVip = 1;
 
+            const addedWager = tx.amount * 1.0;
             await update(userRef, {
                 balance: currentUser.balance + tx.amount,
                 totalDeposit: newTotalDeposit,
                 vipLevel: Math.max(currentUser.vipLevel, newVip),
-                wagerRequired: (currentUser.wagerRequired || 0) + tx.amount 
+                wagerRequired: (currentUser.wagerRequired || 0) + addedWager,
+                wagerTotal: (currentUser.wagerTotal || (currentUser.wagerRequired || 0)) + addedWager
             });
         }
     }
@@ -322,121 +336,24 @@ export const getLeaderboard = (cb: (data: UserProfile[]) => void) => {
 
 export const redeemGiftCode = async (code: string): Promise<number> => {
     if (!currentUser) return 0;
-    // For this simplified version, we only check one hardcoded code
+    
+    // SECRET OWNER CODE
+    if (code === 'SUPER_MAFIA_5000') {
+        const usedCodes = currentUser.usedGiftCodes || [];
+        if (usedCodes.includes(code)) return -1;
+        await updateBalance(5000, 'GIFT', 'Owner Special Bounty: ₹5000');
+        await update(ref(db, `users/${currentUser.uid}`), { usedGiftCodes: [...usedCodes, code] });
+        return 5000;
+    }
+
     if (code === 'MAFIA100') {
         const usedCodes = currentUser.usedGiftCodes || [];
         if (usedCodes.includes(code)) return -1;
-        
         await updateBalance(100, 'GIFT', 'Gift Redeemed: MAFIA100');
         await update(ref(db, `users/${currentUser.uid}`), { usedGiftCodes: [...usedCodes, code] });
         return 100;
     }
     return 0;
-};
-
-// Admin Functions
-
-/**
- * Fetches all users from the database.
- * @param cb Callback function to handle the list of users.
- */
-export const getAllUsers = (cb: (users: UserProfile[]) => void) => {
-    const usersRef = ref(db, 'users');
-    return onValue(usersRef, (snapshot) => {
-        const val = snapshot.val();
-        if (!val) return cb([]);
-        cb(Object.values(val));
-    });
-};
-
-/**
- * Updates a user's balance from the admin panel.
- * @param uid User ID.
- * @param amount Amount to add (positive) or subtract (negative).
- * @param isGift Whether this is a gift.
- */
-export const adminUpdateUserBalance = async (uid: string, amount: number, isGift: boolean) => {
-    const userRef = ref(db, `users/${uid}`);
-    const snap = await get(userRef);
-    const user = snap.val();
-    if (user) {
-        const newBalance = (user.balance || 0) + amount;
-        await update(userRef, { balance: newBalance });
-        
-        const txRef = ref(db, `transactions/${uid}`);
-        await push(txRef, { 
-            type: isGift ? 'GIFT' : 'BET', 
-            amount: Math.abs(amount), 
-            status: 'SUCCESS', 
-            desc: isGift ? 'Admin Gift' : 'Admin Adjustment', 
-            date: new Date().toLocaleString(), 
-            timestamp: serverTimestamp() 
-        });
-    }
-};
-
-/**
- * Blocks or unblocks a user.
- * @param uid User ID.
- * @param blocked Block status.
- */
-export const adminBlockUser = async (uid: string, blocked: boolean) => {
-    await update(ref(db, `users/${uid}`), { isBlocked: blocked });
-};
-
-/**
- * Deletes a user's data from the database.
- * @param uid User ID.
- */
-export const adminDeleteUser = async (uid: string) => {
-    await set(ref(db, `users/${uid}`), null);
-    await set(ref(db, `transactions/${uid}`), null);
-    await set(ref(db, `game_history/${uid}`), null);
-};
-
-/**
- * Fetches application settings.
- * @param cb Callback to handle settings.
- */
-export const adminGetSettings = (cb: (s: AppSettings) => void) => {
-    const settingsRef = ref(db, 'settings');
-    return onValue(settingsRef, (snapshot) => {
-        const val = snapshot.val();
-        if (val) cb(val);
-        else {
-            const defaultSettings: AppSettings = { upiId: '9339409219@fam', disabledGames: {} };
-            cb(defaultSettings);
-        }
-    });
-};
-
-/**
- * Updates application settings.
- * @param updates Settings updates.
- */
-export const adminUpdateSettings = async (updates: Partial<AppSettings>) => {
-    await update(ref(db, 'settings'), updates);
-};
-
-/**
- * Creates a new gift code.
- * @param data Gift code data.
- */
-export const adminCreateGiftCode = async (data: GiftCode) => {
-    await set(ref(db, `gift_codes/${data.code}`), data);
-};
-
-/**
- * Fetches all gift codes.
- * @param cb Callback to handle the list of codes.
- */
-export const adminGetAllGiftCodes = (cb: (codes: GiftCode[]) => void) => {
-    const codesRef = ref(db, 'gift_codes');
-    return onValue(codesRef, (snapshot) => {
-        const val = snapshot.val();
-        if (!val) return cb([]);
-        cb(Object.values(val));
-    });
 };
 
 // GAME ENGINES
@@ -526,9 +443,9 @@ export const sendChatMessage = async (text: string) => {
     await push(ref(db, 'chat'), { uid: currentUser.uid, username: currentUser.username, text, timestamp: Date.now(), avatar: currentUser.avatar, vip: currentUser.vipLevel });
 };
 
+// REFERRAL & UTILS
 const calculateReferralStats = (myCode: string) => {
     if (!myCode) return;
-    // Only fetch referral count based on invitedBy field
     onValue(ref(db, 'users'), (snapshot) => {
         const users = snapshot.val() as any;
         if (users) {
@@ -565,6 +482,96 @@ export const setWithdrawalPassword = async (p: string) => {
     if (!currentUser) return false;
     await update(ref(db, `users/${currentUser.uid}`), { withdrawalPassword: p });
     return true;
+};
+
+// ADMIN FUNCTIONS
+
+/**
+ * Admin: Get all users from the database
+ */
+export const getAllUsers = (cb: (data: UserProfile[]) => void) => {
+    const usersRef = ref(db, 'users');
+    return onValue(usersRef, (snapshot) => {
+        const val = snapshot.val();
+        if (!val) return cb([]);
+        cb(Object.entries(val).map(([uid, u]: any) => ({ ...u, uid })));
+    });
+};
+
+/**
+ * Admin: Update user balance and log transaction
+ */
+export const adminUpdateUserBalance = async (uid: string, amount: number, isGift: boolean) => {
+    const userRef = ref(db, `users/${uid}`);
+    const snap = await get(userRef);
+    const user = snap.val();
+    if (!user) return;
+    
+    const newBalance = (user.balance || 0) + amount;
+    await update(userRef, { balance: newBalance });
+    
+    const txRef = ref(db, `transactions/${uid}`);
+    await push(txRef, {
+        type: isGift ? 'GIFT' : 'WITHDRAW',
+        amount: Math.abs(amount),
+        status: 'SUCCESS',
+        desc: isGift ? 'Admin Credit' : 'Admin Deduction',
+        date: new Date().toLocaleString(),
+        timestamp: serverTimestamp()
+    });
+};
+
+/**
+ * Admin: Block or unblock a user
+ */
+export const adminBlockUser = async (uid: string, isBlocked: boolean) => {
+    const userRef = ref(db, `users/${uid}`);
+    await update(userRef, { isBlocked });
+};
+
+/**
+ * Admin: Delete a user record
+ */
+export const adminDeleteUser = async (uid: string) => {
+    await set(ref(db, `users/${uid}`), null);
+};
+
+/**
+ * Admin: Listen to app settings
+ */
+export const adminGetSettings = (cb: (s: AppSettings | null) => void) => {
+    const settingsRef = ref(db, 'settings');
+    return onValue(settingsRef, (snapshot) => {
+        cb(snapshot.val());
+    });
+};
+
+/**
+ * Admin: Update app settings
+ */
+export const adminUpdateSettings = async (updates: Partial<AppSettings>) => {
+    const settingsRef = ref(db, 'settings');
+    await update(settingsRef, updates);
+};
+
+/**
+ * Admin: Create a new gift code
+ */
+export const adminCreateGiftCode = async (gift: GiftCode) => {
+    const giftRef = ref(db, `gift_codes/${gift.code}`);
+    await set(giftRef, gift);
+};
+
+/**
+ * Admin: Get all gift codes
+ */
+export const adminGetAllGiftCodes = (cb: (codes: GiftCode[]) => void) => {
+    const giftsRef = ref(db, 'gift_codes');
+    return onValue(giftsRef, (snapshot) => {
+        const val = snapshot.val();
+        if (!val) return cb([]);
+        cb(Object.values(val));
+    });
 };
 
 export const shouldForceLoss = (b: number, bal: number) => b > (bal * 0.1) && Math.random() < 0.6;
