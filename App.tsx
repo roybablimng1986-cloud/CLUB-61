@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import NavBar from './components/NavBar';
+import DownloadBanner from './components/DownloadBanner';
 import Home from './pages/Home';
 import WinGo from './pages/WinGo';
 import Aviator from './pages/Aviator';
@@ -128,6 +129,7 @@ export default function App() {
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-[#0a0f1d] shadow-2xl relative overflow-hidden font-sans border-x border-white/5">
+      {showNavBar && <DownloadBanner />}
       {renderContent()}
       <GameResultPopup result={gameResult} onClose={() => setGameResult(null)} />
       {showNavBar && <NavBar currentView={currentView} setView={setCurrentView} />}

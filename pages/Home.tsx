@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { View } from '../types';
-import { Flame, Gift, Search, Crown, BarChart3, MessageCircle, X, Trophy } from 'lucide-react';
+import { Flame, Gift, Search, BarChart3, MessageCircle, X, Trophy } from 'lucide-react';
+import Logo from '../components/Logo';
 
 interface HomeProps {
   setView: (view: View) => void;
@@ -51,8 +52,8 @@ const Home: React.FC<HomeProps> = ({ setView }) => {
     <div className="pb-28 font-sans animate-in fade-in duration-500 bg-[#0a0f1d] min-h-screen">
       <div className="bg-gradient-to-b from-[#1a1c2e] to-[#0a0f1d] pb-6 rounded-b-[3rem] shadow-2xl relative">
         <div className="p-4 flex justify-between items-center">
-            <div className="flex items-center gap-2">
-                <Crown size={24} className="text-yellow-500 fill-yellow-500" />
+            <div className="flex items-center gap-3">
+                <Logo size={48} />
                 <h1 className="text-2xl font-black italic tracking-tighter text-white gold-text uppercase">MAFIA CLUB</h1>
             </div>
             <div className="flex gap-2">

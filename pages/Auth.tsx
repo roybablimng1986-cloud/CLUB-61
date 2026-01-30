@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { Lock, Smartphone, User, Mail, ShieldAlert } from 'lucide-react';
+import { Lock, Smartphone, User, Mail } from 'lucide-react';
 import { login, register } from '../services/mockFirebase';
+import Logo from '../components/Logo';
 
 const Auth: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -39,9 +40,9 @@ const Auth: React.FC = () => {
         
         <div className="w-full max-w-md bg-[#111827] rounded-3xl p-8 shadow-2xl relative z-10 border border-slate-800">
             <div className="flex flex-col items-center mb-8">
-                <ShieldAlert size={40} className="text-yellow-500 mb-2" />
-                <h1 className="text-3xl font-black text-white italic tracking-tighter gold-text">MAFIA CLUB</h1>
-                <p className="text-slate-500 text-xs mt-2 uppercase tracking-[0.2em]">High-Stakes underworld</p>
+                <Logo size={100} className="mb-4" />
+                <h1 className="text-3xl font-black text-white italic tracking-tighter gold-text uppercase">MAFIA CLUB</h1>
+                <p className="text-slate-500 text-[10px] mt-2 uppercase tracking-[0.3em]">The Elite Underworld Arena</p>
             </div>
 
             <div className="flex bg-[#0a0f1d] p-1 rounded-full mb-6 border border-slate-800">
