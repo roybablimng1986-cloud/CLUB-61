@@ -1,12 +1,30 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Download, X, Smartphone } from 'lucide-react';
 
 const DownloadBanner: React.FC = () => {
   const [isVisible, setIsVisible] = useState(true);
+  const [isStandalone, setIsStandalone] = useState(false);
   const downloadLink = "https://drive.usercontent.google.com/download?id=10a5XSFgz9qUYaMdlGjvnRHyxOknThJ5f&export=download&authuser=0";
 
-  if (!isVisible) return null;
+  useEffect(() => {
+    // Detect if the app is running in 'standalone' mode (installed app)
+    const checkEnvironment = () => {
+      const isPWA = window.matchMedia('(display-mode: standalone)').matches;
+      const isIOSStandalone = (window.navigator as any).standalone === true;
+      // Check for common webview indicators in user agent
+      const isWebView = /wv|Webview/i.test(navigator.userAgent);
+      
+      if (isPWA || isIOSStandalone || isWebView) {
+        setIsStandalone(true);
+      }
+    };
+
+    checkEnvironment();
+  }, []);
+
+  // Don't show if manually closed OR if detected as running inside the app
+  if (!isVisible || isStandalone) return null;
 
   return (
     <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-blue-900 p-3 flex items-center justify-between border-b border-white/10 shadow-2xl animate-in slide-in-from-top duration-500 z-[100] sticky top-0">
