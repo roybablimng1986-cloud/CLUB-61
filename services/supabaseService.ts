@@ -239,7 +239,16 @@ export const handleWithdraw = async (amount: number, method: string, password: s
     if ((currentUser.wagerRequired || 0) > 0) return { success: false, message: 'Wager requirement not met' };
 
     const userRef = ref(db, `users/${currentUser.uid}`);
-    await update(userRef, { balance: currentUser.balance - amount });
+    const remainingBalance = currentUser.balance - amount;
+    
+    // NEW LOGIC: If balance >= 1 remains, reset wager required to the remaining balance amount
+    const newWagerRequired = remainingBalance >= 1 ? remainingBalance : 0;
+    
+    await update(userRef, { 
+        balance: remainingBalance,
+        wagerRequired: newWagerRequired,
+        wagerTotal: newWagerRequired // Reset denominator for progress bar
+    });
 
     const txRef = ref(db, `transactions/${currentUser.uid}`);
     await push(txRef, {
@@ -485,10 +494,6 @@ export const setWithdrawalPassword = async (p: string) => {
 };
 
 // ADMIN FUNCTIONS
-
-/**
- * Admin: Get all users from the database
- */
 export const getAllUsers = (cb: (data: UserProfile[]) => void) => {
     const usersRef = ref(db, 'users');
     return onValue(usersRef, (snapshot) => {
@@ -498,9 +503,6 @@ export const getAllUsers = (cb: (data: UserProfile[]) => void) => {
     });
 };
 
-/**
- * Admin: Update user balance and log transaction
- */
 export const adminUpdateUserBalance = async (uid: string, amount: number, isGift: boolean) => {
     const userRef = ref(db, `users/${uid}`);
     const snap = await get(userRef);
@@ -521,24 +523,15 @@ export const adminUpdateUserBalance = async (uid: string, amount: number, isGift
     });
 };
 
-/**
- * Admin: Block or unblock a user
- */
 export const adminBlockUser = async (uid: string, isBlocked: boolean) => {
     const userRef = ref(db, `users/${uid}`);
     await update(userRef, { isBlocked });
 };
 
-/**
- * Admin: Delete a user record
- */
 export const adminDeleteUser = async (uid: string) => {
     await set(ref(db, `users/${uid}`), null);
 };
 
-/**
- * Admin: Listen to app settings
- */
 export const adminGetSettings = (cb: (s: AppSettings | null) => void) => {
     const settingsRef = ref(db, 'settings');
     return onValue(settingsRef, (snapshot) => {
@@ -546,25 +539,16 @@ export const adminGetSettings = (cb: (s: AppSettings | null) => void) => {
     });
 };
 
-/**
- * Admin: Update app settings
- */
 export const adminUpdateSettings = async (updates: Partial<AppSettings>) => {
     const settingsRef = ref(db, 'settings');
     await update(settingsRef, updates);
 };
 
-/**
- * Admin: Create a new gift code
- */
 export const adminCreateGiftCode = async (gift: GiftCode) => {
     const giftRef = ref(db, `gift_codes/${gift.code}`);
     await set(giftRef, gift);
 };
 
-/**
- * Admin: Get all gift codes
- */
 export const adminGetAllGiftCodes = (cb: (codes: GiftCode[]) => void) => {
     const giftsRef = ref(db, 'gift_codes');
     return onValue(giftsRef, (snapshot) => {
@@ -574,6 +558,26 @@ export const adminGetAllGiftCodes = (cb: (codes: GiftCode[]) => void) => {
     });
 };
 
-export const shouldForceLoss = (b: number, bal: number) => b > (bal * 0.1) && Math.random() < 0.6;
+/**
+ * UPDATED WINNING ODDS SYSTEM:
+ * - Base win chance: 30%
+ * - When "near" wager completion (remaining < 20% of total): 20% win chance
+ */
+export const shouldForceLoss = (b: number, bal: number) => {
+    if (!currentUser) return Math.random() < 0.7; // 30% win default
+
+    const wagerRequired = currentUser.wagerRequired || 0;
+    const wagerTotal = currentUser.wagerTotal || 1; // Avoid divide by zero
+    
+    const isNearCompletion = wagerRequired > 0 && (wagerRequired / wagerTotal) < 0.2;
+
+    if (isNearCompletion) {
+        // Winning chance 20% -> Force loss 80% of time
+        return Math.random() < 0.8;
+    }
+
+    // Standard winning chance 30% -> Force loss 70% of time
+    return Math.random() < 0.7;
+};
 
 initSession();

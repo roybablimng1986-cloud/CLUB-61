@@ -5,7 +5,7 @@ import { submitDepositRequest } from '../services/mockFirebase';
 
 const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [step, setStep] = useState(1);
-    const [amount, setAmount] = useState(50);
+    const [amount, setAmount] = useState(20); // Changed default to new minimum
     const [method, setMethod] = useState<'UPI' | 'PhonePe'>('UPI');
     const [utr, setUtr] = useState('');
     const [error, setError] = useState('');
@@ -51,9 +51,9 @@ const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                         </div>
                     </div>
 
-                    <h3 className="text-[10px] font-black text-slate-500 mb-4 uppercase tracking-[0.3em]">Elite Amounts (Min ₹50)</h3>
+                    <h3 className="text-[10px] font-black text-slate-500 mb-4 uppercase tracking-[0.3em]">Elite Amounts (Min ₹20)</h3>
                     <div className="grid grid-cols-3 gap-3 mb-6">
-                        {[50, 100, 500, 1000, 5000, 10000].map(a => (
+                        {[20, 50, 100, 500, 1000, 5000].map(a => (
                             <button key={a} onClick={() => setAmount(a)} className={`py-4 rounded-2xl font-black text-sm transition-all border ${amount === a ? 'bg-blue-600 border-white text-white' : 'bg-[#1e293b] border-slate-800 text-slate-400'}`}>₹{a}</button>
                         ))}
                     </div>
@@ -64,7 +64,7 @@ const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     </div>
 
                     <button 
-                        onClick={() => amount >= 50 ? setStep(2) : alert("Min deposit is ₹50")} 
+                        onClick={() => amount >= 20 ? setStep(2) : alert("Min deposit is ₹20")} 
                         className="w-full bg-gradient-to-r from-blue-600 to-blue-500 py-6 rounded-3xl font-black text-lg shadow-2xl active:scale-95 transition-all uppercase tracking-[0.4em] border-t-2 border-white/20"
                     >
                         CONTINUE
