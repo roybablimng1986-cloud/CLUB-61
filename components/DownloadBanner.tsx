@@ -8,14 +8,28 @@ const DownloadBanner: React.FC = () => {
   const downloadLink = "https://drive.usercontent.google.com/download?id=10a5XSFgz9qUYaMdlGjvnRHyxOknThJ5f&export=download&authuser=0";
 
   useEffect(() => {
-    // Detect if the app is running in 'standalone' mode (installed app)
     const checkEnvironment = () => {
+      // 1. Check for PWA Standalone mode (Chrome/Android/Desktop)
       const isPWA = window.matchMedia('(display-mode: standalone)').matches;
-      const isIOSStandalone = (window.navigator as any).standalone === true;
-      // Check for common webview indicators in user agent
-      const isWebView = /wv|Webview/i.test(navigator.userAgent);
       
-      if (isPWA || isIOSStandalone || isWebView) {
+      // 2. Check for iOS "Add to Home Screen"
+      const isIOSStandalone = (window.navigator as any).standalone === true;
+      
+      // 3. Check for Common WebView indicators in User Agent
+      // Android WebViews often include "wv" or "Version/X.X"
+      const ua = navigator.userAgent;
+      const isAndroidWebView = /wv|Version\/.*Chrome/i.test(ua) && /Mobile/i.test(ua);
+      const isIosWebView = /(iPhone|iPod|iPad).*AppleWebKit(?!.*Safari)/i.test(ua);
+      
+      // 4. Check for URL parameters (Developers often wrap apps with ?mode=app or similar)
+      const urlParams = new URLSearchParams(window.location.search);
+      const isAppParam = urlParams.get('mode') === 'app' || urlParams.get('app') === 'true';
+
+      // 5. Check for injected bridges (common in some APK wrappers)
+      const hasAndroidInterface = (window as any).Android || (window as any).android;
+      const hasWebkitInterface = (window as any).webkit && (window as any).webkit.messageHandlers;
+
+      if (isPWA || isIOSStandalone || isAndroidWebView || isIosWebView || isAppParam || hasAndroidInterface || hasWebkitInterface) {
         setIsStandalone(true);
       }
     };
@@ -23,7 +37,7 @@ const DownloadBanner: React.FC = () => {
     checkEnvironment();
   }, []);
 
-  // Don't show if manually closed OR if detected as running inside the app
+  // If detected as running inside the app OR manually closed, don't show anything
   if (!isVisible || isStandalone) return null;
 
   return (
