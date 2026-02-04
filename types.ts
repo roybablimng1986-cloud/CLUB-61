@@ -1,5 +1,5 @@
 
-export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_BURST' | 'GAME_VORTEX' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS' | 'REWARDS_HUB' | 'GAME_DRAGON_TIGER' | 'GAME_ROULETTE' | 'GAME_SICBO' | 'GAME_BACCARAT' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'GAME_HEAD_TAILS' | 'GAME_LIMBO' | 'GAME_PLINKO' | 'GAME_HILO' | 'GAME_DRAGON_TOWER' | 'GAME_KENO' | 'GAME_DICE' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_MOTO_RACING' | 'LEADERBOARD' | 'GAME_DOG' | 'CHAT' | 'GAME_PENALTY' | 'GAME_CRICKET' | 'GAME_TOWER' | 'GAME_SLOT_MACHINE' | 'GAME_ANDAR_BAHAR';
+export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_BURST' | 'GAME_VORTEX' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS' | 'REWARDS_HUB' | 'GAME_DRAGON_TIGER' | 'GAME_ROULETTE' | 'GAME_SICBO' | 'GAME_BACCARAT' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'GAME_HEAD_TAILS' | 'GAME_LIMBO' | 'GAME_PLINKO' | 'GAME_HILO' | 'GAME_DRAGON_TOWER' | 'GAME_KENO' | 'GAME_DICE' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_MOTO_RACING' | 'LEADERBOARD' | 'GAME_DOG' | 'CHAT' | 'GAME_PENALTY' | 'GAME_CRICKET' | 'GAME_TOWER' | 'GAME_SLOT_MACHINE' | 'GAME_ANDAR_BAHAR' | 'GAME_7UP_DOWN' | 'GAME_CAR_ROULETTE' | 'GAME_JHANDI_MUNDA' | 'GAME_HORSE_RACING' | 'GAME_SPACE_RAID' | 'GAME_COLOR_GRID';
 
 export interface UserProfile {
   uid: string;
@@ -19,8 +19,8 @@ export interface UserProfile {
   invitedBy?: string;
   totalCommission?: number;
   wagerRequired: number;
-  wagerTotal?: number; // Added to track progress bar denominator
-  rebateLastClaimedBet?: number; // Added to reset rebate after claim
+  wagerTotal?: number;
+  rebateLastClaimedBet?: number;
   isBankBound?: boolean;
   isUpiBound?: boolean;
   isTelegramJoined?: boolean;

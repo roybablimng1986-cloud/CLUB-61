@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Wallet as WalletIcon, ArrowUpRight, ArrowDownLeft, History, X, CheckCircle2 } from 'lucide-react';
-// FIX: Switched from invalid 'transactions' import to 'getTransactionHistory' listener function
-import { getTransactionHistory, approveTransaction } from '../services/mockFirebase';
+// FIX: Removed unused approveTransaction import which was causing errors
+import { getTransactionHistory } from '../services/mockFirebase';
 import { View, Transaction } from '../types';
 
 interface WalletProps {
@@ -31,13 +31,6 @@ const Wallet: React.FC<WalletProps> = ({ setView, userBalance }) => {
         tx.type === 'COMMISSION' || 
         tx.type === 'BONUS'
     );
-
-    const handleApprove = async () => {
-        if(selectedTx) {
-            await approveTransaction(selectedTx.id);
-            setSelectedTx(null); // Close modal
-        }
-    }
 
     return (
         <div className="bg-[#0f172a] min-h-screen pb-24 font-sans">
@@ -164,8 +157,6 @@ const Wallet: React.FC<WalletProps> = ({ setView, userBalance }) => {
                                      {selectedTx.accountDetails.phoneNumber && <p className="text-sm text-white"><span className="text-slate-400">Phone:</span> {selectedTx.accountDetails.phoneNumber}</p>}
                                  </div>
                              )}
-
-                             {/* ADMIN APPROVAL BUTTON REMOVED AS REQUESTED */}
                          </div>
                      </div>
                  </div>

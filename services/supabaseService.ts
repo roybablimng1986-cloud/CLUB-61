@@ -18,6 +18,14 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
+// Helper for handling Firebase Permission/Connectivity errors
+const handleFirebaseError = (error: any, context: string) => {
+    console.error(`Firebase Error [${context}]:`, error.message);
+    if (error.message.includes('PERMISSION_DENIED')) {
+        console.warn(`Permission Denied for ${context}. Ensure Firebase Rules allow access to this path.`);
+    }
+};
+
 // AUDIO SYSTEM
 let isMuted = false;
 const sounds = {
@@ -47,9 +55,8 @@ export const playSound = (type: keyof typeof sounds) => {
 };
 export const stopAllSounds = () => { Object.values(sounds).forEach(audio => { audio.pause(); audio.currentTime = 0; }); };
 
+let localGameHistory: GameHistoryItem[] = [];
 let currentUser: UserProfile | null = null;
-let gameHistory: GameHistoryItem[] = [];
-let transactions: Transaction[] = [];
 const balanceSubscribers: ((user: UserProfile | null) => void)[] = [];
 export let referralStats: ReferralData = { code: '', link: '', totalCommission: 0, yesterdayCommission: 0, directSubordinates: 0, teamSubordinates: 0, totalDepositAmount: 0, totalBetAmount: 0 };
 
@@ -67,31 +74,28 @@ const initSession = () => {
                     currentUser = {
                         ...data,
                         uid: user.uid,
-                        balance: data.balance || 0,
+                        balance: Number(data.balance) || 0,
                         email: user.email || data.email,
                     };
                     calculateReferralStats(currentUser!.inviteCode);
                     notifySubscribers();
                 }
-            });
-            onValue(ref(db, `game_history/${user.uid}`), (snapshot) => {
+            }, (err) => handleFirebaseError(err, 'User Profile Listener'));
+
+            const historyRef = ref(db, `game_history/${user.uid}`);
+            onValue(historyRef, (snapshot) => {
                 const val = snapshot.val();
-                if (val) gameHistory = Object.entries(val).map(([id, h]: [string, any]) => ({ id, ...h })).reverse();
-                else gameHistory = [];
-            });
-            onValue(ref(db, `transactions/${user.uid}`), (snapshot) => {
-                const val = snapshot.val();
-                if (val) transactions = Object.entries(val).map(([id, t]: [string, any]) => ({ id, ...t })).reverse();
-                else transactions = [];
-            });
+                localGameHistory = val ? Object.entries(val).map(([id, h]: any) => ({ id, ...h })).reverse() : [];
+            }, (err) => handleFirebaseError(err, 'Game History Listener'));
         } else {
             currentUser = null;
-            gameHistory = [];
-            transactions = [];
+            localGameHistory = [];
             notifySubscribers();
         }
     });
 };
+
+export const logout = async () => { try { await signOut(auth); } catch (e) { handleFirebaseError(e, 'Logout'); } };
 
 export const subscribeToBalance = (cb: (user: UserProfile | null) => void) => {
     balanceSubscribers.push(cb);
@@ -104,80 +108,39 @@ export const subscribeToBalance = (cb: (user: UserProfile | null) => void) => {
 
 export const updateBalance = async (amount: number, type: Transaction['type'] = 'BET', desc: string = 'Game Action') => {
     if (!currentUser) return;
-    const userRef = ref(db, `users/${currentUser.uid}`);
-    const newBalance = (currentUser.balance || 0) + amount;
-    const updates: any = { balance: newBalance };
-    
-    if (amount < 0) {
-        updates.totalBet = (currentUser.totalBet || 0) + Math.abs(amount);
-        // Decrease wager remaining
-        updates.wagerRequired = Math.max(0, (currentUser.wagerRequired || 0) - Math.abs(amount));
-    } else if (type === 'BONUS' || type === 'GIFT') {
-        // Increase wager requirement for bonuses
-        const addedWager = amount * 5.4;
-        updates.wagerRequired = (currentUser.wagerRequired || 0) + addedWager;
-        updates.wagerTotal = (currentUser.wagerTotal || (currentUser.wagerRequired || 0)) + addedWager;
+    try {
+        const userRef = ref(db, `users/${currentUser.uid}`);
+        const newBalance = (currentUser.balance || 0) + amount;
+        const updates: any = { balance: newBalance };
+        
+        if (amount < 0) {
+            updates.totalBet = (currentUser.totalBet || 0) + Math.abs(amount);
+            updates.wagerRequired = Math.max(0, (currentUser.wagerRequired || 0) - Math.abs(amount));
+        } else if (type === 'BONUS' || type === 'GIFT' || type === 'DEPOSIT') {
+            const multiplier = (type === 'GIFT' || type === 'BONUS') ? 5.4 : 1.0;
+            const addedWager = amount * multiplier;
+            updates.wagerRequired = (currentUser.wagerRequired || 0) + addedWager;
+            updates.wagerTotal = (currentUser.wagerTotal || (currentUser.wagerRequired || 0)) + addedWager;
+        }
+        
+        await update(userRef, updates);
+        const txRef = ref(db, `transactions/${currentUser.uid}`);
+        await push(txRef, { type, amount: Math.abs(amount), status: 'SUCCESS', desc, date: new Date().toLocaleString(), timestamp: serverTimestamp() });
+    } catch (e) {
+        handleFirebaseError(e, 'Update Balance');
     }
-    
-    await update(userRef, updates);
-    const txRef = ref(db, `transactions/${currentUser.uid}`);
-    await push(txRef, { type, amount: Math.abs(amount), status: 'SUCCESS', desc, date: new Date().toLocaleString(), timestamp: serverTimestamp() });
 };
 
 export const addGameHistory = async (game: string, bet: number, win: number, details: string) => {
     if (!currentUser) return;
-    const historyRef = ref(db, `game_history/${currentUser.uid}`);
-    await push(historyRef, {
-        game,
-        amount: bet,
-        win,
-        details,
-        date: new Date().toLocaleString(),
-        timestamp: serverTimestamp()
-    });
-};
-
-export const getGameHistory = (game: string, cb: (data: GameHistoryItem[]) => void) => {
-    if (!currentUser) {
-        cb([]);
-        return () => {};
+    try {
+        const historyRef = ref(db, `game_history/${currentUser.uid}`);
+        await push(historyRef, {
+            game, amount: bet, win, details, date: new Date().toLocaleString(), timestamp: serverTimestamp()
+        });
+    } catch (e) {
+        handleFirebaseError(e, 'Add Game History');
     }
-    const historyRef = ref(db, `game_history/${currentUser.uid}`);
-    return onValue(historyRef, (snapshot) => {
-        const val = snapshot.val();
-        if (!val) return cb([]);
-        const list = Object.entries(val).map(([id, h]: [string, any]) => ({ id, ...h })).reverse();
-        if (game === 'ALL') cb(list);
-        else cb(list.filter(h => h.game === game));
-    });
-};
-
-export const getTransactionHistory = (cb: (data: Transaction[]) => void) => {
-    if (!currentUser) {
-        cb([]);
-        return () => {};
-    }
-    const txRef = ref(db, `transactions/${currentUser.uid}`);
-    return onValue(txRef, (snapshot) => {
-        const val = snapshot.val();
-        if (!val) return cb([]);
-        cb(Object.entries(val).map(([id, t]: [string, any]) => ({ id, ...t })).reverse());
-    });
-};
-
-export const claimRebate = async () => {
-    if (!currentUser) return { success: false, message: 'Not logged in' };
-    const lastClaimed = currentUser.rebateLastClaimedBet || 0;
-    const currentBetTotal = currentUser.totalBet || 0;
-    const turnoverSinceLastClaim = Math.max(0, currentBetTotal - lastClaimed);
-    const rebateAmount = turnoverSinceLastClaim * 0.001;
-    
-    if (rebateAmount <= 0) return { success: false, message: 'No rebate available' };
-    
-    const userRef = ref(db, `users/${currentUser.uid}`);
-    await update(userRef, { rebateLastClaimedBet: currentBetTotal });
-    await updateBalance(rebateAmount, 'BONUS', 'Daily Rebate');
-    return { success: true, amount: rebateAmount, message: 'Rebate claimed' };
 };
 
 export const login = async (phone: string, email: string, pass: string) => {
@@ -194,20 +157,9 @@ export const register = async (phone: string, email: string, pass: string, invit
         const res = await createUserWithEmailAndPassword(auth, email, pass);
         const uid = res.user.uid;
         const newUser: UserProfile = {
-            uid,
-            phone,
-            email,
-            username,
-            name: username,
-            balance: 0,
-            vipLevel: 0,
-            totalDeposit: 0,
-            totalBet: 0,
+            uid, phone, email, username, name: username, balance: 0, vipLevel: 0, totalDeposit: 0, totalBet: 0,
             inviteCode: Math.floor(100000 + Math.random() * 900000).toString(),
-            invitedBy: inviteCode || '',
-            wagerRequired: 0,
-            wagerTotal: 0,
-            rebateLastClaimedBet: 0,
+            invitedBy: inviteCode || '', wagerRequired: 0, wagerTotal: 0, rebateLastClaimedBet: 0,
             avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`,
         };
         await set(ref(db, `users/${uid}`), newUser);
@@ -219,86 +171,94 @@ export const register = async (phone: string, email: string, pass: string, invit
 
 export const submitDepositRequest = async (amount: number, method: string, utr: string) => {
     if (!currentUser) return;
-    const txRef = ref(db, `transactions/${currentUser.uid}`);
-    await push(txRef, {
-        type: 'DEPOSIT',
-        amount,
-        status: 'PROCESSING',
-        method,
-        utr,
-        desc: `Deposit via ${method}`,
-        date: new Date().toLocaleString(),
-        timestamp: serverTimestamp()
-    });
+    try {
+        const txRef = ref(db, `transactions/${currentUser.uid}`);
+        await push(txRef, {
+            type: 'DEPOSIT', amount, status: 'PROCESSING', method, utr,
+            desc: `Refill via ${method}`, date: new Date().toLocaleString(), timestamp: serverTimestamp()
+        });
+    } catch (e) {
+        handleFirebaseError(e, 'Submit Deposit');
+    }
 };
 
 export const handleWithdraw = async (amount: number, method: string, password: string, details: any) => {
     if (!currentUser) return { success: false, message: 'Not logged in' };
-    if (currentUser.withdrawalPassword !== password) return { success: false, message: 'Invalid Security PIN' };
+    if (currentUser.withdrawalPassword !== password) return { success: false, message: 'Invalid PIN' };
     if (currentUser.balance < amount) return { success: false, message: 'Insufficient balance' };
-    if ((currentUser.wagerRequired || 0) > 0) return { success: false, message: 'Wager requirement not met' };
+    if ((currentUser.wagerRequired || 0) > 0) return { success: false, message: 'Turnover incomplete' };
 
-    const userRef = ref(db, `users/${currentUser.uid}`);
-    const remainingBalance = currentUser.balance - amount;
-    
-    // NEW LOGIC: If balance >= 1 remains, reset wager required to the remaining balance amount
-    const newWagerRequired = remainingBalance >= 1 ? remainingBalance : 0;
-    
-    await update(userRef, { 
-        balance: remainingBalance,
-        wagerRequired: newWagerRequired,
-        wagerTotal: newWagerRequired // Reset denominator for progress bar
-    });
+    try {
+        const remainingBalance = currentUser.balance - amount;
+        const userRef = ref(db, `users/${currentUser.uid}`);
+        const newWagerRequired = remainingBalance >= 1 ? remainingBalance : 0;
+        
+        await update(userRef, { 
+            balance: remainingBalance,
+            wagerRequired: newWagerRequired,
+            wagerTotal: newWagerRequired
+        });
 
-    const txRef = ref(db, `transactions/${currentUser.uid}`);
-    await push(txRef, {
-        type: 'WITHDRAW',
-        amount,
-        status: 'PROCESSING',
-        method,
-        accountDetails: details,
-        desc: `Withdraw via ${method}`,
-        date: new Date().toLocaleString(),
-        timestamp: serverTimestamp()
-    });
-    return { success: true, message: 'Withdrawal request submitted' };
+        const txRef = ref(db, `transactions/${currentUser.uid}`);
+        await push(txRef, {
+            type: 'WITHDRAW', amount, status: 'PROCESSING', method, accountDetails: details,
+            desc: `Withdraw via ${method}`, date: new Date().toLocaleString(), timestamp: serverTimestamp()
+        });
+        return { success: true, message: 'Request submitted' };
+    } catch (e) {
+        handleFirebaseError(e, 'Handle Withdraw');
+        return { success: false, message: 'Database error' };
+    }
 };
 
-export const approveTransaction = async (txId: string) => {
-    if (!currentUser) return;
-    const txRef = ref(db, `transactions/${currentUser.uid}/${txId}`);
-    const snap = await get(txRef);
-    const tx = snap.val();
-    if (tx && tx.status === 'PROCESSING') {
-        await update(txRef, { status: 'SUCCESS' });
-        if (tx.type === 'DEPOSIT') {
-            const userRef = ref(db, `users/${currentUser.uid}`);
-            const newTotalDeposit = (currentUser.totalDeposit || 0) + tx.amount;
-            let newVip = 0;
-            if (newTotalDeposit >= 400000) newVip = 5;
-            else if (newTotalDeposit >= 100000) newVip = 4;
-            else if (newTotalDeposit >= 50000) newVip = 3;
-            else if (newTotalDeposit >= 2000) newVip = 2;
-            else if (newTotalDeposit >= 500) newVip = 1;
+export const shouldForceLoss = (betAmount: number, currentBalance: number) => {
+    if (!currentUser) return Math.random() < 0.7;
+    const wagerRemaining = currentUser.wagerRequired || 0;
+    const wagerTotal = currentUser.wagerTotal || 1;
+    const isNearCompletion = wagerRemaining > 0 && (wagerRemaining / wagerTotal) < 0.2;
+    const lossThreshold = isNearCompletion ? 0.8 : 0.7; 
+    return Math.random() < lossThreshold;
+};
 
-            const addedWager = tx.amount * 1.0;
-            await update(userRef, {
-                balance: currentUser.balance + tx.amount,
-                totalDeposit: newTotalDeposit,
-                vipLevel: Math.max(currentUser.vipLevel, newVip),
-                wagerRequired: (currentUser.wagerRequired || 0) + addedWager,
-                wagerTotal: (currentUser.wagerTotal || (currentUser.wagerRequired || 0)) + addedWager
-            });
-        }
+export const redeemGiftCode = async (code: string): Promise<number> => {
+    if (!currentUser) return 0;
+    try {
+        const snap = await get(ref(db, `gift_codes/${code}`));
+        const gift = snap.val() as GiftCode;
+        if (!gift) return 0;
+        if (currentUser.usedGiftCodes?.includes(code)) return -1;
+        if (gift.usedCount >= gift.limit) return -2;
+        await update(ref(db, `users/${currentUser.uid}`), { balance: (currentUser.balance || 0) + gift.amount, usedGiftCodes: [...(currentUser.usedGiftCodes || []), code] });
+        await update(ref(db, `gift_codes/${code}`), { usedCount: gift.usedCount + 1 });
+        await updateBalance(gift.amount, 'GIFT', `Gift: ${code}`);
+        return gift.amount;
+    } catch (e) {
+        handleFirebaseError(e, 'Redeem Gift');
+        return 0;
+    }
+};
+
+export const claimRebate = async () => {
+    if (!currentUser) return { success: false };
+    try {
+        const turnover = Math.max(0, (currentUser.totalBet || 0) - (currentUser.rebateLastClaimedBet || 0));
+        const amount = turnover * 0.001; 
+        if (amount <= 0) return { success: false, message: 'No rebate available' };
+        await update(ref(db, `users/${currentUser.uid}`), { rebateLastClaimedBet: currentUser.totalBet });
+        await updateBalance(amount, 'BONUS', 'Daily Rebate');
+        return { success: true, amount };
+    } catch (e) {
+        handleFirebaseError(e, 'Claim Rebate');
+        return { success: false };
     }
 };
 
 export const getGameStats = () => {
     const stats: Record<string, { bet: number, win: number }> = {};
-    gameHistory.forEach(g => {
+    localGameHistory.forEach(g => {
         if (!stats[g.game]) stats[g.game] = { bet: 0, win: 0 };
-        stats[g.game].bet += g.amount;
-        stats[g.game].win += g.win;
+        stats[g.game].bet += (Number(g.amount) || 0);
+        stats[g.game].win += (Number(g.win) || 0);
     });
     return Object.entries(stats).map(([name, data]) => ({ 
         name, 
@@ -308,276 +268,277 @@ export const getGameStats = () => {
     }));
 };
 
-export const bindBank = async (details: any) => {
-    if (!currentUser) return { success: false };
-    if (currentUser.isBankBound) return { success: false, message: 'Already bound' };
-    await update(ref(db, `users/${currentUser.uid}`), { bankDetails: details, isBankBound: true });
-    await updateBalance(10, 'BONUS', 'Bank Binding Reward');
-    return { success: true };
+export const getGameHistory = (gameName: string, cb: (data: GameHistoryItem[]) => void) => {
+    if (!currentUser) return () => {};
+    const historyRef = ref(db, `game_history/${currentUser.uid}`);
+    return onValue(historyRef, (s) => {
+        const val = s.val(); if (!val) return cb([]);
+        const list = Object.entries(val).map(([id, h]: any) => ({ id, ...h })).reverse();
+        cb(gameName === 'ALL' ? list : list.filter((h: any) => h.game === gameName));
+    }, (err) => handleFirebaseError(err, 'Get Game History'));
 };
 
-export const bindUpi = async (details: any) => {
-    if (!currentUser) return { success: false };
-    if (currentUser.isUpiBound) return { success: false, message: 'Already bound' };
-    await update(ref(db, `users/${currentUser.uid}`), { upiDetails: details, isUpiBound: true });
-    await updateBalance(5, 'BONUS', 'UPI Binding Reward');
-    return { success: true };
+export const getTransactionHistory = (cb: (data: Transaction[]) => void) => {
+    if (!currentUser) return () => {};
+    const txRef = ref(db, `transactions/${currentUser.uid}`);
+    return onValue(txRef, (s) => {
+        const val = s.val(); if (!val) return cb([]);
+        cb(Object.entries(val).map(([id, t]: any) => ({ id, ...t })).reverse());
+    }, (err) => handleFirebaseError(err, 'Get Tx History'));
 };
 
-export const joinTelegramReward = async () => {
-    if (!currentUser) return { success: false };
-    if (currentUser.isTelegramJoined) return { success: false, message: 'Already claimed' };
-    await update(ref(db, `users/${currentUser.uid}`), { isTelegramJoined: true });
-    await updateBalance(5, 'BONUS', 'Telegram Reward');
-    return { success: true };
+export const setWithdrawalPassword = async (password: string) => {
+    if (!currentUser) return false;
+    try {
+        await update(ref(db, `users/${currentUser.uid}`), { withdrawalPassword: password });
+        return true;
+    } catch (e) {
+        handleFirebaseError(e, 'Set Withdraw PIN');
+        return false;
+    }
+};
+
+// ENGINES
+let winGoState: WinGoGameState = { timeLeft: 30, period: 202511261000, history: [], status: 'BETTING', lastResult: null };
+const winGoSubscribers: Function[] = [];
+const generateWinGoResult = (period: string): WinGoHistory => {
+  const num = Math.floor(Math.random() * 10);
+  let color: 'Red'|'Green'|'Violet' = num === 0 || num === 5 ? 'Violet' : [1,3,7,9].includes(num) ? 'Green' : 'Red';
+  return { period, number: num, bigSmall: num >= 5 ? 'Big' : 'Small', color };
+};
+export const startGlobalEngines = () => {
+  setInterval(() => {
+    winGoState.timeLeft -= 1;
+    if (winGoState.timeLeft <= 0) {
+        winGoState.status = 'REVEALING';
+        const res = generateWinGoResult(winGoState.period.toString());
+        winGoState.lastResult = res; winGoState.history = [res, ...winGoState.history].slice(0, 50);
+        winGoState.period += 1; winGoState.timeLeft = 30;
+        setTimeout(() => { winGoState.status = 'BETTING'; }, 3000);
+    }
+    winGoSubscribers.forEach(cb => cb({ ...winGoState }));
+  }, 1000);
+};
+export const subscribeToWinGo = (cb: (state: WinGoGameState) => void) => { winGoSubscribers.push(cb); return () => winGoSubscribers.splice(winGoSubscribers.indexOf(cb), 1); };
+
+const calculateReferralStats = async (myCode: string) => {
+    if (!myCode) return;
+    try {
+        const usersRef = ref(db, 'users');
+        const snapshot = await get(usersRef).catch(() => null); // Gracefully handle permission denied for reading all users
+        if (!snapshot) return;
+        // Cast snapshot.val() to any to fix potential unknown type inference issues
+        const users = snapshot.val() as any;
+        if (!users) return;
+        const subs = Object.values(users).filter((u: any) => u.invitedBy === myCode);
+        // Explicitly type totalDep as number to fix arithmetic operation errors on unknown type
+        const totalDep: number = subs.reduce((acc: number, c: any): number => acc + (Number(c.totalDeposit) || 0), 0);
+        referralStats = { 
+            code: myCode, 
+            link: `${window.location.origin}/#/register?code=${myCode}`, 
+            totalCommission: totalDep * 0.1, 
+            yesterdayCommission: totalDep * 0.05, 
+            directSubordinates: subs.length, 
+            teamSubordinates: subs.length, 
+            totalDepositAmount: totalDep, 
+            // Explicitly cast the reduce result to number to fix assignment to totalBetAmount
+            totalBetAmount: subs.reduce((acc: number, c: any): number => acc + (Number(c.totalBet) || 0), 0) 
+        };
+    } catch (e) {
+        handleFirebaseError(e, 'Calc Referral Stats');
+    }
+};
+
+// COMPONENT EXPORTS
+export const subscribeToAviator = (cb: (state: AviatorState) => void) => {
+    const aviRef = ref(db, 'game_states/aviator');
+    return onValue(aviRef, (s) => cb(s.val() || { phase: 'WAITING', multiplier: 1.0, timeLeft: 10, history: [], crashPoint: 0 }), (err) => handleFirebaseError(err, 'Aviator Sync'));
+};
+
+export const subscribeToDragonTiger = (cb: (state: DragonTigerState) => void) => {
+    const dtRef = ref(db, 'game_states/dragon_tiger');
+    return onValue(dtRef, (s) => cb(s.val() || { status: 'BETTING', timeLeft: 15, period: '2024001', dragonCard: null, tigerCard: null, history: [] }), (err) => handleFirebaseError(err, 'DragonTiger Sync'));
+};
+
+export const getSubordinates = (cb: (data: SubordinateItem[]) => void) => {
+    const usersRef = ref(db, 'users');
+    return onValue(usersRef, snapshot => {
+        const users = snapshot.val(); if (!users) return cb([]);
+        const subs = Object.values(users).filter((u: any) => u.invitedBy === currentUser?.inviteCode).map((u: any) => ({ id: u.uid, uid: u.uid, level: 1, depositAmount: u.totalDeposit || 0, betAmount: u.totalBet || 0, commission: (u.totalDeposit || 0) * 0.1, date: '2024-01-01' }));
+        cb(subs);
+    }, (err) => handleFirebaseError(err, 'Get Subordinates'));
+};
+
+export const getCommissions = (cb: (data: CommissionItem[]) => void) => {
+    if (!currentUser) return;
+    const txRef = ref(db, `transactions/${currentUser.uid}`);
+    return onValue(txRef, snapshot => {
+        const val = snapshot.val(); if (!val) return cb([]);
+        cb(Object.entries(val).map(([id, t]: any) => ({ id, ...t })).filter((t: any) => t.type === 'COMMISSION').map((t: any) => ({ id: t.id, fromUid: 'System', amount: t.amount, date: t.date, type: t.desc || 'Referral' })));
+    }, (err) => handleFirebaseError(err, 'Get Commissions'));
+};
+
+export const claimCommission = async () => {
+    if (!currentUser || referralStats.totalCommission <= 0) return { success: false, message: 'No assets' };
+    const amount = referralStats.totalCommission; await updateBalance(amount, 'BONUS', 'Commission Claim');
+    return { success: true, message: amount.toFixed(2) };
+};
+
+export const bindBank = async (details: any) => { 
+    if (!currentUser) return { success: false }; 
+    try {
+        await update(ref(db, `users/${currentUser.uid}`), { bankDetails: details, isBankBound: true }); 
+        await updateBalance(10, 'BONUS', 'Bank Binding'); 
+        return { success: true }; 
+    } catch (e) { handleFirebaseError(e, 'Bind Bank'); return { success: false }; }
+};
+
+export const bindUpi = async (details: any) => { 
+    if (!currentUser) return { success: false }; 
+    try {
+        await update(ref(db, `users/${currentUser.uid}`), { upiDetails: details, isUpiBound: true }); 
+        await updateBalance(5, 'BONUS', 'UPI Binding'); 
+        return { success: true }; 
+    } catch (e) { handleFirebaseError(e, 'Bind UPI'); return { success: false }; }
+};
+
+export const joinTelegramReward = async () => { 
+    if (!currentUser || currentUser.isTelegramJoined) return { success: false }; 
+    try {
+        await update(ref(db, `users/${currentUser.uid}`), { isTelegramJoined: true }); 
+        await updateBalance(5, 'BONUS', 'Telegram Reward'); 
+        return { success: true }; 
+    } catch (e) { handleFirebaseError(e, 'Join Telegram'); return { success: false }; }
 };
 
 export const getLeaderboard = (cb: (data: UserProfile[]) => void) => {
     const usersRef = ref(db, 'users');
-    return onValue(usersRef, (snapshot) => {
-        const val = snapshot.val();
-        if (!val) return cb([]);
+    return onValue(usersRef, s => {
+        const val = s.val(); if (!val) return cb([]);
         const players = Object.entries(val).map(([uid, u]: any) => ({ ...u, uid }));
         players.sort((a, b) => (b.balance + (b.totalDeposit || 0)) - (a.balance + (a.totalDeposit || 0)));
         cb(players.slice(0, 20));
-    });
+    }, (err) => handleFirebaseError(err, 'Get Leaderboard'));
 };
 
-export const redeemGiftCode = async (code: string): Promise<number> => {
-    if (!currentUser) return 0;
-    
-    // SECRET OWNER CODE
-    if (code === 'SUPER_MAFIA_5000') {
-        const usedCodes = currentUser.usedGiftCodes || [];
-        if (usedCodes.includes(code)) return -1;
-        await updateBalance(5000, 'GIFT', 'Owner Special Bounty: ₹5000');
-        await update(ref(db, `users/${currentUser.uid}`), { usedGiftCodes: [...usedCodes, code] });
-        return 5000;
-    }
-
-    if (code === 'MAFIA100') {
-        const usedCodes = currentUser.usedGiftCodes || [];
-        if (usedCodes.includes(code)) return -1;
-        await updateBalance(100, 'GIFT', 'Gift Redeemed: MAFIA100');
-        await update(ref(db, `users/${currentUser.uid}`), { usedGiftCodes: [...usedCodes, code] });
-        return 100;
-    }
-    return 0;
+export const subscribeToChat = (cb: (msgs: ChatMessage[]) => void) => {
+    const chatRef = query(ref(db, 'chat'), limitToLast(50));
+    return onValue(chatRef, s => cb(s.val() ? Object.entries(s.val()).map(([id, m]: any) => ({ id, ...m })) : []), (err) => handleFirebaseError(err, 'Chat Sync'));
 };
 
-// GAME ENGINES
-let winGoState: WinGoGameState = { timeLeft: 30, period: 202511261000, history: [], status: 'BETTING', lastResult: null };
-const winGoSubscribers: Function[] = [];
-let aviatorState: AviatorState = { phase: 'WAITING', multiplier: 1.0, timeLeft: 3, history: [], crashPoint: 1.5 };
-const aviatorSubscribers: Function[] = [];
-let dragonTigerState: DragonTigerState = { status: 'BETTING', timeLeft: 15, period: '1', dragonCard: null, tigerCard: null, history: [] };
-const dragonTigerSubscribers: Function[] = [];
-
-const generateWinGoResult = (p: string): WinGoHistory => {
-    const n = Math.floor(Math.random() * 10);
-    const color: 'Red'|'Green'|'Violet' = n===0||n===5?'Violet':[1,3,7,9].includes(n)?'Green':'Red';
-    return { period: p, number: n, bigSmall: n>=5?'Big':'Small', color };
+export const sendChatMessage = async (text: string) => { 
+    if (!currentUser) return; 
+    try {
+        await push(ref(db, 'chat'), { uid: currentUser.uid, username: currentUser.username, text, timestamp: serverTimestamp(), avatar: currentUser.avatar, vip: currentUser.vipLevel }); 
+    } catch (e) { handleFirebaseError(e, 'Send Chat Message'); }
 };
 
-export const startGlobalEngines = () => {
-    setInterval(() => {
-        winGoState.timeLeft--;
-        if (winGoState.timeLeft <= 0) {
-            winGoState.status = 'REVEALING';
-            const res = generateWinGoResult(winGoState.period.toString());
-            winGoState.lastResult = res;
-            winGoState.history = [res, ...winGoState.history].slice(0, 50);
-            winGoState.period++;
-            winGoState.timeLeft = 30;
-            setTimeout(() => { winGoState.status = 'BETTING'; }, 3000);
-        }
-        winGoSubscribers.forEach(cb => cb({...winGoState}));
-    }, 1000);
-
-    setInterval(() => {
-        if (aviatorState.phase === 'WAITING') {
-            aviatorState.timeLeft -= 0.1;
-            if (aviatorState.timeLeft <= 0) {
-                aviatorState.phase = 'FLYING';
-                aviatorState.multiplier = 1.0;
-                aviatorState.crashPoint = 1.1 + Math.random() * 8.9;
-            }
-        } else if (aviatorState.phase === 'FLYING') {
-            aviatorState.multiplier *= 1.03;
-            if (aviatorState.multiplier >= aviatorState.crashPoint) {
-                aviatorState.phase = 'CRASHED';
-                aviatorState.history = [aviatorState.multiplier, ...aviatorState.history].slice(0, 20);
-                setTimeout(() => {
-                    aviatorState.phase = 'WAITING';
-                    aviatorState.timeLeft = 3; 
-                    aviatorState.multiplier = 1.0;
-                }, 3000);
-            }
-        }
-        aviatorSubscribers.forEach(cb => cb({...aviatorState}));
-    }, 100);
-
-    setInterval(() => {
-        dragonTigerState.timeLeft--;
-        if (dragonTigerState.timeLeft <= 0) {
-            dragonTigerState.status = 'RESULT';
-            dragonTigerState.dragonCard = Math.floor(Math.random()*13)+1;
-            dragonTigerState.tigerCard = Math.floor(Math.random()*13)+1;
-            const win: 'D' | 'T' | 'Tie' = dragonTigerState.dragonCard > dragonTigerState.tigerCard ? 'D' : dragonTigerState.dragonCard < dragonTigerState.tigerCard ? 'T' : 'Tie';
-            dragonTigerState.history = [win, ...dragonTigerState.history].slice(0, 30);
-            setTimeout(() => {
-                dragonTigerState.status = 'BETTING';
-                dragonTigerState.timeLeft = 15;
-                dragonTigerState.dragonCard = null;
-                dragonTigerState.tigerCard = null;
-            }, 6000);
-        }
-        dragonTigerSubscribers.forEach(cb => cb({...dragonTigerState}));
-    }, 1000);
-};
-
-export const subscribeToWinGo = (cb: (s: WinGoGameState) => void) => { winGoSubscribers.push(cb); return () => winGoSubscribers.splice(winGoSubscribers.indexOf(cb), 1); };
-export const subscribeToAviator = (cb: (s: AviatorState) => void) => { aviatorSubscribers.push(cb); return () => aviatorSubscribers.splice(aviatorSubscribers.indexOf(cb), 1); };
-export const subscribeToDragonTiger = (cb: (s: DragonTigerState) => void) => { dragonTigerSubscribers.push(cb); return () => dragonTigerSubscribers.splice(dragonTigerSubscribers.indexOf(cb), 1); };
-
-export const logout = async () => { await signOut(auth); };
-export const checkAuth = () => !!auth.currentUser;
-
-export const subscribeToChat = (cb: (m: ChatMessage[]) => void) => onValue(query(ref(db, 'chat'), limitToLast(50)), s => {
-    const val = s.val(); cb(val ? Object.entries(val).map(([id, m]: any) => ({id, ...m})) : []);
-});
-
-export const sendChatMessage = async (text: string) => {
-    if (!currentUser) return;
-    await push(ref(db, 'chat'), { uid: currentUser.uid, username: currentUser.username, text, timestamp: Date.now(), avatar: currentUser.avatar, vip: currentUser.vipLevel });
-};
-
-// REFERRAL & UTILS
-const calculateReferralStats = (myCode: string) => {
-    if (!myCode) return;
-    onValue(ref(db, 'users'), (snapshot) => {
-        const users = snapshot.val() as any;
-        if (users) {
-            const subordinates = Object.values(users).filter((u: any) => u.invitedBy === myCode);
-            referralStats.code = myCode;
-            referralStats.link = `${window.location.origin}/#/register?inviteCode=${myCode}`;
-            referralStats.directSubordinates = subordinates.length;
-            referralStats.teamSubordinates = subordinates.length; 
-            referralStats.totalDepositAmount = subordinates.reduce((acc: number, curr: any) => acc + (curr.totalDeposit || 0), 0) as number;
-            referralStats.totalBetAmount = subordinates.reduce((acc: number, curr: any) => acc + (curr.totalBet || 0), 0) as number;
-            referralStats.totalCommission = subordinates.reduce((acc: number, curr: any) => acc + ((curr.totalDeposit || 0) * 0.1), 0) as number;
-        }
-    });
-};
-
-export const getSubordinates = (cb: (data: SubordinateItem[]) => void) => onValue(ref(db, 'users'), s => {
-    const val = s.val(); if (!val || !currentUser) return cb([]);
-    cb(Object.values(val).filter((u:any) => u.invitedBy === currentUser?.inviteCode).map((u:any) => ({ id: u.uid||'1', uid: u.uid||'1', level: 1, depositAmount: u.totalDeposit||0, betAmount: u.totalBet||0, commission: (u.totalDeposit||0)*0.1, date: u.createdAt||'N/A' })));
-});
-
-export const getCommissions = (cb: (data: CommissionItem[]) => void) => onValue(ref(db, `transactions/${currentUser?.uid}`), s => {
-    const val = s.val(); if (!val) return cb([]);
-    cb(Object.values(val).filter((t:any) => t.type === 'COMMISSION').map((t:any) => ({ id: t.timestamp?.toString(), fromUid: 'System', amount: t.amount, date: t.date, type: t.desc || 'Bonus' })));
-});
-
-export const claimCommission = async () => {
-    if (!currentUser || referralStats.totalCommission <= 0) return { success: false, message: 'No commission' };
-    const amount = referralStats.totalCommission;
-    await updateBalance(amount, 'COMMISSION', 'Agency Payout');
-    return { success: true, message: amount.toFixed(2) };
-};
-
-export const setWithdrawalPassword = async (p: string) => {
-    if (!currentUser) return false;
-    await update(ref(db, `users/${currentUser.uid}`), { withdrawalPassword: p });
-    return true;
-};
-
-// ADMIN FUNCTIONS
-export const getAllUsers = (cb: (data: UserProfile[]) => void) => {
+// ADMIN & MANAGEMENT FUNCTIONS
+export const getAllUsers = (cb: (users: UserProfile[]) => void) => {
     const usersRef = ref(db, 'users');
     return onValue(usersRef, (snapshot) => {
         const val = snapshot.val();
         if (!val) return cb([]);
-        cb(Object.entries(val).map(([uid, u]: any) => ({ ...u, uid })));
-    });
+        cb(Object.values(val));
+    }, (err) => handleFirebaseError(err, 'Admin Get All Users'));
 };
 
 export const adminUpdateUserBalance = async (uid: string, amount: number, isGift: boolean) => {
-    const userRef = ref(db, `users/${uid}`);
-    const snap = await get(userRef);
-    const user = snap.val();
-    if (!user) return;
-    
-    const newBalance = (user.balance || 0) + amount;
-    await update(userRef, { balance: newBalance });
-    
-    const txRef = ref(db, `transactions/${uid}`);
-    await push(txRef, {
-        type: isGift ? 'GIFT' : 'WITHDRAW',
-        amount: Math.abs(amount),
-        status: 'SUCCESS',
-        desc: isGift ? 'Admin Credit' : 'Admin Deduction',
-        date: new Date().toLocaleString(),
-        timestamp: serverTimestamp()
-    });
+    try {
+        const userRef = ref(db, `users/${uid}`);
+        const snap = await get(userRef);
+        const userData = snap.val();
+        if (!userData) return;
+        const newBalance = (Number(userData.balance) || 0) + amount;
+        await update(userRef, { balance: newBalance });
+        const txRef = ref(db, `transactions/${uid}`);
+        await push(txRef, { type: isGift ? 'GIFT' : 'BET', amount: Math.abs(amount), status: 'SUCCESS', desc: isGift ? 'Admin Gift' : 'Admin Deduction', date: new Date().toLocaleString(), timestamp: serverTimestamp() });
+    } catch (e) { handleFirebaseError(e, 'Admin Update Balance'); }
 };
 
 export const adminBlockUser = async (uid: string, isBlocked: boolean) => {
-    const userRef = ref(db, `users/${uid}`);
-    await update(userRef, { isBlocked });
+    try { await update(ref(db, `users/${uid}`), { isBlocked }); } catch (e) { handleFirebaseError(e, 'Admin Block User'); }
 };
 
 export const adminDeleteUser = async (uid: string) => {
-    await set(ref(db, `users/${uid}`), null);
+    try {
+        await set(ref(db, `users/${uid}`), null);
+        await set(ref(db, `transactions/${uid}`), null);
+        await set(ref(db, `game_history/${uid}`), null);
+    } catch (e) { handleFirebaseError(e, 'Admin Delete User'); }
 };
 
 export const adminGetSettings = (cb: (s: AppSettings | null) => void) => {
-    const settingsRef = ref(db, 'settings');
-    return onValue(settingsRef, (snapshot) => {
-        cb(snapshot.val());
-    });
+    return onValue(ref(db, 'app_settings'), (s) => cb(s.val()), (err) => handleFirebaseError(err, 'Admin Get Settings'));
 };
 
 export const adminUpdateSettings = async (updates: Partial<AppSettings>) => {
-    const settingsRef = ref(db, 'settings');
-    await update(settingsRef, updates);
+    try { await update(ref(db, 'app_settings'), updates); } catch (e) { handleFirebaseError(e, 'Admin Update Settings'); }
 };
 
 export const adminCreateGiftCode = async (gift: GiftCode) => {
-    const giftRef = ref(db, `gift_codes/${gift.code}`);
-    await set(giftRef, gift);
+    try { await set(ref(db, `gift_codes/${gift.code}`), gift); } catch (e) { handleFirebaseError(e, 'Admin Create Gift'); }
 };
 
 export const adminGetAllGiftCodes = (cb: (codes: GiftCode[]) => void) => {
-    const giftsRef = ref(db, 'gift_codes');
-    return onValue(giftsRef, (snapshot) => {
-        const val = snapshot.val();
-        if (!val) return cb([]);
-        cb(Object.values(val));
-    });
+    return onValue(ref(db, 'gift_codes'), (s) => cb(s.val() ? Object.values(s.val()) : []), (err) => handleFirebaseError(err, 'Admin Get Gifts'));
 };
 
-/**
- * UPDATED WINNING ODDS SYSTEM:
- * - Base win chance: 30%
- * - When "near" wager completion (remaining < 20% of total): 20% win chance
- */
-export const shouldForceLoss = (b: number, bal: number) => {
-    if (!currentUser) return Math.random() < 0.7; // 30% win default
+export const getAllPendingTransactions = (cb: (requests: any[]) => void) => {
+    return onValue(ref(db, 'transactions'), (snapshot) => {
+        const allTxs = snapshot.val();
+        if (!allTxs) return cb([]);
+        const pending: any[] = [];
+        Object.entries(allTxs).forEach(([uid, txs]: [string, any]) => {
+            Object.entries(txs).forEach(([txId, tx]: [string, any]) => { if (tx && tx.status === 'PROCESSING') pending.push({ uid, txId, tx }); });
+        });
+        cb(pending);
+    }, (err) => handleFirebaseError(err, 'Admin Get Pending Txs'));
+};
 
-    const wagerRequired = currentUser.wagerRequired || 0;
-    const wagerTotal = currentUser.wagerTotal || 1; // Avoid divide by zero
-    
-    const isNearCompletion = wagerRequired > 0 && (wagerRequired / wagerTotal) < 0.2;
+export const approveTransaction = async (uid: string, txId: string) => {
+    try {
+        const txRef = ref(db, `transactions/${uid}/${txId}`);
+        const snap = await get(txRef);
+        const tx = snap.val();
+        if (!tx || tx.status !== 'PROCESSING') return;
+        await update(txRef, { status: 'SUCCESS' });
+        if (tx.type === 'DEPOSIT') {
+            const userRef = ref(db, `users/${uid}`);
+            const userSnap = await get(userRef);
+            const user = userSnap.val() as UserProfile;
+            if (!user) return;
+            const amount = Number(tx.amount);
+            const newTotalDeposit = (Number(user.totalDeposit) || 0) + amount;
+            const newBalance = (Number(user.balance) || 0) + amount;
+            let newVip = Number(user.vipLevel) || 0;
+            const thresholds = [500, 2000, 50000, 100000, 400000];
+            thresholds.forEach((t, i) => { if (newTotalDeposit >= t) newVip = Math.max(newVip, i + 1); });
+            const updates: any = { balance: newBalance, totalDeposit: newTotalDeposit, vipLevel: newVip };
+            if ((Number(user.totalDeposit) || 0) === 0) {
+                 const bonus = amount * 0.20;
+                 await push(ref(db, `transactions/${uid}`), { type: 'BONUS', amount: bonus, status: 'SUCCESS', desc: 'First Deposit Bonus', date: new Date().toLocaleString(), timestamp: serverTimestamp() });
+                 updates.balance += bonus;
+            }
+            await update(userRef, updates);
+        }
+    } catch (e) { handleFirebaseError(e, 'Approve Transaction'); }
+};
 
-    if (isNearCompletion) {
-        // Winning chance 20% -> Force loss 80% of time
-        return Math.random() < 0.8;
-    }
-
-    // Standard winning chance 30% -> Force loss 70% of time
-    return Math.random() < 0.7;
+export const rejectTransaction = async (uid: string, txId: string) => {
+    try {
+        const txRef = ref(db, `transactions/${uid}/${txId}`);
+        const snap = await get(txRef);
+        const tx = snap.val();
+        if (!tx || tx.status !== 'PROCESSING') return;
+        await update(txRef, { status: 'FAILED' });
+        if (tx.type === 'WITHDRAW') {
+            const userRef = ref(db, `users/${uid}`);
+            const userSnap = await get(userRef);
+            const user = userSnap.val();
+            if (user) await update(userRef, { balance: (Number(user.balance) || 0) + Number(tx.amount) });
+        }
+    } catch (e) { handleFirebaseError(e, 'Reject Transaction'); }
 };
 
 initSession();

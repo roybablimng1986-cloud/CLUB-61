@@ -5,7 +5,7 @@ import { submitDepositRequest } from '../services/mockFirebase';
 
 const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [step, setStep] = useState(1);
-    const [amount, setAmount] = useState(20); // Changed default to new minimum
+    const [amount, setAmount] = useState(20); 
     const [method, setMethod] = useState<'UPI' | 'PhonePe'>('UPI');
     const [utr, setUtr] = useState('');
     const [error, setError] = useState('');

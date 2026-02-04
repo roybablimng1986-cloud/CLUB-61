@@ -42,6 +42,12 @@ import LiveChat from './pages/LiveChat';
 import Vortex from './pages/Vortex';
 import SlotMachine from './pages/SlotMachine';
 import AndarBahar from './pages/AndarBahar';
+import SevenUpDown from './pages/SevenUpDown';
+import CarRoulette from './pages/CarRoulette';
+import JhandiMunda from './pages/JhandiMunda';
+import HorseRacing from './pages/HorseRacing';
+import SpaceRaid from './pages/SpaceRaid';
+import ColorGrid from './pages/ColorGrid';
 import GameResultPopup from './components/GameResultPopup';
 import { View, UserProfile, GameResult } from './types';
 import { subscribeToBalance, startGlobalEngines, stopAllSounds } from './services/mockFirebase';
@@ -86,6 +92,12 @@ export default function App() {
       case 'GAME_WINGO': return <WinGo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} setView={setCurrentView} />;
       case 'GAME_AVIATOR': return <Aviator onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_MINES': return <Mines onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_7UP_DOWN': return <SevenUpDown onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_CAR_ROULETTE': return <CarRoulette onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_JHANDI_MUNDA': return <JhandiMunda onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_HORSE_RACING': return <HorseRacing onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_SPACE_RAID': return <SpaceRaid onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_COLOR_GRID': return <ColorGrid onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_DRAGON_TIGER': return <DragonTiger onBack={() => setCurrentView('HOME')} userBalance={user.balance} username={user.username} onResult={setGameResult} />;
       case 'GAME_ROULETTE': return <Roulette onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_SICBO': return <SicBo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
@@ -132,7 +144,7 @@ export default function App() {
       {showNavBar && <DownloadBanner />}
       {renderContent()}
       <GameResultPopup result={gameResult} onClose={() => setGameResult(null)} />
-      {showNavBar && <NavBar currentView={currentView} setView={setCurrentView} />}
+      {showNavBar && <NavBar currentView={currentView as View} setView={setCurrentView} />}
     </div>
   );
 }
