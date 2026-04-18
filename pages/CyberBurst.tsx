@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, Zap, ShieldAlert, History, Volume2, VolumeX } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+
+import CyberBurstResultPopup from '../components/CyberBurstResultPopup';
 
 const CyberBurst: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
     const [gameState, setGameState] = useState<'IDLE' | 'CHARGING' | 'BURST' | 'CAPTURED'>('IDLE');
@@ -10,6 +13,7 @@ const CyberBurst: React.FC<{ onBack: () => void; userBalance: number; onResult: 
     const [betAmount, setBetAmount] = useState(10);
     const [muted, setMuted] = useState(getMuteStatus());
     const [history, setHistory] = useState<number[]>([1.5, 2.8, 1.1, 4.5, 0.0]);
+    const [cbResult, setCbResult] = useState<any | null>(null);
     
     const isMounted = useRef(true);
     const burstPoint = useRef(0);
@@ -20,10 +24,15 @@ const CyberBurst: React.FC<{ onBack: () => void; userBalance: number; onResult: 
         return () => { isMounted.current = false; stopAllSounds(); cancelAnimationFrame(frameRef.current); };
     }, []);
 
-    const startCharge = () => {
+    const startCharge = async () => {
         if (userBalance < betAmount) { alert("Insufficient Capital"); return; }
-        playSound('click');
+        
+        // Record bet in Firestore removed to save quota for instant games
+        // addGameHistory will still record the result for the user
+
+        playSound('bet_place');
         updateBalance(-betAmount, 'BET', 'Cyber Burst Charge');
+        setCbResult(null);
         setGameState('CHARGING');
         setMultiplier(1.0);
         
@@ -52,8 +61,12 @@ const CyberBurst: React.FC<{ onBack: () => void; userBalance: number; onResult: 
         setGameState('BURST');
         playSound('plane_crash');
         setHistory(prev => [0, ...prev].slice(0, 10));
+        setCbResult({
+            win: false,
+            amount: betAmount,
+            multiplier: 0
+        });
         addGameHistory('Cyber Burst', betAmount, 0, `Burst at ${multiplier.toFixed(2)}x`);
-        onResult({ win: false, amount: betAmount, game: 'Cyber Burst' });
         setTimeout(() => isMounted.current && setGameState('IDLE'), 2500);
     };
 
@@ -61,17 +74,15 @@ const CyberBurst: React.FC<{ onBack: () => void; userBalance: number; onResult: 
         if (gameState !== 'CHARGING') return;
         cancelAnimationFrame(frameRef.current);
         setGameState('CAPTURED');
-        playSound('win');
         
         const winAmt = betAmount * multiplier;
         updateBalance(winAmt, 'WIN', 'Cyber Burst Capture');
         setHistory(prev => [multiplier, ...prev].slice(0, 10));
         
-        onResult({ 
-            win: true, 
-            amount: winAmt, 
-            game: 'Cyber Burst',
-            resultDetails: [{ label: 'Captured', value: `${multiplier.toFixed(2)}x` }]
+        setCbResult({
+            win: true,
+            amount: winAmt,
+            multiplier: multiplier
         });
         addGameHistory('Cyber Burst', betAmount, winAmt, `Captured ${multiplier.toFixed(2)}x`);
         setTimeout(() => isMounted.current && setGameState('IDLE'), 2500);
@@ -79,6 +90,7 @@ const CyberBurst: React.FC<{ onBack: () => void; userBalance: number; onResult: 
 
     return (
         <div className="bg-black min-h-screen flex flex-col font-sans text-white overflow-hidden relative select-none">
+            <CyberBurstResultPopup result={cbResult} onClose={() => setCbResult(null)} />
             <div className="p-4 flex justify-between items-center bg-[#111] border-b border-cyan-500/20 z-50">
                 <div className="flex items-center gap-3">
                     <button onClick={onBack} className="p-2 bg-zinc-900 rounded-xl"><ArrowLeft size={20}/></button>

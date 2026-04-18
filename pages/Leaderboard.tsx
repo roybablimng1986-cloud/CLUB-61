@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Trophy, Crown, Medal, TrendingUp, Sparkles, User, ShieldCheck } from 'lucide-react';
-import { getLeaderboard } from '../services/mockFirebase';
+import { getLeaderboard } from '../services/supabaseService';
 import { UserProfile } from '../types';
 
 const Leaderboard: React.FC<{ onBack: () => void }> = ({ onBack }) => {

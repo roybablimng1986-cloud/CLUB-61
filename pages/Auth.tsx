@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Lock, Smartphone, User, Mail } from 'lucide-react';
-import { login, register } from '../services/mockFirebase';
+import { login, register } from '../services/supabaseService';
 import Logo from '../components/Logo';
 
 const Auth: React.FC = () => {

@@ -1,8 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View } from '../types';
 import { Flame, Gift, Search, BarChart3, MessageCircle, X, Trophy } from 'lucide-react';
 import Logo from '../components/Logo';
+import { adminGetSettings } from '../services/supabaseService';
 
 interface HomeProps {
   setView: (view: View) => void;
@@ -11,47 +12,54 @@ interface HomeProps {
 type Category = 'Popular' | 'Lottery' | 'Casino' | 'Originals' | 'Slots';
 
 const GAMES = [
-    { id: 'GAME_WINGO', title: "Win Go", desc: "30S DRAW", icon: "🎱", color: "bg-red-900/40", category: "Lottery" },
-    { id: 'GAME_AVIATOR', title: "Aviator", desc: "CRASH", icon: "✈️", color: "bg-blue-600/20", category: "Casino" },
-    { id: 'GAME_MINES', title: "Mines", desc: "GRID", icon: "💣", color: "bg-indigo-600/20", category: "Originals" },
-    { id: 'GAME_7UP_DOWN', title: "7 Up Down", desc: "DICE", icon: "🎲", color: "bg-emerald-600/20", category: "Originals" },
-    { id: 'GAME_CAR_ROULETTE', title: "Car Roulette", desc: "LUXURY", icon: "🏎️", color: "bg-zinc-600/20", category: "Casino" },
-    { id: 'GAME_JHANDI_MUNDA', title: "Jhandi Munda", desc: "TRADITION", icon: "🔱", color: "bg-amber-600/20", category: "Originals" },
-    { id: 'GAME_HORSE_RACING', title: "Horse Racing", desc: "DERBY", icon: "🐎", color: "bg-green-600/20", category: "Originals" },
-    { id: 'GAME_SPACE_RAID', title: "Space Raid", desc: "BOOST", icon: "🚀", color: "bg-cyan-600/20", category: "Originals" },
-    { id: 'GAME_COLOR_GRID', title: "Color Grid", desc: "PUZZLE", icon: "🌈", color: "bg-pink-600/20", category: "Originals" },
-    { id: 'GAME_DOG', title: "Dog Road", desc: "SPRINT", icon: "🐕", color: "bg-amber-600/20", category: "Originals" },
-    { id: 'GAME_BURST', title: "Cyber Burst", desc: "EXPAND", icon: "💥", color: "bg-cyan-600/20", category: "Originals" },
-    { id: 'GAME_DRAGON_TIGER', title: "Dragon Tiger", desc: "CARDS", icon: "🐉", color: "bg-orange-600/20", category: "Casino" },
-    { id: 'GAME_ROULETTE', title: "Roulette", desc: "WHEEL", icon: "🎡", color: "bg-green-600/20", category: "Casino" },
-    { id: 'GAME_SICBO', title: "Sic Bo", desc: "DICE", icon: "🎲", color: "bg-purple-600/20", category: "Casino" },
-    { id: 'GAME_BACCARAT', title: "Baccarat", desc: "ELITE", icon: "🃏", color: "bg-emerald-600/20", category: "Casino" },
-    { id: 'GAME_STREET_RACE', title: "Street Race", desc: "MOTORS", icon: "🏍️", color: "bg-rose-600/20", category: "Originals" },
-    { id: 'GAME_VORTEX', title: "Circle Spin", desc: "SPIN", icon: "🌀", color: "bg-blue-900/30", category: "Originals" },
-    { id: 'GAME_PENALTY', title: "Penalty King", desc: "GOAL", icon: "⚽", color: "bg-green-700/20", category: "Originals" },
-    { id: 'GAME_CRICKET', title: "Cricket Hero", desc: "RUNS", icon: "🏏", color: "bg-blue-500/20", category: "Originals" },
-    { id: 'GAME_TOWER', title: "Tower Climb", desc: "LEVELS", icon: "🏗️", color: "bg-slate-500/20", category: "Originals" },
-    { id: 'GAME_SLOT_MACHINE', title: "Royal Slots", desc: "SPIN", icon: "🎰", color: "bg-yellow-600/20", category: "Slots" },
-    { id: 'GAME_ANDAR_BAHAR', title: "Andar Bahar", desc: "DRAW", icon: "🃏", color: "bg-red-500/20", category: "Casino" },
-    { id: 'GAME_PLINKO', title: "Plinko", desc: "DROPS", icon: "🟣", color: "bg-pink-600/20", category: "Originals" },
-    { id: 'GAME_LIMBO', title: "Limbo", desc: "FLY", icon: "🚀", color: "bg-cyan-600/20", category: "Originals" },
-    { id: 'GAME_DRAGON_TOWER', title: "D. Tower", desc: "CLIMB", icon: "🏰", color: "bg-slate-700/40", category: "Originals" },
-    { id: 'GAME_FRUIT_SLOT', title: "Fruit Slot", desc: "SPIN", icon: "🍎", color: "bg-rose-500/20", category: "Slots" },
-    { id: 'GAME_EGYPT_SLOT', title: "Egypt Slot", desc: "GOLD", icon: "🏺", color: "bg-yellow-900/40", category: "Slots" },
-    { id: 'GAME_VAULT', title: "Vault Breaker", desc: "CRACK", icon: "🔐", color: "bg-blue-900/40", category: "Originals" },
-    { id: 'GAME_HEAD_TAILS', title: "Head & Tails", desc: "FLIP", icon: "🪙", color: "bg-yellow-600/20", category: "Originals" },
-    { id: 'GAME_KENO', title: "Keno Elite", desc: "LOTTO", icon: "🎱", color: "bg-emerald-600/20", category: "Lottery" },
-    { id: 'GAME_DICE', title: "Dice Duel", desc: "ROLL", icon: "🎲", color: "bg-purple-600/20", category: "Originals" },
+    { id: 'GAME_WINGO', title: "Win Go", desc: "30S DRAW", image: "https://images.unsplash.com/photo-1606167668584-78701c57f13d?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-red-900/40", category: "Lottery" },
+    { id: 'GAME_AVIATOR', title: "Aviator", desc: "CRASH", image: "https://images.unsplash.com/photo-1569154941061-e231b4725ef1?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-red-600/20", category: "Casino" },
+    { id: 'GAME_MINES', title: "Mines", desc: "GRID", image: "https://images.unsplash.com/photo-1614028674026-a65e31bfd27c?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-indigo-600/20", category: "Originals" },
+    { id: 'GAME_7UP_DOWN', title: "7 Up Down", desc: "DICE", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-emerald-600/20", category: "Originals" },
+    { id: 'GAME_CAR_ROULETTE', title: "Car Roulette", desc: "LUXURY", image: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-zinc-600/20", category: "Casino" },
+    { id: 'GAME_JHANDI_MUNDA', title: "Jhandi Munda", desc: "TRADITION", image: "https://images.unsplash.com/photo-1534131707746-25d604851a1f?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-amber-600/20", category: "Originals" },
+    { id: 'GAME_SPACE_RAID', title: "Space Raid", desc: "BOOST", image: "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-cyan-600/20", category: "Originals" },
+    { id: 'GAME_DOG', title: "Dog Road", desc: "SPRINT", image: "https://images.unsplash.com/photo-1537151608828-ea2b11777ee8?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-amber-600/20", category: "Originals" },
+    { id: 'GAME_BURST', title: "Cyber Burst", desc: "EXPAND", image: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-cyan-600/20", category: "Originals" },
+    { id: 'GAME_DRAGON_TIGER', title: "Dragon Tiger", desc: "CARDS", image: "https://images.unsplash.com/photo-1511193311914-0346f16efe90?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-orange-600/20", category: "Casino" },
+    { id: 'GAME_ROULETTE', title: "Roulette", desc: "WHEEL", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-green-600/20", category: "Casino" },
+    { id: 'GAME_SICBO', title: "Sic Bo", desc: "DICE", image: "https://images.unsplash.com/photo-1511193311914-0346f16efe90?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-purple-600/20", category: "Casino" },
+    { id: 'GAME_BACCARAT', title: "Baccarat", desc: "ELITE", image: "https://images.unsplash.com/photo-1511193311914-0346f16efe90?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-emerald-600/20", category: "Casino" },
+    { id: 'GAME_VORTEX', title: "Vortex Spin", desc: "ELITE", image: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-blue-900/40", category: "Originals" },
+    { id: 'GAME_LUCKY_WHEEL', title: "Lucky Wheel", desc: "JACKPOT", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-purple-600/20", category: "Originals" },
+    { id: 'GAME_CRICKET', title: "Cricket Hero", desc: "RUNS", image: "https://images.unsplash.com/photo-1531415074968-036ba1b575da?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-blue-500/20", category: "Originals" },
+    { id: 'GAME_TOWER', title: "Tower Climb", desc: "LEVELS", image: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-slate-500/20", category: "Originals" },
+    { id: 'GAME_SLOT_MACHINE', title: "Royal Slots", desc: "SPIN", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-yellow-600/20", category: "Slots" },
+    { id: 'GAME_ANDAR_BAHAR', title: "Andar Bahar", desc: "DRAW", image: "https://images.unsplash.com/photo-1511193311914-0346f16efe90?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-red-500/20", category: "Casino" },
+    { id: 'GAME_CHICKEN_ROAD', title: "Chicken Road", desc: "CROSS", image: "https://images.unsplash.com/photo-1516139008210-96e45dccd83b?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-yellow-600/20", category: "Originals" },
+    { id: 'GAME_PLINKO', title: "Plinko", desc: "DROPS", image: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-pink-600/20", category: "Originals" },
+    { id: 'GAME_LIMBO', title: "Limbo", desc: "FLY", image: "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-cyan-600/20", category: "Originals" },
+    { id: 'GAME_DRAGON_TOWER', title: "D. Tower", desc: "CLIMB", image: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-slate-700/40", category: "Originals" },
+    { id: 'GAME_FRUIT_SLOT', title: "Fruit Slot", desc: "SPIN", image: "https://images.unsplash.com/photo-1519098901909-b1553a1190af?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-rose-500/20", category: "Slots" },
+    { id: 'GAME_EGYPT_SLOT', title: "Egypt Slot", desc: "GOLD", image: "https://images.unsplash.com/photo-1503174971373-b1f69850bded?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-yellow-900/40", category: "Slots" },
+    { id: 'GAME_VAULT', title: "Vault Breaker", desc: "CRACK", image: "https://images.unsplash.com/photo-1563986768609-322da13575f3?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-blue-900/40", category: "Originals" },
+    { id: 'GAME_HEAD_TAILS', title: "Head & Tails", desc: "FLIP", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-yellow-600/20", category: "Originals" },
+    { id: 'GAME_KENO', title: "Keno Elite", desc: "LOTTO", image: "https://images.unsplash.com/photo-1518623489648-a173ef7824f3?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-emerald-600/20", category: "Lottery" },
+    { id: 'GAME_DICE', title: "Dice Duel", desc: "ROLL", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-purple-600/20", category: "Originals" },
+    { id: 'GAME_HILO', title: "Hi-Lo Elite", desc: "CARDS", image: "https://images.unsplash.com/photo-1511193311914-0346f16efe90?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-indigo-600/20", category: "Originals" },
 ];
 
 const Home: React.FC<HomeProps> = ({ setView }) => {
   const [activeCategory, setActiveCategory] = useState<Category>('Popular');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const [settings, setSettings] = useState<any>(null);
+
+  useEffect(() => {
+    const unsub = adminGetSettings(setSettings);
+    return unsub;
+  }, []);
+
   const filteredGames = GAMES.filter(game => {
     const matchesSearch = game.title.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = activeCategory === 'Popular' || game.category === activeCategory;
-    return matchesSearch && matchesCategory;
+    const isNotDisabled = !settings?.disabledGames?.[game.id];
+    return matchesSearch && matchesCategory && isNotDisabled;
   });
 
   return (
@@ -63,9 +71,10 @@ const Home: React.FC<HomeProps> = ({ setView }) => {
                 <h1 className="text-2xl font-black italic tracking-tighter text-white gold-text uppercase">MAFIA CLUB</h1>
             </div>
             <div className="flex gap-2">
+                <button onClick={() => setView('GIFT_CODE')} className="bg-yellow-500/10 p-2 rounded-full text-yellow-500 border border-yellow-500/20 shadow-lg active:scale-90"><Gift size={18} /></button>
                 <button onClick={() => setView('CHAT')} className="bg-blue-500/10 p-2 rounded-full text-blue-400 border border-blue-500/20 shadow-lg active:scale-90"><MessageCircle size={18} /></button>
                 <button onClick={() => setView('LEADERBOARD')} className="bg-purple-500/10 p-2 rounded-full text-purple-400 border border-purple-500/20 shadow-lg active:scale-90"><BarChart3 size={18} /></button>
-                <button onClick={() => setView('REWARDS_HUB')} className="bg-yellow-500/10 p-2 rounded-full text-yellow-500 border border-yellow-500/20 shadow-lg active:scale-90"><Gift size={18} /></button>
+                <button onClick={() => setView('REWARDS_HUB')} className="bg-emerald-500/10 p-2 rounded-full text-emerald-400 border border-emerald-500/20 shadow-lg active:scale-90"><Gift size={18} /></button>
             </div>
         </div>
         
@@ -113,15 +122,29 @@ const Home: React.FC<HomeProps> = ({ setView }) => {
             <div className="h-[1px] flex-1 bg-white/5"></div>
         </div>
         
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-4">
             {filteredGames.map((game) => (
-                <div key={game.id} onClick={() => setView(game.id as View)} className="bg-[#1e293b] rounded-2xl overflow-hidden cursor-pointer group transition-all border border-white/5 shadow-xl active:scale-95 hover:border-yellow-500/50">
-                    <div className={`h-24 flex items-center justify-center text-4xl group-hover:scale-110 transition-transform duration-300 ${game.color}`}>
-                       {game.icon}
+                <div 
+                    key={game.id} 
+                    onClick={() => setView(game.id as View)} 
+                    className="relative h-44 rounded-[2rem] overflow-hidden cursor-pointer group transition-all border border-white/5 shadow-2xl active:scale-95"
+                >
+                    <img src={game.image} alt={game.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" referrerPolicy="no-referrer" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+                    
+                    <div className="absolute inset-0 p-4 flex flex-col justify-end items-start">
+                        <div className="bg-yellow-500/20 backdrop-blur-md px-2 py-0.5 rounded-full border border-yellow-500/30 mb-1.5">
+                            <span className="text-[7px] font-black text-yellow-500 uppercase tracking-widest">{game.desc}</span>
+                        </div>
+                        <h4 className="font-black text-white text-lg uppercase tracking-tighter italic leading-tight group-hover:text-yellow-400 transition-colors">{game.title}</h4>
+                        <div className="flex items-center gap-1 mt-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                            <span className="text-[7px] font-bold text-white uppercase tracking-widest">Live</span>
+                        </div>
                     </div>
-                    <div className="p-2 text-center bg-black/20">
-                        <h4 className="font-black text-white text-[10px] uppercase tracking-tighter truncate">{game.title}</h4>
-                        <p className="text-[7px] text-slate-500 uppercase font-bold tracking-tighter">{game.desc}</p>
+                    
+                    <div className="absolute top-3 right-3 w-8 h-8 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all">
+                        <Flame size={16} className="text-yellow-500" />
                     </div>
                 </div>
             ))}

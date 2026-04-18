@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, History, Volume2, VolumeX, Trash2, Coins } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, db, auth } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+
+import HeadTailsResultPopup from '../components/HeadTailsResultPopup';
 
 interface Props {
   onBack: () => void;
@@ -17,6 +20,7 @@ const HeadTails: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [history, setHistory] = useState<('H' | 'T')[]>(['H', 'T', 'H', 'H', 'T']);
   const [muted, setMuted] = useState(getMuteStatus());
   const [rotation, setRotation] = useState({ x: 0, y: 0 });
+  const [htResult, setHtResult] = useState<any | null>(null);
 
   const isMounted = useRef(true);
 
@@ -28,20 +32,32 @@ const HeadTails: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     };
   }, []);
 
-  const handleFlip = () => {
+  const handleFlip = async () => {
     if (!selectedSide || isFlipping) return;
     if (betAmount > userBalance) {
       alert("Insufficient Balance!");
       return;
     }
 
+    // Record bet in Firestore
+    if (auth.currentUser) {
+        try {
+            await addDoc(collection(db, 'head_tails_bets'), {
+                uid: auth.currentUser.uid,
+                username: auth.currentUser.displayName || 'Player',
+                amount: betAmount,
+                target: selectedSide,
+                timestamp: Date.now()
+            });
+        } catch (e) {}
+    }
+
     // IMPORTANT: Capture the exact side the user bet on NOW
     const playerChoice = selectedSide; 
     
     setIsFlipping(true);
-    playSound('click');
-    // FIX: Changed invalid sound name 'spin' to 'wheel_spin'
-    playSound('wheel_spin');
+    playSound('bet_place');
+    setHtResult(null);
     updateBalance(-betAmount, 'BET', 'Head & Tails Stake');
 
     // 1. Result Logic (Determined immediately but shown after animation)
@@ -60,26 +76,18 @@ const HeadTails: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
       setIsFlipping(false);
       const isWin = playerChoice === outcome; // Compare with the captured choice
       
-      setHistory(prev => [outcome === 'HEAD' ? 'H' : 'T', ...prev].slice(0, 15));
+      setHistory(prev => [outcome === 'HEAD' ? 'H' : 'T', ...prev].slice(0, 15) as ("H" | "T")[]);
+
+      const winAmt = isWin ? betAmount * 1.98 : 0;
+      setHtResult({
+          win: isWin,
+          amount: isWin ? winAmt : betAmount,
+          outcome: outcome,
+          target: playerChoice
+      });
 
       if (isWin) {
-        const winAmt = betAmount * 1.98;
         updateBalance(winAmt, 'WIN', 'Head & Tails Win');
-        playSound('win');
-        onResult({
-          win: true,
-          amount: winAmt,
-          game: 'Head & Tails',
-          resultDetails: [{ label: 'Landed', value: outcome === 'HEAD' ? 'Heads' : 'Tails' }]
-        });
-      } else {
-        playSound('loss');
-        onResult({
-          win: false,
-          amount: betAmount,
-          game: 'Head & Tails',
-          resultDetails: [{ label: 'Landed', value: outcome === 'HEAD' ? 'Heads' : 'Tails', color: 'text-red-500' }]
-        });
       }
       addGameHistory('Head & Tails', betAmount, isWin ? betAmount * 1.98 : 0, `Landed ${outcome}`);
     }, 2100);
@@ -93,6 +101,7 @@ const HeadTails: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
 
   return (
     <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white relative overflow-hidden select-none">
+      <HeadTailsResultPopup result={htResult} onClose={() => setHtResult(null)} />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,_rgba(59,130,246,0.05)_0%,_transparent_60%)] pointer-events-none"></div>
 
       {/* Header */}

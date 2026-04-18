@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Gift, CreditCard, Smartphone, Send, CheckCircle2, AlertCircle, X } from 'lucide-react';
-import { bindBank, bindUpi, joinTelegramReward, subscribeToBalance } from '../services/mockFirebase';
+import { bindBank, bindUpi, joinTelegramReward, subscribeToBalance } from '../services/supabaseService';
 import { UserProfile } from '../types';
 
 const BindingRewards: React.FC<{ onBack: () => void }> = ({ onBack }) => {

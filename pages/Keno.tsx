@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, HelpCircle, X, RotateCw, Trophy } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+
+import KenoResultPopup from '../components/KenoResultPopup';
 
 const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
   const [bet, setBet] = useState(10);
@@ -10,6 +13,7 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
   const [drawn, setDrawn] = useState<number[]>([]);
   const [gameState, setGameState] = useState<'IDLE' | 'DRAWING' | 'RESULT'>('IDLE');
   const [showRules, setShowRules] = useState(false);
+  const [keResult, setKeResult] = useState<any | null>(null);
   const [floating, setFloating] = useState<{ text: string; color: string; id: number } | null>(null);
 
   const isMounted = useRef(true);
@@ -36,9 +40,22 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
 
   const startDraw = async () => {
     if (selected.length === 0 || userBalance < bet) return;
+    
+    // Record bet in Firestore using batched service
+    if (auth.currentUser) {
+        try {
+            await addGameBet('keno_bets', {
+                amount: bet,
+                target: selected.join(',')
+            });
+        } catch (e) {}
+    }
+
     updateBalance(-bet, 'BET', 'Keno Elite');
+    setKeResult(null);
     setGameState('DRAWING');
     setDrawn([]);
+    playSound('bet_place');
 
     const results: number[] = [];
     while(results.length < 15) {
@@ -61,16 +78,21 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
     else if (matches >= 5) mult = 100;
 
     const winAmt = bet * mult;
+    setKeResult({
+        win: winAmt > 0,
+        amount: winAmt > 0 ? winAmt : bet,
+        matches: matches,
+        multiplier: mult
+    });
+
     if (winAmt > 0) {
         updateBalance(winAmt, 'WIN', 'Keno Elite Win');
-        playSound('win');
         triggerFloating(`+₹${winAmt.toFixed(2)}`, 'text-green-400');
     } else {
-        playSound('loss');
         triggerFloating(`-₹${bet.toFixed(2)}`, 'text-red-500');
     }
 
-    onResult({ win: winAmt > 0, amount: winAmt > 0 ? winAmt : bet, game: 'Keno Elite', resultDetails: [{label: 'Matches', value: `${matches}`}]});
+    addGameHistory('Keno Elite', bet, winAmt, `Matches: ${matches}`);
     setGameState('RESULT');
   };
 
@@ -82,6 +104,7 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
 
   return (
     <div className="bg-[#051515] min-h-screen flex flex-col font-sans text-white relative overflow-hidden">
+      <KenoResultPopup result={keResult} onClose={() => setKeResult(null)} />
       {floating && (
           <div key={floating.id} className={`fixed top-1/2 left-1/2 -translate-x-1/2 z-[100] font-black text-5xl italic pointer-events-none animate-float-up ${floating.color}`} style={{ textShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
               {floating.text}

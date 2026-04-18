@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { ArrowLeft, Smartphone, QrCode, ClipboardCopy, CheckCircle2, ShieldCheck, Zap } from 'lucide-react';
-import { submitDepositRequest } from '../services/mockFirebase';
+import { submitDepositRequest } from '../services/supabaseService';
 
 const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [step, setStep] = useState(1);
@@ -40,14 +40,10 @@ const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     </div>
 
                     <h3 className="text-[10px] font-black text-slate-500 mb-4 uppercase tracking-[0.3em]">Select Channel</h3>
-                    <div className="grid grid-cols-2 gap-4 mb-8">
+                    <div className="grid grid-cols-1 gap-4 mb-8">
                         <div onClick={() => setMethod('UPI')} className={`p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 ${method === 'UPI' ? 'border-blue-500 bg-blue-500/10' : 'border-slate-800 bg-[#1e293b] opacity-60'}`}>
                             <QrCode size={40} className={method === 'UPI' ? 'text-blue-400' : 'text-slate-500'}/>
-                            <span className="font-black text-xs uppercase tracking-widest">Normal UPI</span>
-                        </div>
-                        <div onClick={() => setMethod('PhonePe')} className={`p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 ${method === 'PhonePe' ? 'border-purple-500 bg-purple-500/10' : 'border-slate-800 bg-[#1e293b] opacity-60'}`}>
-                            <Smartphone size={40} className={method === 'PhonePe' ? 'text-purple-400' : 'text-slate-500'}/>
-                            <span className="font-black text-xs uppercase tracking-widest">PhonePe</span>
+                            <span className="font-black text-xs uppercase tracking-widest">UPI Transfer</span>
                         </div>
                     </div>
 

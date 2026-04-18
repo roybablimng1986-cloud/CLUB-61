@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Gift, ArrowLeft, History } from 'lucide-react';
-import { redeemGiftCode, getTransactionHistory, playSound } from '../services/mockFirebase';
+import { redeemGiftCode, getTransactionHistory, playSound } from '../services/supabaseService';
 import { Transaction } from '../types';
 
 const Promotion: React.FC = () => {
@@ -20,21 +20,12 @@ const Promotion: React.FC = () => {
       if (!code) return;
       
       const res = await redeemGiftCode(code);
-      if (res > 0) {
-          setMessage({ type: 'success', text: `Success! ₹${res} added to wallet.` });
+      if (res.success) {
+          setMessage({ type: 'success', text: res.message });
           playSound('win');
           setCode('');
-      } else if (res === -1) {
-          setMessage({ type: 'error', text: 'You have already used this code.' });
-          playSound('loss');
-      } else if (res === -2) {
-          setMessage({ type: 'error', text: 'Code limit has been reached.' });
-          playSound('loss');
-      } else if (res === -3) {
-          setMessage({ type: 'error', text: 'VIP Level insufficient for this reward.' });
-          playSound('loss');
       } else {
-          setMessage({ type: 'error', text: 'Invalid gift code.' });
+          setMessage({ type: 'error', text: res.message });
           playSound('loss');
       }
 

@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, HelpCircle, X, ChevronUp, Lock, Sparkles } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+
+import DragonTowerResultPopup from '../components/DragonTowerResultPopup';
 
 const LEVELS = [1.5, 3.2, 6.8, 14.5, 32.0, 75.0, 200.0, 500.0];
 
@@ -12,11 +15,17 @@ const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   const [gameState, setGameState] = useState<'IDLE' | 'PLAYING' | 'REVEALING' | 'LOST' | 'WON'>('IDLE');
   const [showRules, setShowRules] = useState(false);
   const [revealedIdx, setRevealedIdx] = useState<number | null>(null);
+  const [tResult, setTResult] = useState<any | null>(null);
 
-  const start = () => {
+  const start = async () => {
     if (userBalance < bet) return;
+    
+    // Record bet in Firestore removed to save quota for instant games
+    // addGameHistory will still record the result for the user
+
     updateBalance(-bet, 'BET', 'Tower of Fortune');
-    playSound('click');
+    playSound('bet_place');
+    setTResult(null);
     setGameState('PLAYING');
     setCurrentLv(-1);
     setRevealedIdx(null);
@@ -41,9 +50,13 @@ const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
     } else {
         // SET STATE TO LOST IMMEDIATELY TO HIDE CASH OUT BUTTON
         setGameState('LOST');
-        playSound('loss');
+        setTResult({
+            win: false,
+            amount: bet,
+            level: currentLv + 1,
+            multiplier: 0
+        });
         addGameHistory('Tower', bet, 0, `Floor ${currentLv + 1} Collapse`);
-        onResult({ win: false, amount: bet, game: 'Tower Climb' });
         setTimeout(() => {
             setGameState('IDLE');
             setCurrentLv(-1);
@@ -55,14 +68,22 @@ const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
     if (currentLv === -1 || gameState !== 'PLAYING') return;
     const winAmt = bet * LEVELS[currentLv];
     updateBalance(winAmt, 'WIN', 'Tower Cashout');
-    playSound('win');
-    onResult({ win: true, amount: winAmt, game: 'Tower Climb', resultDetails: [{label: 'Floors', value: `${currentLv + 1}`}]});
+    
+    setTResult({
+        win: true,
+        amount: winAmt,
+        level: currentLv + 1,
+        multiplier: LEVELS[currentLv]
+    });
+
+    addGameHistory('Tower', bet, winAmt, `Floor ${currentLv + 1} Cashout`);
     setGameState('IDLE');
     setCurrentLv(-1);
   };
 
   return (
     <div className="bg-[#0c0a1a] min-h-screen flex flex-col font-sans text-white overflow-hidden relative">
+      <DragonTowerResultPopup result={tResult} onClose={() => setTResult(null)} />
       <div className="p-4 flex justify-between items-center bg-black/40 border-b border-white/5 relative z-50">
         <button onClick={onBack} disabled={gameState === 'PLAYING'} className="p-2 bg-slate-800 rounded-xl"><ArrowLeft size={20}/></button>
         <h1 className="text-xl font-black gold-text italic tracking-widest uppercase">TOWER ELITE</h1>

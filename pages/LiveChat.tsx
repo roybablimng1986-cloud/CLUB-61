@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Send, MessageCircle, ShieldCheck, User, Sparkles } from 'lucide-react';
-import { subscribeToChat, sendChatMessage, subscribeToBalance } from '../services/mockFirebase';
+import { subscribeToChat, sendChatMessage, subscribeToBalance } from '../services/supabaseService';
 import { ChatMessage, UserProfile } from '../types';
 
 const LiveChat: React.FC<{ onBack: () => void }> = ({ onBack }) => {

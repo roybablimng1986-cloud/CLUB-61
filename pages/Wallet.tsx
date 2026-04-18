@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Wallet as WalletIcon, ArrowUpRight, ArrowDownLeft, History, X, CheckCircle2 } from 'lucide-react';
 // FIX: Removed unused approveTransaction import which was causing errors
-import { getTransactionHistory } from '../services/mockFirebase';
+import { getTransactionHistory } from '../services/supabaseService';
 import { View, Transaction } from '../types';
 
 interface WalletProps {

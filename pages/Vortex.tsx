@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, Volume2, VolumeX } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, db, auth } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+
+import VortexResultPopup from '../components/VortexResultPopup';
 
 interface Props {
   onBack: () => void;
@@ -22,6 +25,7 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [gameState, setGameState] = useState<'IDLE' | 'SPINNING' | 'LOCKED'>('IDLE');
   const [muted, setMuted] = useState(getMuteStatus());
   const [history, setHistory] = useState<string[]>(['10X', '0X', '5X', '2X', '0X']);
+  const [vxResult, setVxResult] = useState<any | null>(null);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
@@ -153,11 +157,16 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     }
   };
 
-  const launch = () => {
+  const launch = async () => {
     if (gameState !== 'IDLE' || userBalance < betAmount) return;
+    
+    // Record bet in Firestore removed to save quota for instant games
+    // addGameHistory will still record the result for the user
+
     setGameState('SPINNING');
     updateBalance(-betAmount, 'BET', 'Circle Spin');
-    playSound('click'); playSound('wheel_spin');
+    setVxResult(null);
+    playSound('bet_place'); playSound('wheel_spin');
     
     ballAngle.current = Math.random() * Math.PI * 2;
     ballRadius.current = 168;
@@ -178,20 +187,21 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
 
     setTimeout(() => {
         if (!isMounted.current) return;
-        if (winAmt > 0) { updateBalance(winAmt, 'WIN', 'Circle Spin Win'); playSound('win'); } else { playSound('loss'); }
+        if (winAmt > 0) { updateBalance(winAmt, 'WIN', 'Circle Spin Win'); }
         setHistory(prev => [result.mult + 'X', ...prev].slice(0, 10));
-        onResult({ 
-            win: winAmt > 0, 
-            amount: winAmt > 0 ? winAmt : betAmount, 
-            game: 'Circle Spin',
-            resultDetails: [{ label: 'Pocket', value: result.mult + 'X', color: result.mult > 0 ? 'text-yellow-400' : 'text-slate-500' }]
+        setVxResult({
+            win: winAmt > 0,
+            amount: winAmt > 0 ? winAmt : betAmount,
+            multiplier: result.mult
         });
+        addGameHistory('Circle Spin', betAmount, winAmt, `Landed on ${result.mult}x`);
         setGameState('IDLE');
     }, 1200);
   };
 
   return (
     <div className="bg-black min-h-screen flex flex-col font-sans text-white select-none overflow-hidden relative">
+      <VortexResultPopup result={vxResult} onClose={() => setVxResult(null)} />
       <div className="p-4 flex justify-between items-center bg-[#111827] border-b border-white/5 z-50 shadow-2xl">
         <button onClick={onBack} className="p-2.5 bg-slate-800 rounded-2xl border border-white/10 active:scale-90"><ArrowLeft size={20}/></button>
         <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">CIRCLE SPIN</h1>

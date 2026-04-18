@@ -2,7 +2,7 @@
 import React from 'react';
 import { ArrowLeft, BarChart2 } from 'lucide-react';
 import { View } from '../types';
-import { getGameStats } from '../services/mockFirebase';
+import { getGameStats } from '../services/supabaseService';
 
 interface StatsProps {
     setView: (view: View) => void;

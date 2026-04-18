@@ -1,8 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, History, X, AlertCircle } from 'lucide-react';
-import { updateBalance, subscribeToDragonTiger, playSound, addGameHistory, stopAllSounds, getGameHistory } from '../services/mockFirebase';
+import { ArrowLeft, Wallet, History, X, AlertCircle, Users, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, subscribeToDragonTiger, subscribeToDragonTigerBets, addGameBet, getClockOffset } from '../services/supabaseService';
 import { DragonTigerState, GameResult, GameHistoryItem } from '../types';
+import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp, where, getDocs, addDoc } from 'firebase/firestore';
+
+import DragonTigerResultPopup from '../components/DragonTigerResultPopup';
+import { useStabilizedTimer } from '../hooks/useTimer';
 
 interface Props {
     onBack: () => void;
@@ -11,98 +16,167 @@ interface Props {
     onResult: (r: GameResult) => void;
 }
 
-type BetTarget = 'D' | 'T' | 'Tie' | 'D_EVEN' | 'D_ODD' | 'T_EVEN' | 'T_ODD';
-
-interface UserBet {
-    id: string;
-    target: BetTarget;
-    amount: number;
-}
+type BetTarget = 'D' | 'T' | 'Tie' | 'ST';
 
 const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult }) => {
     const [gameState, setGameState] = useState<DragonTigerState | null>(null);
     const [selectedChip, setSelectedChip] = useState(10);
-    const [myBets, setMyBets] = useState<UserBet[]>([]);
+    const [myBets, setMyBets] = useState<any[]>([]);
+    const [allBets, setAllBets] = useState<any[]>([]);
     const [showDragon, setShowDragon] = useState(false);
     const [showTiger, setShowTiger] = useState(false);
     const [confirmDrawerOpen, setConfirmDrawerOpen] = useState(false);
     const [confirmTarget, setConfirmTarget] = useState<BetTarget | null>(null);
-    const [localHistory, setLocalHistory] = useState<GameHistoryItem[]>([]);
+    const [activeTab, setActiveTab] = useState<'ALL' | 'MY'>('ALL');
+    const [isBettingLocked, setIsBettingLocked] = useState(false);
+    const [dtResult, setDtResult] = useState<any | null>(null);
 
     const isMounted = useRef(true);
     const resultHandledRef = useRef<string | null>(null);
 
+    const timeLeft = useStabilizedTimer(gameState?.status === 'BETTING' ? gameState.endTime : undefined);
+
     useEffect(() => {
         isMounted.current = true;
-        const unsub = subscribeToDragonTiger((state) => {
-            if (!isMounted.current) return;
+        
+        // Global Game State Listener
+        const unsubState = subscribeToDragonTiger((state) => {
+            if (!state) return;
             setGameState(state);
+
             if (state.status === 'BETTING') {
-                setShowDragon(false); setShowTiger(false); resultHandledRef.current = null;
-                if (state.timeLeft <= 5 && state.timeLeft > 0) playSound('wingo_tick');
+                setShowDragon(false);
+                setShowTiger(false);
+                resultHandledRef.current = null;
+            } else {
+                setIsBettingLocked(true);
             }
+
             if (state.status === 'RESULT' && resultHandledRef.current !== state.period) {
                 resultHandledRef.current = state.period;
                 handleRevealingSequence(state);
             }
         });
-        
-        const unsubH = getGameHistory('Dragon Tiger', (data) => {
-            if(isMounted.current) setLocalHistory(data);
+
+        const unsubBets = subscribeToDragonTigerBets((bets) => {
+            setAllBets(bets);
+            if (auth.currentUser) {
+                setMyBets(bets.filter((b: any) => b.uid === auth.currentUser?.uid));
+            }
         });
 
-        return () => { isMounted.current = false; unsub(); unsubH(); stopAllSounds(); };
+        return () => {
+            isMounted.current = false;
+            unsubState();
+            unsubBets();
+            stopAllSounds();
+        };
     }, []);
 
+    useEffect(() => {
+        if (gameState?.status === 'BETTING') {
+            setIsBettingLocked(timeLeft <= 3);
+            if (timeLeft <= 5 && timeLeft > 0) playSound('wingo_tick');
+        }
+    }, [timeLeft, gameState?.status]);
+
+    if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center font-black gold-text">Syncing Arena...</div>;
+
+    // Listen to bets for the current period
+    // Redundant - now handled by shared listener in first useEffect
+
     const handleRevealingSequence = async (state: DragonTigerState) => {
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 500));
         if (!isMounted.current) return;
         setShowDragon(true);
         playSound('dt_card');
-        await new Promise(r => setTimeout(r, 1200));
+        await new Promise(r => setTimeout(r, 1000));
         if (!isMounted.current) return;
         setShowTiger(true);
         playSound('dt_card');
-        await new Promise(r => setTimeout(r, 1000));
-        if (isMounted.current && myBets.length > 0) {
-            playSound('dt_draw');
-            processMyResult(state);
+        await new Promise(r => setTimeout(r, 1500));
+        
+        if (isMounted.current) {
+            const myCurrentBets = allBets.filter(b => b.uid === auth.currentUser?.uid);
+            if (myCurrentBets.length > 0) {
+                processMyResult(state, myCurrentBets);
+            }
         }
     };
 
-    const processMyResult = (state: DragonTigerState) => {
-        const dVal = state.dragonCard || 0;
-        const tVal = state.tigerCard || 0;
-        const winner = dVal > tVal ? 'D' : tVal > dVal ? 'T' : 'Tie';
-        let totalWin = 0; let totalBet = 0;
-        myBets.forEach(bet => {
+    const processMyResult = (state: DragonTigerState, currentBets: any[]) => {
+        const dSum = state.dragonCards.reduce((a, b) => a + b.rank, 0);
+        const tSum = state.tigerCards.reduce((a, b) => a + b.rank, 0);
+        
+        let winner: 'D' | 'T' | 'Tie' | 'ST' = 'Tie';
+        if (dSum > tSum) winner = 'D';
+        else if (tSum > dSum) winner = 'T';
+        else {
+            if (state.dragonCards[0].suit === state.tigerCards[0].suit) winner = 'ST';
+            else winner = 'Tie';
+        }
+        
+        let totalWin = 0;
+        let totalBet = 0;
+        
+        currentBets.forEach(bet => {
             totalBet += bet.amount;
-            if (bet.target === winner) totalWin += bet.amount * (winner === 'Tie' ? 9 : 2);
+            if (bet.target === winner) {
+                let multi = 2;
+                if (winner === 'Tie') multi = 11;
+                if (winner === 'ST') multi = 50;
+                totalWin += bet.amount * multi;
+            }
         });
+
         const hasWon = totalWin > 0;
-        if (hasWon) { updateBalance(totalWin, 'WIN', 'Dragon Tiger Win'); playSound('win'); onResult({ win: true, amount: totalWin, game: 'Dragon Tiger' }); }
-        else { playSound('loss'); onResult({ win: false, amount: totalBet, game: 'Dragon Tiger' }); }
+        if (hasWon) updateBalance(totalWin, 'WIN', 'Dragon Tiger Win');
+        
+        setDtResult({
+            win: hasWon,
+            amount: hasWon ? totalWin : totalBet,
+            period: state.period,
+            winner,
+            dragonCards: state.dragonCards,
+            tigerCards: state.tigerCards,
+            target: currentBets.map(b => b.target).join(', ')
+        });
+
         addGameHistory('Dragon Tiger', totalBet, totalWin, `Period: ${state.period}`);
-        setMyBets([]);
     };
 
     const handleTargetClick = (target: BetTarget) => {
-        if (gameState?.status !== 'BETTING' || gameState!.timeLeft <= 2) return;
+        if (isBettingLocked || gameState?.status !== 'BETTING') return;
         setConfirmTarget(target);
         setConfirmDrawerOpen(true);
         playSound('click');
     };
 
-    const confirmBetAction = () => {
-        if (selectedChip > userBalance) { alert("Insufficient Balance"); return; }
-        updateBalance(-selectedChip, 'BET', `DT Bet on ${confirmTarget}`);
-        setMyBets(prev => [...prev, { id: Date.now().toString(), target: confirmTarget!, amount: selectedChip }]);
-        setConfirmDrawerOpen(false);
-        playSound('click');
+    const confirmBetAction = async () => {
+        if (!auth.currentUser || !gameState) return;
+        if (selectedChip > userBalance) {
+            alert("Insufficient Balance");
+            return;
+        }
+
+        try {
+            const betData = {
+                target: confirmTarget,
+                amount: selectedChip,
+                period: gameState.period,
+            };
+
+            await addGameBet('dragon_tiger_bets', betData);
+            await updateBalance(-selectedChip, 'BET', `DT Bet on ${confirmTarget}`);
+            setConfirmDrawerOpen(false);
+            playSound('bet_place');
+        } catch (e) {
+            console.error("Bet error:", e);
+        }
     };
 
-    const getCardRank = (val: number | null) => {
-        if (val === null || val === undefined) return '?';
+    const getCardRank = (val: number | undefined) => {
+        if (!val) return '?';
         if (val === 1) return 'A';
         if (val === 11) return 'J';
         if (val === 12) return 'Q';
@@ -110,10 +184,40 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
         return val.toString();
     };
 
+    const Card = ({ cards, show, label }: { cards: { rank: number; suit: string }[], show: boolean, label: string }) => (
+        <div className="flex flex-col items-center gap-2">
+            <div className="flex gap-1">
+                {cards.map((card, idx) => (
+                    <div key={idx} className="card-container" style={{ width: '60px', height: '84px' }}>
+                        <div className={`card-inner ${show ? 'flip' : ''}`}>
+                            <div className="card-front" style={{ fontSize: '1.2rem' }}>?</div>
+                            <div className="card-back flex flex-col items-center justify-center relative">
+                                <span className={`absolute top-0.5 left-1 text-[10px] font-bold ${['♥', '♦'].includes(card?.suit || '') ? 'text-red-600' : 'text-zinc-900'}`}>
+                                    {getCardRank(card?.rank)}
+                                </span>
+                                <span className={`text-2xl ${['♥', '♦'].includes(card?.suit || '') ? 'text-red-600' : 'text-zinc-900'}`}>
+                                    {card?.suit}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+                {cards.length === 0 && (
+                    <div className="card-container" style={{ width: '60px', height: '84px' }}>
+                        <div className="card-front" style={{ fontSize: '1.2rem' }}>?</div>
+                    </div>
+                )}
+            </div>
+            <span className={`text-xs font-black uppercase tracking-widest ${label === 'Dragon' ? 'text-red-500' : 'text-orange-500'}`}>{label}</span>
+        </div>
+    );
+
     if (!gameState) return <div className="min-h-screen bg-black flex items-center justify-center font-black gold-text">Syncing Arena...</div>;
 
     return (
         <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white select-none overflow-hidden relative">
+            <DragonTigerResultPopup result={dtResult} onClose={() => setDtResult(null)} />
+            {/* Header */}
             <div className="p-4 flex justify-between items-center bg-[#111827] border-b border-yellow-500/20 z-50">
                 <div className="flex items-center gap-3">
                     <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={20}/></button>
@@ -122,84 +226,221 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
                 <div className="bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono shadow-inner italic">₹{userBalance.toFixed(2)}</div>
             </div>
 
-            <div className="flex-1 bg-gradient-to-b from-[#064e3b] via-[#0a0f1d] to-[#0a0f1d] flex flex-col items-center py-8 gap-6 relative overflow-y-auto no-scrollbar pb-72">
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-                    <div className={`w-16 h-16 rounded-full border-4 flex items-center justify-center font-black shadow-2xl bg-black/40 ${gameState.status === 'BETTING' ? 'border-green-500 text-green-500' : 'border-red-600 text-red-600 animate-pulse'}`}>
-                        <span className="text-2xl font-mono">{gameState.timeLeft}</span>
-                    </div>
-                </div>
-
-                <div className="flex justify-center items-center gap-10 w-full px-4 mt-12">
-                    <div className={`w-32 h-48 rounded-2xl border-4 transition-all duration-700 relative overflow-hidden flex flex-col items-center justify-center shadow-2xl ${showDragon ? 'bg-white border-red-500 scale-105' : 'bg-slate-900 border-white/10'}`}>
-                        {showDragon ? (
-                            <>
-                                <span className="absolute top-2 left-3 font-black text-3xl text-red-600">{getCardRank(gameState.dragonCard)}</span>
-                                <span className="text-8xl text-red-600">♦</span>
-                                <span className="absolute bottom-2 font-black text-xs text-red-500 tracking-widest uppercase">Dragon</span>
-                            </>
-                        ) : <div className="text-6xl font-black text-white/5 italic">D</div>}
-                    </div>
-                    <span className="text-3xl font-black italic gold-text">VS</span>
-                    <div className={`w-32 h-48 rounded-2xl border-4 transition-all duration-700 relative overflow-hidden flex flex-col items-center justify-center shadow-2xl ${showTiger ? 'bg-white border-orange-500 scale-105' : 'bg-slate-900 border-white/10'}`}>
-                        {showTiger ? (
-                            <>
-                                <span className="absolute top-2 left-3 font-black text-3xl text-zinc-900">{getCardRank(gameState.tigerCard)}</span>
-                                <span className="text-8xl text-zinc-900">♠</span>
-                                <span className="absolute bottom-2 font-black text-xs text-orange-500 tracking-widest uppercase">Tiger</span>
-                            </>
-                        ) : <div className="text-6xl font-black text-white/5 italic">T</div>}
-                    </div>
-                </div>
-
-                <div className="w-full px-6">
-                    <div className="flex items-center gap-2 mb-3 text-zinc-500">
-                        <History size={16} className="text-yellow-500/50" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">History</span>
-                    </div>
-                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-4">
+            {/* Game Area */}
+            <div className="flex-1 casino-gradient flex flex-col items-center py-4 gap-4 relative overflow-y-auto no-scrollbar pb-96">
+                
+                {/* History (Top) */}
+                <div className="w-full px-4">
+                    <div className="flex gap-1 overflow-x-auto no-scrollbar py-2 bg-black/20 rounded-full px-3 border border-white/5">
                         {gameState.history.map((h, i) => (
-                            <span key={i} className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs shadow-lg ${h==='D'?'bg-red-600':h==='T'?'bg-orange-600':'bg-green-600'}`}>{h}</span>
+                            <span key={i} className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-black text-[10px] shadow-lg border border-white/10 ${h==='D'?'bg-red-600':h==='T'?'bg-orange-600':'bg-green-600'}`}>{h}</span>
                         ))}
                     </div>
                 </div>
+
+                {/* Table Layout */}
+                <div className="w-full max-w-md px-4 mt-4">
+                    <div className="bg-[#064e3b] rounded-[3rem] p-8 border-4 border-[#065f46] shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
+                        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
+                        
+                        <div className="flex justify-between items-center mb-8">
+                            <Card cards={gameState.dragonCards || []} show={showDragon} label="Dragon" />
+                            
+                            <div className="flex flex-col items-center">
+                                <div className={`w-16 h-16 rounded-full border-4 flex flex-col items-center justify-center font-black shadow-2xl bg-black/60 ${gameState.status === 'BETTING' ? (isBettingLocked ? 'border-orange-500 text-orange-500' : 'border-green-500 text-green-500') : 'border-red-600 text-red-600 animate-pulse'}`}>
+                                    <span className="text-2xl font-mono leading-none">{timeLeft}</span>
+                                </div>
+                                <span className="text-[8px] font-black text-white/40 uppercase tracking-widest mt-2">{gameState.status}</span>
+                            </div>
+
+                            <Card cards={gameState.tigerCards || []} show={showTiger} label="Tiger" />
+                        </div>
+
+                        <div className="text-center">
+                            <div className="text-[10px] font-bold text-white/30 uppercase tracking-tighter">Period: {gameState.period}</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Betting Grid */}
+                <div className="px-4 grid grid-cols-2 gap-4 mb-4 mt-4 w-full max-w-md">
+                    <button 
+                        disabled={isBettingLocked || gameState.status !== 'BETTING'}
+                        onClick={() => handleTargetClick('D')}
+                        className={`relative h-32 rounded-[2rem] overflow-hidden border-2 transition-all active:scale-95 ${isBettingLocked ? 'opacity-50 grayscale' : 'hover:border-red-500/50'} ${confirmTarget === 'D' ? 'border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]' : 'border-white/5 bg-red-950/20'}`}
+                    >
+                        <div className="absolute inset-0 bg-gradient-to-br from-red-600/20 to-transparent"></div>
+                        <div className="relative h-full flex flex-col items-center justify-center p-2">
+                            <span className="text-2xl font-black italic text-red-500 mb-1 tracking-tighter">DRAGON</span>
+                            <span className="text-[8px] font-black text-red-500/60 uppercase tracking-widest mb-2">Payout 1:1</span>
+                            <span className="text-sm font-black text-white italic">₹{gameState.totalBets.D.toLocaleString()}</span>
+                        </div>
+                    </button>
+
+                    <button 
+                        disabled={isBettingLocked || gameState.status !== 'BETTING'}
+                        onClick={() => handleTargetClick('T')}
+                        className={`relative h-32 rounded-[2rem] overflow-hidden border-2 transition-all active:scale-95 ${isBettingLocked ? 'opacity-50 grayscale' : 'hover:border-orange-500/50'} ${confirmTarget === 'T' ? 'border-orange-500 shadow-[0_0_30px_rgba(249,115,22,0.3)]' : 'border-white/5 bg-orange-950/20'}`}
+                    >
+                        <div className="absolute inset-0 bg-gradient-to-br from-orange-600/20 to-transparent"></div>
+                        <div className="relative h-full flex flex-col items-center justify-center p-2">
+                            <span className="text-2xl font-black italic text-orange-500 mb-1 tracking-tighter">TIGER</span>
+                            <span className="text-[8px] font-black text-orange-500/60 uppercase tracking-widest mb-2">Payout 1:1</span>
+                            <span className="text-sm font-black text-white italic">₹{gameState.totalBets.T.toLocaleString()}</span>
+                        </div>
+                    </button>
+                </div>
+
+                <div className="px-4 grid grid-cols-2 gap-4 mb-4 w-full max-w-md">
+                    <button 
+                        disabled={isBettingLocked || gameState.status !== 'BETTING'}
+                        onClick={() => handleTargetClick('Tie')}
+                        className={`relative h-24 rounded-[1.5rem] overflow-hidden border-2 transition-all active:scale-95 ${isBettingLocked ? 'opacity-50 grayscale' : 'hover:border-green-500/50'} ${confirmTarget === 'Tie' ? 'border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]' : 'border-white/5 bg-green-950/20'}`}
+                    >
+                        <div className="relative h-full flex flex-col items-center justify-center p-2">
+                            <span className="text-lg font-black italic text-green-500 mb-1 tracking-tighter">TIE</span>
+                            <span className="text-[8px] font-black text-green-500/60 uppercase tracking-widest mb-1">Payout 1:8</span>
+                            <span className="text-xs font-black text-white italic">₹{gameState.totalBets.Tie.toLocaleString()}</span>
+                        </div>
+                    </button>
+
+                    <button 
+                        disabled={isBettingLocked || gameState.status !== 'BETTING'}
+                        onClick={() => handleTargetClick('ST')}
+                        className={`relative h-24 rounded-[1.5rem] overflow-hidden border-2 transition-all active:scale-95 ${isBettingLocked ? 'opacity-50 grayscale' : 'hover:border-yellow-500/50'} ${confirmTarget === 'ST' ? 'border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.3)]' : 'border-white/5 bg-yellow-950/20'}`}
+                    >
+                        <div className="relative h-full flex flex-col items-center justify-center p-2">
+                            <span className="text-lg font-black italic text-yellow-500 mb-1 tracking-tighter">SUITED TIE</span>
+                            <span className="text-[8px] font-black text-yellow-500/60 uppercase tracking-widest mb-1">Payout 1:50</span>
+                            <span className="text-xs font-black text-white italic">₹{gameState.totalBets.SuitedTie.toLocaleString()}</span>
+                        </div>
+                    </button>
+                </div>
+
+                {/* Live Bets Section */}
+                <div className="w-full mt-4 flex-1 flex flex-col min-h-[300px]">
+                    <div className="flex border-b border-white/5 px-4">
+                        <button onClick={() => setActiveTab('ALL')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'ALL' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-zinc-500'}`}>All Bets ({allBets.length})</button>
+                        <button onClick={() => setActiveTab('MY')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'MY' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-zinc-500'}`}>My Bets ({myBets.length})</button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar">
+                        <AnimatePresence mode="popLayout">
+                            {(activeTab === 'ALL' ? allBets : myBets).map((bet) => (
+                                <motion.div 
+                                    key={bet.id || bet.uid}
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: 20 }}
+                                    className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-[10px] ${bet.target === 'D' ? 'bg-red-600' : bet.target === 'T' ? 'bg-orange-600' : 'bg-green-600'}`}>
+                                            {bet.target}
+                                        </div>
+                                        <div>
+                                            <div className="text-[10px] font-black uppercase">{bet.username || 'Player'}</div>
+                                            <div className="text-[8px] text-zinc-500">{new Date(bet.timestamp).toLocaleTimeString()}</div>
+                                        </div>
+                                    </div>
+                                    <div className="text-sm font-black text-yellow-500">₹{bet.amount}</div>
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
+                        {(activeTab === 'ALL' ? allBets : myBets).length === 0 && (
+                            <div className="text-center py-10 text-zinc-600 text-[10px] font-black uppercase tracking-widest">No bets placed yet</div>
+                        )}
+                    </div>
+                </div>
             </div>
 
-            <div className="bg-[#111] p-4 border-t border-white/10 z-[60] fixed bottom-0 left-0 w-full shadow-[0_-20px_60px_rgba(0,0,0,1)] pb-10">
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                    <BetButton target="D" label="DRAGON" mult="2.0X" color="bg-red-950/40 border-red-700" bets={myBets} onClick={handleTargetClick} status={gameState.status} />
-                    <BetButton target="Tie" label="TIE" mult="9.0X" color="bg-green-950/40 border-green-700" bets={myBets} onClick={handleTargetClick} status={gameState.status} />
-                    <BetButton target="T" label="TIGER" mult="2.0X" color="bg-orange-950/40 border-orange-700" bets={myBets} onClick={handleTargetClick} status={gameState.status} />
+            {/* Betting Controls */}
+            <div className="bg-[#111] p-4 border-t border-white/10 z-[60] fixed bottom-0 left-0 w-full shadow-[0_-20px_60px_rgba(0,0,0,1)] pb-8">
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                    <BetButton target="D" label="DRAGON" mult="2.0X" color="bg-red-950/40 border-red-700" bets={myBets} onClick={handleTargetClick} disabled={isBettingLocked || gameState.status !== 'BETTING'} />
+                    <BetButton target="Tie" label="TIE" mult="11X" color="bg-green-950/40 border-green-700" bets={myBets} onClick={handleTargetClick} disabled={isBettingLocked || gameState.status !== 'BETTING'} />
+                    <BetButton target="ST" label="SUITED" mult="50X" color="bg-emerald-950/40 border-emerald-700" bets={myBets} onClick={handleTargetClick} disabled={isBettingLocked || gameState.status !== 'BETTING'} />
+                    <BetButton target="T" label="TIGER" mult="2.0X" color="bg-orange-950/40 border-orange-700" bets={myBets} onClick={handleTargetClick} disabled={isBettingLocked || gameState.status !== 'BETTING'} />
                 </div>
-                <div className="flex gap-2 overflow-x-auto no-scrollbar py-2">
-                    {[10, 50, 100, 500, 1000].map(chip => (
-                        <button key={chip} onClick={() => setSelectedChip(chip)} className={`flex-shrink-0 w-14 h-14 rounded-full border-4 flex items-center justify-center font-black text-xs transition-all ${selectedChip === chip ? 'bg-yellow-500 border-white text-black scale-110 shadow-2xl' : 'bg-slate-800 border-slate-700 text-slate-500'}`}>₹{chip}</button>
-                    ))}
+                
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar py-2 flex-1">
+                        {[10, 50, 100, 500, 1000, 5000].map(chip => (
+                            <button 
+                                key={chip} 
+                                onClick={() => setSelectedChip(chip)} 
+                                className={`flex-shrink-0 w-14 h-14 rounded-full border-4 flex flex-col items-center justify-center font-black text-[9px] transition-all relative overflow-hidden ${selectedChip === chip ? 'bg-yellow-500 border-white text-black scale-110 shadow-[0_0_20px_rgba(234,179,8,0.6)]' : 'bg-zinc-900 border-white/10 text-zinc-500'}`}
+                            >
+                                <div className={`absolute inset-0 opacity-20 bg-[radial-gradient(circle,transparent_40%,black_100%)]`} />
+                                <span className="z-10">₹{chip >= 1000 ? (chip/1000)+'K' : chip}</span>
+                                <div className="w-full h-1 bg-white/20 absolute bottom-2" />
+                            </button>
+                        ))}
+                    </div>
+                    {confirmTarget && gameState.status === 'BETTING' && !isBettingLocked && (
+                        <button onClick={confirmBetAction} className="bg-yellow-500 text-black px-6 py-3 rounded-xl font-black text-xs uppercase animate-in slide-in-from-right">Place Bet</button>
+                    )}
                 </div>
             </div>
 
+            {/* Confirm Drawer */}
             {confirmDrawerOpen && (
                 <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/85 backdrop-blur-md">
                     <div className="bg-[#111] w-full max-w-md rounded-t-[3.5rem] p-10 border-t-2 border-yellow-500/40 animate-in slide-in-from-bottom duration-300">
                         <div className="flex justify-between items-center mb-8">
-                             <div><h3 className="text-3xl font-black italic gold-text uppercase">Stake on {confirmTarget}</h3></div>
+                             <div><h3 className="text-3xl font-black italic gold-text uppercase">Stake on {confirmTarget === 'D' ? 'Dragon' : confirmTarget === 'T' ? 'Tiger' : confirmTarget === 'Tie' ? 'Tie' : 'Suited Tie'}</h3></div>
                              <button onClick={() => setConfirmDrawerOpen(false)} className="p-4 bg-slate-800 rounded-full active:scale-90"><X size={24}/></button>
                         </div>
-                        <button onClick={confirmBetAction} className="w-full py-7 rounded-[2.5rem] bg-gradient-to-r from-yellow-500 to-orange-600 text-black font-black uppercase tracking-[0.4em] text-2xl shadow-2xl active:scale-95 border-t-2 border-white/30">CONFIRM ₹{selectedChip}</button>
+                        <div className="flex items-center justify-between mb-8 bg-black/40 p-6 rounded-3xl border border-white/5">
+                            <span className="text-zinc-500 font-black uppercase tracking-widest">Amount</span>
+                            <span className="text-3xl font-black text-yellow-500">₹{selectedChip}</span>
+                        </div>
+                        <button onClick={confirmBetAction} className="w-full py-7 rounded-[2.5rem] bg-gradient-to-r from-yellow-500 to-orange-600 text-black font-black uppercase tracking-[0.4em] text-2xl shadow-2xl active:scale-95 border-t-2 border-white/30">CONFIRM</button>
                     </div>
                 </div>
             )}
-            <style>{`.gold-text { background: linear-gradient(to bottom, #fde68a, #d97706, #fde68a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }`}</style>
+            <style>{`
+                .gold-text { background: linear-gradient(to bottom, #fde68a, #d97706, #fde68a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+                .card-container {
+                    perspective: 1000px;
+                    width: 100px;
+                    height: 140px;
+                }
+                .card-inner {
+                    width: 100%;
+                    height: 100%;
+                    position: relative;
+                    transition: transform 0.6s;
+                    transform-style: preserve-3d;
+                }
+                .card-inner.flip {
+                    transform: rotateY(180deg);
+                }
+                .card-front, .card-back {
+                    position: absolute;
+                    width: 100%;
+                    height: 100%;
+                    backface-visibility: hidden;
+                    border-radius: 8px;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                }
+                .card-front { background: linear-gradient(45deg, #222, #444); border: 2px solid gold; color: gold; font-size: 2rem; font-weight: bold; }
+                .card-back { background: white; color: black; transform: rotateY(180deg); border: 2px solid #ccc; }
+            `}</style>
         </div>
     );
 };
 
-const BetButton = ({ target, label, mult, color, bets, onClick, status }: any) => {
+const BetButton = ({ target, label, mult, color, bets, onClick, disabled }: any) => {
     const amount = bets.filter((b:any)=>b.target===target).reduce((a:number,b:any)=>a+b.amount,0);
     return (
-        <button onClick={() => onClick(target)} disabled={status !== 'BETTING'} className={`h-28 rounded-3xl border-b-[8px] transition-all active:scale-95 flex flex-col items-center justify-center ${status === 'BETTING' ? color : 'bg-slate-900 opacity-40 grayscale'}`}>
-            <span className="text-lg font-black italic">{label}</span>
-            <span className="text-[8px] font-black opacity-60 uppercase">{mult}</span>
-            {amount > 0 && <div className="mt-2 bg-yellow-500 text-black px-3 py-1 rounded-full text-[9px] font-black animate-in zoom-in shadow-lg">₹{amount}</div>}
+        <button onClick={() => onClick(target)} disabled={disabled} className={`h-24 rounded-2xl border-b-[6px] transition-all active:scale-95 flex flex-col items-center justify-center relative overflow-hidden ${!disabled ? color : 'bg-slate-900 opacity-40 grayscale'}`}>
+            <span className="text-sm font-black italic">{label}</span>
+            <span className="text-[7px] font-black opacity-60 uppercase">{mult}</span>
+            {amount > 0 && <div className="mt-1 bg-yellow-500 text-black px-2 py-0.5 rounded-full text-[8px] font-black animate-in zoom-in shadow-lg">₹{amount}</div>}
+            {disabled && <div className="absolute inset-0 bg-black/20 flex items-center justify-center"><Check size={20} className="text-white/20" /></div>}
         </button>
     );
 };

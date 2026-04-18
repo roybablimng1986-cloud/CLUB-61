@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Building2, Smartphone, AlertCircle, ShieldCheck, Lock, CheckCircle2 } from 'lucide-react';
-import { handleWithdraw, subscribeToBalance } from '../services/mockFirebase';
+import { handleWithdraw, subscribeToBalance } from '../services/supabaseService';
 import { UserProfile } from '../types';
 
 const Withdraw: React.FC<{ onBack: () => void; userBalance: number }> = ({ onBack, userBalance }) => {

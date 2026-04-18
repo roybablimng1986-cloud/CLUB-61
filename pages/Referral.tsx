@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Users, Copy, ChevronRight, BarChart3, CreditCard, QrCode, X, Phone, MessageCircle, Share2, FileText, User, CheckCircle2, Crown, Lock, Send, ShieldAlert, AlertCircle, TrendingUp, Zap, Wallet } from 'lucide-react';
-import { referralStats, getSubordinates, getCommissions, subscribeToBalance, claimCommission, playSound } from '../services/mockFirebase';
+import { referralStats, getSubordinates, getCommissions, subscribeToBalance, claimCommission, playSound } from '../services/supabaseService';
 import { UserProfile, SubordinateItem, CommissionItem } from '../types';
 
 interface ReferralProps {

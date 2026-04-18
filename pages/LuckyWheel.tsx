@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, Volume2, VolumeX, History, Trophy, RotateCw } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute } from '../services/supabaseService';
 import { GameResult } from '../types';
+
+import LuckyWheelResultPopup from '../components/LuckyWheelResultPopup';
 
 interface Props {
   onBack: () => void;
@@ -27,6 +29,7 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [rotation, setRotation] = useState(0);
   const [history, setHistory] = useState<string[]>(['10X', '2X', '5X', '0.5X']);
   const [muted, setMuted] = useState(getMuteStatus());
+  const [lwResult, setLwResult] = useState<any | null>(null);
   
   const isMounted = useRef(true);
 
@@ -46,8 +49,8 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     }
 
     setIsSpinning(true);
-    // FIX: Changed invalid sound name 'spin' to 'wheel_spin'
-    playSound('wheel_spin');
+    playSound('bet_place');
+    setLwResult(null);
     // Instant Deduction
     updateBalance(-betAmount, 'BET', 'Lucky Wheel Stake');
 
@@ -70,27 +73,25 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
       const result = SEGMENTS[landedIdx];
 
       const winAmount = betAmount * result.val;
+      setLwResult({
+          win: result.val >= 1,
+          amount: result.val >= 1 ? winAmount : betAmount,
+          multiplier: result.val,
+          label: result.label
+      });
+
       if (winAmount > 0) {
         updateBalance(winAmount, 'WIN', 'Lucky Wheel Win');
-        playSound('win');
-      } else {
-        playSound('loss');
       }
 
       setHistory(prev => [result.label, ...prev].slice(0, 10));
-      onResult({
-        win: result.val >= 1,
-        amount: winAmount,
-        game: 'Lucky Wheel',
-        resultDetails: [{ label: 'Landed', value: result.label, color: result.val >= 1 ? 'text-green-400' : 'text-red-400' }]
-      });
-
       addGameHistory('Lucky Wheel', betAmount, winAmount, `Hit ${result.label}`);
     }, 4000);
   };
 
   return (
     <div className="bg-[#0f0a1f] min-h-screen flex flex-col font-sans text-white relative overflow-hidden select-none">
+      <LuckyWheelResultPopup result={lwResult} onClose={() => setLwResult(null)} />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,_rgba(139,92,246,0.1)_0%,_transparent_70%)] pointer-events-none"></div>
 
       {/* Header */}

@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, History, Volume2, VolumeX, ChevronUp, ChevronDown } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, db, auth } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+import HiLoResultPopup from '../components/HiLoResultPopup';
 
 interface Props {
   onBack: () => void;
@@ -32,6 +34,7 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [multiplier, setMultiplier] = useState(1.0);
   const [history, setHistory] = useState<string[]>([]);
   const [muted, setMuted] = useState(getMuteStatus());
+  const [hlResult, setHlResult] = useState<any | null>(null);
   const [floatingText, setFloatingText] = useState<{ text: string; color: string; id: number } | null>(null);
   
   const isMounted = useRef(true);
@@ -47,10 +50,25 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
       setTimeout(() => setFloatingText(null), 1500);
   };
 
-  const startGame = () => {
+  const startGame = async () => {
     if (userBalance < betAmount) return;
+    
+    // Record bet in Firestore
+    if (auth.currentUser) {
+        try {
+            await addDoc(collection(db, 'hilo_bets'), {
+                uid: auth.currentUser.uid,
+                username: auth.currentUser.displayName || 'Player',
+                amount: betAmount,
+                target: 'BET',
+                timestamp: Date.now()
+            });
+        } catch (e) {}
+    }
+
     updateBalance(-betAmount, 'BET', 'Hi-Lo Stake');
-    playSound('click');
+    playSound('bet_place');
+    setHlResult(null);
     
     deckRef.current = createDeck();
     const firstCard = deckRef.current.pop()!;
@@ -92,8 +110,12 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
             setGameState('PLAYING');
         }, 1000);
     } else {
-        playSound('loss');
-        triggerFloating(`-₹${(betAmount * multiplier).toFixed(2)}`, 'text-red-500');
+        setHlResult({
+            win: false,
+            amount: betAmount * multiplier,
+            multiplier: multiplier,
+            finalCard: { rank: revealedCard.rank, suit: revealedCard.suit }
+        });
         setGameState('LOST');
         addGameHistory('Hi-Lo', betAmount, 0, `Lost at ${multiplier.toFixed(2)}x`);
         
@@ -110,14 +132,13 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     
     const winAmt = betAmount * multiplier;
     updateBalance(winAmt, 'WIN', 'Hi-Lo Cashout');
-    playSound('win');
     triggerFloating(`+₹${winAmt.toFixed(2)}`, 'text-yellow-400');
     
-    onResult({
+    setHlResult({
         win: true,
         amount: winAmt,
-        game: 'Hi-Lo Royale',
-        resultDetails: [{ label: 'Final Mult', value: multiplier.toFixed(2) + 'x' }]
+        multiplier: multiplier,
+        finalCard: { rank: currentCard!.rank, suit: currentCard!.suit }
     });
 
     addGameHistory('Hi-Lo', betAmount, winAmt, `Cashed out ${multiplier.toFixed(2)}x`);
@@ -134,6 +155,7 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
 
   return (
     <div className="bg-[#0f172a] min-h-screen flex flex-col font-sans text-white select-none overflow-hidden relative">
+      <HiLoResultPopup result={hlResult} onClose={() => setHlResult(null)} />
       {/* Header */}
       <div className="p-4 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
         <button onClick={onBack} className="p-2.5 bg-slate-800 rounded-2xl active:scale-90"><ArrowLeft size={20}/></button>

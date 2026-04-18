@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, Lock, Unlock, ShieldCheck, X, HelpCircle } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+
+import VaultBreakerResultPopup from '../components/VaultBreakerResultPopup';
 
 const VaultBreaker: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
   const [bet, setBet] = useState(10);
@@ -10,6 +13,7 @@ const VaultBreaker: React.FC<{ onBack: () => void; userBalance: number; onResult
   const [combination, setCombination] = useState<number[]>([]);
   const [userInput, setUserInput] = useState<number[]>([]);
   const [level, setLevel] = useState(1);
+  const [vbResult, setVbResult] = useState<any | null>(null);
   const [showRules, setShowRules] = useState(false);
   const isMounted = useRef(true);
 
@@ -18,13 +22,28 @@ const VaultBreaker: React.FC<{ onBack: () => void; userBalance: number; onResult
     return () => { isMounted.current = false; stopAllSounds(); };
   }, []);
 
-  const start = () => {
+  const start = async () => {
       if (userBalance < bet) return;
+      
+      // Record bet in Firestore
+      if (auth.currentUser) {
+          try {
+              await addDoc(collection(db, 'vault_breaker_bets'), {
+                  uid: auth.currentUser.uid,
+                  username: auth.currentUser.displayName || 'Player',
+                  amount: bet,
+                  target: 'BET',
+                  timestamp: Date.now()
+              });
+          } catch (e) {}
+      }
+
       updateBalance(-bet, 'BET', 'Vault Breaker');
       setGameState('PLAYING');
+      setVbResult(null);
       generateLevel(1);
       setUserInput([]);
-      playSound('click');
+      playSound('bet_place');
   };
 
   const generateLevel = (lv: number) => {
@@ -55,20 +74,23 @@ const VaultBreaker: React.FC<{ onBack: () => void; userBalance: number; onResult
 
   const finalize = (success: boolean) => {
       const winAmt = success ? bet * 5 : 0;
+      setVbResult({
+          win: success,
+          amount: success ? winAmt : bet,
+          tierReached: level
+      });
+
       if (success) {
           updateBalance(winAmt, 'WIN', 'Vault Breaker Win');
-          playSound('win');
-      } else {
-          playSound('loss');
       }
       setGameState('RESULT');
-      onResult({ win: success, amount: success ? winAmt : bet, game: 'Vault Breaker' });
       addGameHistory('Vault Breaker', bet, winAmt, success ? 'Vault Cracked' : 'Alarm Triggered');
       setTimeout(() => isMounted.current && setGameState('IDLE'), 3000);
   };
 
   return (
     <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white select-none">
+        <VaultBreakerResultPopup result={vbResult} onClose={() => setVbResult(null)} />
         <div className="p-4 flex justify-between items-center bg-black/40 border-b border-blue-500/20 sticky top-0 z-50">
             <div className="flex items-center gap-3">
                 <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={18}/></button>

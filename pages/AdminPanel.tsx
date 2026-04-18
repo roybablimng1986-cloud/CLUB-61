@@ -44,9 +44,35 @@ const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     );
 
     const GAMES_LIST = [
-        { id: 'GAME_WINGO', name: 'Win Go' }, { id: 'GAME_AVIATOR', name: 'Aviator' },
-        { id: 'GAME_MINES', name: 'Mines' }, { id: 'GAME_DRAGON_TIGER', name: 'Dragon Tiger' },
-        { id: 'GAME_ROULETTE', name: 'Roulette' }
+        { id: 'GAME_WINGO', name: 'Win Go' }, 
+        { id: 'GAME_AVIATOR', name: 'Aviator' },
+        { id: 'GAME_MINES', name: 'Mines' }, 
+        { id: 'GAME_7UP_DOWN', name: '7 Up Down' },
+        { id: 'GAME_CAR_ROULETTE', name: 'Car Roulette' },
+        { id: 'GAME_JHANDI_MUNDA', name: 'Jhandi Munda' },
+        { id: 'GAME_SPACE_RAID', name: 'Space Raid' },
+        { id: 'GAME_DOG', name: 'Dog Road' },
+        { id: 'GAME_BURST', name: 'Cyber Burst' },
+        { id: 'GAME_DRAGON_TIGER', name: 'Dragon Tiger' },
+        { id: 'GAME_ROULETTE', name: 'Roulette' },
+        { id: 'GAME_SICBO', name: 'Sic Bo' },
+        { id: 'GAME_BACCARAT', name: 'Baccarat' },
+        { id: 'GAME_STREET_RACE', name: 'Street Race' },
+        { id: 'GAME_VORTEX', name: 'Vortex' },
+        { id: 'GAME_CRICKET', name: 'Cricket Hero' },
+        { id: 'GAME_TOWER', name: 'Tower Climb' },
+        { id: 'GAME_SLOT_MACHINE', name: 'Royal Slots' },
+        { id: 'GAME_ANDAR_BAHAR', name: 'Andar Bahar' },
+        { id: 'GAME_CHICKEN_ROAD', name: 'Chicken Road' },
+        { id: 'GAME_PLINKO', name: 'Plinko' },
+        { id: 'GAME_LIMBO', name: 'Limbo' },
+        { id: 'GAME_DRAGON_TOWER', name: 'Dragon Tower' },
+        { id: 'GAME_FRUIT_SLOT', name: 'Fruit Slot' },
+        { id: 'GAME_EGYPT_SLOT', name: 'Egypt Slot' },
+        { id: 'GAME_VAULT', name: 'Vault Breaker' },
+        { id: 'GAME_HEAD_TAILS', name: 'Head & Tails' },
+        { id: 'GAME_KENO', name: 'Keno Elite' },
+        { id: 'GAME_DICE', name: 'Dice Duel' }
     ];
 
     return (

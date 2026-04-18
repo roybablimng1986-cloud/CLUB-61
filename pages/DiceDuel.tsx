@@ -1,15 +1,19 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, RotateCw, History, HelpCircle, X } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+
+import DiceDuelResultPopup from '../components/DiceDuelResultPopup';
 
 const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
   const [bet, setBet] = useState(10);
-  const [target, setTarget] = useState<'BIG' | 'SMALL' | null>(null);
+  const [target, setTarget] = useState<'BIG' | 'SMALL' | 'TIE' | null>(null);
   const [isRolling, setIsRolling] = useState(false);
   const [dice, setDice] = useState([1, 1]);
   const [history, setHistory] = useState<number[]>([]);
+  const [ddResult, setDdResult] = useState<any | null>(null);
   const [floating, setFloating] = useState<{ text: string; color: string; id: number } | null>(null);
   const [showRules, setShowRules] = useState(false);
 
@@ -24,13 +28,26 @@ const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
       setTimeout(() => setFloating(null), 3000);
   };
 
-  const roll = () => {
+  const roll = async () => {
     if (isRolling || !target || userBalance < bet) return;
     
+    // Record bet in Firestore
+    if (auth.currentUser) {
+        try {
+            await addDoc(collection(db, 'dice_duel_bets'), {
+                uid: auth.currentUser.uid,
+                username: auth.currentUser.displayName || 'Player',
+                amount: bet,
+                target: target,
+                timestamp: Date.now()
+            });
+        } catch (e) {}
+    }
+
     updateBalance(-bet, 'BET', 'Dice Duel');
+    setDdResult(null);
     setIsRolling(true);
-    // FIX: Changed invalid sound name 'spin' to 'wheel_spin'
-    playSound('wheel_spin');
+    playSound('bet_place');
 
     let count = 0;
     const interval = setInterval(() => {
@@ -50,32 +67,36 @@ const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
     setDice([d1, d2]);
     setIsRolling(false);
 
-    const outcome = sum >= 7 ? 'BIG' : 'SMALL';
+    // User requested "tie system", same numbers = tie
+    const isActuallyTie = d1 === d2;
+    const outcome = isActuallyTie ? 'TIE' : (sum > 7 ? 'BIG' : 'SMALL');
     const isWin = target === outcome;
-    const winAmt = isWin ? bet * 1.95 : 0;
+    const mult = outcome === 'TIE' ? 6 : 1.95;
+    const winAmt = isWin ? bet * mult : 0;
+
+    setDdResult({
+        win: isWin,
+        amount: isWin ? winAmt : bet,
+        dice: [d1, d2],
+        sum: sum,
+        target: target
+    });
 
     if (isWin) {
         updateBalance(winAmt, 'WIN', 'Dice Win');
-        playSound('win');
         triggerFloating(`+₹${winAmt.toFixed(2)}`, 'text-green-400');
     } else {
-        playSound('loss');
         triggerFloating(`-₹${bet.toFixed(2)}`, 'text-red-500');
     }
 
     setHistory(prev => [sum, ...prev].slice(0, 10));
-    onResult({ 
-        win: isWin, 
-        amount: isWin ? winAmt : bet, 
-        game: 'Dice Duel', 
-        resultDetails: [{label: 'Sum', value: sum.toString(), color: isWin ? 'text-green-400' : 'text-red-400'}] 
-    });
     addGameHistory('Dice Duel', bet, winAmt, `Bet ${target} | Sum ${sum}`);
     setTarget(null);
   };
 
   return (
     <div className="bg-[#0f172a] min-h-screen flex flex-col font-sans text-white relative overflow-hidden">
+        <DiceDuelResultPopup result={ddResult} onClose={() => setDdResult(null)} />
         {floating && (
             <div key={floating.id} className={`fixed top-1/2 left-1/2 -translate-x-1/2 z-[100] font-black text-5xl italic pointer-events-none animate-float-up ${floating.color}`} style={{ textShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
                 {floating.text}
@@ -103,20 +124,27 @@ const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
                 ))}
             </div>
             
-            <div className="grid grid-cols-2 gap-6 w-full max-w-sm mb-8">
+            <div className="grid grid-cols-3 gap-3 w-full max-w-sm mb-8">
                 <button 
                   onClick={() => !isRolling && setTarget('SMALL')} 
-                  className={`py-8 rounded-3xl font-black text-2xl border-b-[8px] transition-all active:scale-95 ${target === 'SMALL' ? 'bg-blue-600 border-blue-800 scale-105 shadow-[0_0_30px_rgba(37,99,235,0.4)]' : 'bg-slate-800 border-slate-900 opacity-60'}`}
+                  className={`py-6 rounded-3xl font-black text-xl border-b-[8px] transition-all active:scale-95 ${target === 'SMALL' ? 'bg-blue-600 border-blue-800 scale-105 shadow-[0_0_20px_rgba(37,99,235,0.4)]' : 'bg-slate-800 border-slate-900 opacity-60'}`}
                 >
                     SMALL
-                    <p className="text-[10px] font-bold opacity-60 mt-1 uppercase tracking-widest">(Sum 2-6)</p>
+                    <p className="text-[10px] font-bold opacity-60 mt-1 uppercase tracking-widest">(2-6)</p>
+                </button>
+                <button 
+                  onClick={() => !isRolling && setTarget('TIE' as any)} 
+                  className={`py-6 rounded-3xl font-black text-xl border-b-[8px] transition-all active:scale-95 ${target === 'TIE' as any ? 'bg-green-600 border-green-800 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.4)]' : 'bg-slate-800 border-slate-900 opacity-60'}`}
+                >
+                    TIE
+                    <p className="text-[10px] font-bold opacity-60 mt-1 uppercase tracking-widest">(7)</p>
                 </button>
                 <button 
                   onClick={() => !isRolling && setTarget('BIG')} 
-                  className={`py-8 rounded-3xl font-black text-2xl border-b-[8px] transition-all active:scale-95 ${target === 'BIG' ? 'bg-orange-600 border-orange-800 scale-105 shadow-[0_0_30px_rgba(234,88,12,0.4)]' : 'bg-slate-800 border-slate-900 opacity-60'}`}
+                  className={`py-6 rounded-3xl font-black text-xl border-b-[8px] transition-all active:scale-95 ${target === 'BIG' ? 'bg-orange-600 border-orange-800 scale-105 shadow-[0_0_20px_rgba(234,88,12,0.4)]' : 'bg-slate-800 border-slate-900 opacity-60'}`}
                 >
                     BIG
-                    <p className="text-[10px] font-bold opacity-60 mt-1 uppercase tracking-widest">(Sum 7-12)</p>
+                    <p className="text-[10px] font-bold opacity-60 mt-1 uppercase tracking-widest">(8-12)</p>
                 </button>
             </div>
 

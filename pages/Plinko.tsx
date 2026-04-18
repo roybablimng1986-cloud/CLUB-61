@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, Volume2, VolumeX, PlayCircle, HelpCircle, X } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
 
 interface Ball {
   id: string; x: number; y: number; row: number; col: number; bet: number;
@@ -14,10 +15,13 @@ const MULTIPLIERS = [10, 5, 2, 1.2, 0.5, 1.2, 2, 5, 10];
 const ROWS = 9; const PIN_RADIUS = 5; const BALL_RADIUS = 8;
 const CANVAS_WIDTH = 380; const CANVAS_HEIGHT = 540;
 
+import PlinkoResultPopup from '../components/PlinkoResultPopup';
+
 const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
   const [betAmount, setBetAmount] = useState(10);
   const [muted, setMuted] = useState(getMuteStatus());
   const [showRules, setShowRules] = useState(false);
+  const [plResult, setPlResult] = useState<any | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ballsRef = useRef<Ball[]>([]);
   const pulsesRef = useRef<{row: number, col: number, startTime: number}[]>([]);
@@ -52,10 +56,10 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
           playSound('wingo_tick');
           const nextRow = ball.row + 1; const moveRight = Math.random() > 0.49 ? 1 : 0;
           const nextCol = ball.col + moveRight; const coords = getPinCoords(nextRow, nextCol);
-          return { ...ball, row: nextRow, col: nextCol, targetX: coords.x, targetY: coords.y };
+          return { ...ball, row: nextRow, col: nextCol, targetX: coords.x, targetY: coords.y } as Ball;
         } else {
-          if (ball.y < slotY) { playSound('wingo_tick'); return { ...ball, targetY: slotY + 25, targetX: ball.x, row: ROWS }; }
-          else { handleBallLand(ball); return { ...ball, status: 'DONE' }; }
+          if (ball.y < slotY) { playSound('wingo_tick'); return { ...ball, targetY: slotY + 25, targetX: ball.x, row: ROWS } as Ball; }
+          else { handleBallLand(ball); return { ...ball, status: 'DONE' } as Ball; }
         }
       }
       const t = ball.progress; const arcHeight = 10; 
@@ -63,7 +67,7 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
       const linearY = ball.startPos.y + (ball.targetY - ball.startPos.y) * t;
       ball.y = linearY - (-4 * arcHeight * t * (t - 1));
       return ball;
-    }).filter(b => b.status === 'DROPPING');
+    }).filter(b => b.status === 'DROPPING') as Ball[];
     pulsesRef.current = pulsesRef.current.filter(p => Date.now() - p.startTime < 400);
   };
 
@@ -99,28 +103,42 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
     const slotIdx = Math.min(Math.max(ball.col, 0), MULTIPLIERS.length - 1);
     const multiplier = MULTIPLIERS[slotIdx];
     const winAmount = ball.bet * multiplier;
-    updateBalance(winAmount, 'WIN', `Plinko ${multiplier}x`);
-    playSound(multiplier >= 1 ? 'win' : 'click');
+    
+    const isWin = multiplier >= 1;
+    setPlResult({
+        win: isWin,
+        amount: isWin ? winAmount : ball.bet,
+        multiplier: multiplier
+    });
+
+    if (isWin) {
+        updateBalance(winAmount, 'WIN', `Plinko ${multiplier}x`);
+    }
+    
     const rid = Math.random().toString(36).substr(2, 5);
     setFloatingResults(prev => [...prev, { id: rid, mult: multiplier, amount: winAmount }]);
-    // FIX: Reduced timeout to 1 second as requested
     setTimeout(() => { setFloatingResults(prev => prev.filter(res => res.id !== rid)); }, 1000);
     addGameHistory('Plinko', ball.bet, winAmount, `Hit ${multiplier}x`);
   };
 
-  const dropBall = () => {
+  const dropBall = async () => {
     if (userBalance < betAmount) { playSound('loss'); return; }
+    
+    // Record bet in Firestore removed to save quota for instant games
+    // addGameHistory will still record the result for the user
+
     updateBalance(-betAmount, 'BET', 'Plinko Stake');
     const startCoords = getPinCoords(0, 0);
     ballsRef.current.push({
       id: Math.random().toString(36).substr(2, 9), x: CANVAS_WIDTH / 2, y: 30, row: 0, col: 0, bet: betAmount,
       status: 'DROPPING', targetX: startCoords.x, targetY: startCoords.y, progress: 0, startPos: { x: CANVAS_WIDTH / 2, y: 30 }
     });
-    playSound('click');
+    playSound('bet_place');
   };
 
   return (
     <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white relative overflow-hidden">
+      <PlinkoResultPopup result={plResult} onClose={() => setPlResult(null)} />
       {floatingResults.map(res => (
           <div key={res.id} className="fixed top-[40%] left-1/2 -translate-x-1/2 z-[100] w-full px-10 pointer-events-none animate-in fade-in zoom-in duration-300">
                <div className={`py-4 px-8 rounded-full border-4 shadow-2xl flex items-center justify-center gap-6 backdrop-blur-xl ${res.mult >= 1 ? 'bg-green-600/90 border-green-400' : 'bg-red-600/90 border-red-400'}`}>

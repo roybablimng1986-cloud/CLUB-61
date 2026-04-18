@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, RotateCw, HelpCircle, X } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+
+import SlotResultPopup from '../components/SlotResultPopup';
 
 const FRUITS = ['🍎', '🍓', '🍋', '🍉', '🍇', '🍒', '🍊'];
 
@@ -11,6 +14,7 @@ const FruitSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
   const [reels, setReels] = useState(['🍎', '🍎', '🍎']);
   const [spinning, setSpinning] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [fsResult, setFsResult] = useState<any | null>(null);
   const [floating, setFloating] = useState<{ text: string; color: string; id: number } | null>(null);
 
   const isMounted = useRef(true);
@@ -26,12 +30,16 @@ const FruitSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
       setTimeout(() => setFloating(null), 3000);
   };
 
-  const spin = () => {
+  const spin = async () => {
     if (spinning || userBalance < bet) return;
+    
+    // Record bet in Firestore removed to save quota for instant games
+    // addGameHistory will still record the result for the user
+
     updateBalance(-bet, 'BET', 'Fruit Slots');
+    setFsResult(null);
     setSpinning(true);
-    // FIX: Changed invalid sound name 'spin' to 'slot_reel'
-    playSound('slot_reel');
+    playSound('bet_place');
 
     let count = 0;
     const interval = setInterval(() => {
@@ -65,19 +73,27 @@ const FruitSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
     if (isMatch3) mult = 25;
     else if (isMatch2) mult = 2.5;
 
+    setFsResult({
+        win: mult > 0,
+        amount: mult > 0 ? bet * mult : bet,
+        reels: outcome,
+        multiplier: mult,
+        gameName: 'Fruit Party'
+    });
+
     if (mult > 0) {
         const win = bet * mult;
         updateBalance(win, 'WIN', 'Fruit Slot Win');
-        playSound('win');
         triggerFloating(`+₹${win.toFixed(2)}`, 'text-green-400');
     } else {
-        playSound('loss');
         triggerFloating(`-₹${bet.toFixed(2)}`, 'text-red-500');
     }
+    addGameHistory('Fruit Party', bet, mult > 0 ? bet * mult : 0, `Outcome: ${outcome.join('|')}`);
   };
 
   return (
     <div className="bg-[#1e0a11] min-h-screen flex flex-col font-sans text-white relative overflow-hidden">
+        <SlotResultPopup result={fsResult} onClose={() => setFsResult(null)} />
         {floating && (
             <div key={floating.id} className={`fixed top-1/2 left-1/2 -translate-x-1/2 z-[100] font-black text-5xl italic pointer-events-none animate-float-up ${floating.color}`} style={{ textShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
                 {floating.text}

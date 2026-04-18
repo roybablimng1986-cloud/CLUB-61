@@ -1,12 +1,15 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Volume2, HelpCircle, Wallet, VolumeX, X } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, getGameHistory, shouldForceLoss } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, getGameHistory, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult, GameHistoryItem } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+
+import MinesResultPopup from '../components/MinesResultPopup';
 
 const ASSETS = {
-    GEM: "https://cdn-icons-png.flaticon.com/512/2276/2276931.png",
-    BOMB: "https://cdn-icons-png.flaticon.com/512/112/112683.png",
+    GEM: "https://cdn-icons-png.flaticon.com/512/2530/2530868.png", // 3D Diamond
+    BOMB: "https://cdn-icons-png.flaticon.com/512/2530/2530877.png", // 3D Bomb
 };
 
 interface MinesProps {
@@ -24,6 +27,7 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
     const [gemsFound, setGemsFound] = useState(0);
     const [gameOver, setGameOver] = useState(false);
     const [muted, setMuted] = useState(getMuteStatus());
+    const [minesResult, setMinesResult] = useState<any | null>(null);
     
     const isMounted = useRef(true);
 
@@ -32,9 +36,13 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
         return () => { isMounted.current = false; stopAllSounds(); };
     }, []);
 
-    const startGame = () => {
+    const startGame = async () => {
         if (betAmount > userBalance) { alert("Insufficient Balance!"); return; }
         playSound('click');
+        
+        // Record bet in Firestore removed to save quota as per user request for instant games
+        // addGameHistory will still record the result for the user
+
         updateBalance(-betAmount, 'BET', 'Mines Game');
         setIsPlaying(true); setGameOver(false); setGemsFound(0); setRevealed(Array(25).fill(false));
         const newGrid = Array(25).fill(1);
@@ -53,14 +61,20 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
         newRevealed[index] = true;
         setRevealed(newRevealed);
 
-        const forced = gemsFound >= 1 && shouldForceLoss(betAmount, userBalance);
+        const forced = false;
 
         if (grid[index] === 2 || forced) {
             playSound('mine_bomb');
             setGameOver(true); setIsPlaying(false);
             setRevealed(Array(25).fill(true));
             addGameHistory('Mines', betAmount, 0, `Hit Mine`);
-            onResult({ win: false, amount: betAmount, game: 'Mines' });
+            setMinesResult({
+                win: false,
+                amount: betAmount,
+                multiplier: 0,
+                gemsFound: gemsFound,
+                minesCount: minesCount
+            });
         } else {
             playSound('mine_reveal');
             setGemsFound(prev => prev + 1);
@@ -74,13 +88,19 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
         updateBalance(winAmount, 'WIN', 'Mines Win');
         addGameHistory('Mines', betAmount, winAmount, `Cashed Out @ ${multiplier.toFixed(2)}x`);
         setIsPlaying(false); setGameOver(true);
-        playSound('win');
         setRevealed(Array(25).fill(true)); 
-        onResult({ win: true, amount: winAmount, game: 'Mines', resultDetails: [{ label: 'Multiplier', value: `${multiplier.toFixed(2)}x` }] });
+        setMinesResult({
+            win: true,
+            amount: winAmount,
+            multiplier: multiplier,
+            gemsFound: gemsFound,
+            minesCount: minesCount
+        });
     };
 
     return (
         <div className="bg-[#0f172a] min-h-screen flex flex-col pb-safe font-sans select-none">
+            <MinesResultPopup result={minesResult} onClose={() => setMinesResult(null)} />
             <div className="bg-[#1e293b] p-4 flex items-center justify-between border-b border-slate-700 shadow-lg">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack}><ArrowLeft className="text-white" /></button>

@@ -1,8 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, HelpCircle, X, Lock, Flame, Sparkles, Trophy, Skull } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+
+import { motion, AnimatePresence } from 'motion/react';
+import DragonTowerResultPopup from '../components/DragonTowerResultPopup';
 
 const LEVELS = [1.32, 1.76, 2.35, 3.12, 4.20, 5.60, 7.50, 10.0, 13.5, 18.0, 24.0, 32.0];
 
@@ -13,6 +17,7 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
   const [revealedIdx, setRevealedIdx] = useState<number | null>(null);
   const [gridData, setGridData] = useState<number[]>([]); 
   const [revealedRows, setRevealedRows] = useState<number[]>([]); // Levels where we reveal the fire
+  const [dtResult, setDtResult] = useState<any | null>(null);
   
   const isMounted = useRef(true);
 
@@ -21,12 +26,17 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
     return () => { isMounted.current = false; stopAllSounds(); };
   }, []);
 
-  const start = () => {
+  const start = async () => {
     if (userBalance < bet) return;
+    
+    // Record bet in Firestore removed to save quota for instant games
+    // addGameHistory will still record the result for the user
+
     updateBalance(-bet, 'BET', 'Dragon Tower');
-    playSound('click');
+    playSound('bet_place');
     const newGrid = LEVELS.map(() => Math.floor(Math.random() * 4));
     setGridData(newGrid);
+    setDtResult(null);
     setGameState('PLAYING');
     setCurrentLv(-1);
     setRevealedIdx(null);
@@ -44,24 +54,21 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
     const isWin = idx !== trapIdx;
     
     if (isWin) {
-        playSound('win');
         setRevealedRows(prev => [...prev, currentLv + 1]);
         setCurrentLv(prev => prev + 1);
         setGameState('PLAYING');
         setRevealedIdx(null);
         if (currentLv + 1 === LEVELS.length - 1) cashout(true);
     } else {
-        playSound('loss');
         setGameState('LOST');
         setRevealedRows(prev => [...prev, currentLv + 1]);
-        addGameHistory('Dragon Tower', bet, 0, `Burned at Level ${currentLv + 2}`);
-        
-        onResult({
+        setDtResult({
             win: false,
             amount: bet,
-            game: 'Dragon Tower',
-            resultDetails: [{label: 'Level reached', value: (currentLv + 1).toString()}]
+            level: currentLv + 1,
+            multiplier: 0
         });
+        addGameHistory('Dragon Tower', bet, 0, `Burned at Level ${currentLv + 2}`);
     }
   };
 
@@ -69,9 +76,13 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
     if (gameState !== 'PLAYING' || currentLv === -1) return;
     const winAmt = bet * LEVELS[currentLv];
     updateBalance(winAmt, 'WIN', 'Dragon Tower Cashout');
-    playSound('win');
+    setDtResult({
+        win: true,
+        amount: winAmt,
+        level: currentLv + 1,
+        multiplier: LEVELS[currentLv]
+    });
     setGameState('WON');
-    onResult({ win: true, amount: winAmt, game: 'Dragon Tower' });
   };
 
   const resetGame = () => {
@@ -82,35 +93,7 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
 
   return (
     <div className="bg-[#0a0505] min-h-screen flex flex-col font-sans text-white overflow-hidden relative">
-      {gameState === 'LOST' && (
-          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-red-950/90 backdrop-blur-md animate-in fade-in duration-500">
-              <div className="bg-red-600 p-6 rounded-full shadow-[0_0_50px_rgba(220,38,38,0.8)] mb-6 animate-bounce">
-                  <Skull size={64} className="text-white" />
-              </div>
-              <h2 className="text-5xl font-black italic gold-text uppercase mb-2">WASTED</h2>
-              <p className="text-red-400 font-bold tracking-widest mb-10">YOU HIT THE FIRE</p>
-              <div className="bg-black/40 px-10 py-4 rounded-2xl border border-red-500/30 mb-10 text-center">
-                  <p className="text-[10px] text-red-500 font-black uppercase text-center mb-1">Loss</p>
-                  <p className="text-3xl font-black text-white">₹{bet.toFixed(2)}</p>
-              </div>
-              <button onClick={resetGame} className="px-12 py-4 bg-white text-black font-black rounded-full shadow-2xl active:scale-95 transition-transform uppercase tracking-widest">Try Again</button>
-          </div>
-      )}
-
-      {gameState === 'WON' && (
-          <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-green-950/90 backdrop-blur-md animate-in fade-in duration-500">
-              <div className="bg-yellow-500 p-6 rounded-full shadow-[0_0_50px_rgba(234,179,8,0.8)] mb-6 animate-pulse">
-                  <Trophy size={64} className="text-black" />
-              </div>
-              <h2 className="text-5xl font-black italic gold-text uppercase mb-2">VICTORY</h2>
-              <p className="text-green-400 font-bold tracking-widest mb-10">ELITE CLIMBER</p>
-              <div className="bg-black/40 px-10 py-4 rounded-2xl border border-yellow-500/30 mb-10 text-center">
-                  <p className="text-[10px] text-yellow-500 font-black uppercase mb-1">Winning Amount</p>
-                  <p className="text-4xl font-black text-white italic">₹{(bet * LEVELS[currentLv]).toFixed(2)}</p>
-              </div>
-              <button onClick={resetGame} className="px-12 py-4 bg-yellow-500 text-black font-black rounded-full shadow-2xl active:scale-95 transition-transform uppercase tracking-widest">Collect & Close</button>
-          </div>
-      )}
+      <DragonTowerResultPopup result={dtResult} onClose={() => resetGame()} />
 
       <div className="p-4 flex justify-between items-center bg-black/60 border-b border-orange-500/20 z-50 shadow-xl">
         <div className="flex items-center gap-3">
@@ -128,40 +111,50 @@ const DragonTower: React.FC<{ onBack: () => void; userBalance: number; onResult:
           <div className="absolute inset-0 pointer-events-none opacity-20 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]"></div>
           
           {LEVELS.map((m, i) => (
-              <div key={i} className={`h-20 w-full rounded-3xl border-2 flex items-center justify-between px-6 transition-all duration-500 relative z-10 ${currentLv === i ? 'bg-orange-950/40 border-orange-500 shadow-[0_0_30px_rgba(249,115,22,0.3)] scale-[1.03]' : i === currentLv + 1 ? 'bg-zinc-900 border-zinc-700' : 'bg-black/40 border-white/5 opacity-40'}`}>
-                  <span className={`font-black text-xl italic w-14 ${currentLv >= i ? 'text-orange-400' : 'text-zinc-600'}`}>{m}x</span>
-                  <div className="flex-1 flex justify-end gap-3">
+              <div key={i} className={`h-24 w-full rounded-2xl border-2 flex items-center justify-between px-4 transition-all duration-500 relative z-10 ${currentLv === i ? 'bg-orange-950/40 border-orange-500 shadow-[0_0_30px_rgba(249,115,22,0.3)] scale-[1.03]' : i === currentLv + 1 ? 'bg-zinc-900 border-zinc-700' : 'bg-black/40 border-white/5 opacity-40'}`}>
+                  <span className={`font-black text-lg italic w-12 ${currentLv >= i ? 'text-orange-400' : 'text-zinc-600'}`}>{m}x</span>
+                  <div className="flex-1 flex justify-end gap-2">
                       {[0,1,2,3].map(tileIdx => {
                           const isCurrentRow = i === currentLv + 1;
                           const isTrap = gridData[i] === tileIdx;
                           const isPicked = isCurrentRow && revealedIdx === tileIdx;
                           const isFireRevealed = revealedRows.includes(i) && isTrap;
+                          const isSuccess = revealedRows.includes(i) && !isTrap;
                           
                           return (
                               <button 
                                 key={tileIdx} 
                                 onClick={() => pick(tileIdx)}
                                 disabled={!isCurrentRow || gameState !== 'PLAYING'}
-                                className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all border-2 relative overflow-hidden ${
+                                className={`w-20 h-24 rounded-2xl flex items-center justify-center transition-all border-4 relative overflow-hidden ${
                                     isFireRevealed 
-                                        ? 'bg-orange-600/20 border-orange-500/40' 
-                                        : isPicked 
-                                            ? 'bg-green-600 border-green-400 shadow-[0_0_15px_rgba(34,197,94,0.5)]' 
-                                            : isCurrentRow 
-                                                ? 'bg-zinc-800 border-zinc-600 hover:border-orange-500 active:scale-90 shadow-lg' 
-                                                : currentLv >= i 
-                                                    ? 'bg-green-900/20 border-green-500/20'
-                                                    : 'bg-black/20 border-white/5'
+                                        ? 'bg-red-950/60 border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.8),inset_0_0_30px_rgba(239,68,68,0.6)] z-20' 
+                                        : isSuccess
+                                            ? 'bg-green-600 border-green-400 shadow-[0_0_20px_rgba(34,197,94,0.6)]'
+                                            : isPicked 
+                                                ? 'bg-blue-600 border-blue-400 animate-pulse' 
+                                                : isCurrentRow 
+                                                    ? 'bg-zinc-800 border-zinc-500 hover:border-orange-500 active:scale-95 shadow-[0_10px_20px_rgba(0,0,0,0.4)]' 
+                                                    : currentLv >= i 
+                                                        ? 'bg-green-900/20 border-green-500/10'
+                                                        : 'bg-black/40 border-white/5'
                                 }`}
                               >
                                   {isFireRevealed ? (
-                                      <div className="animate-fire-pulse">
-                                        <Flame size={28} className="text-orange-500 fill-orange-500/20" />
-                                      </div>
+                                      <motion.div 
+                                        initial={{ scale: 0, y: 20 }}
+                                        animate={{ scale: 1.2, y: 0 }}
+                                        className="relative flex flex-col items-center"
+                                      >
+                                        <Flame size={48} className="text-orange-500 fill-orange-600 animate-pulse" />
+                                        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-red-600/60 via-orange-500/20 to-transparent blur-xl"></div>
+                                      </motion.div>
                                   ) : isCurrentRow ? (
                                       <span className="text-zinc-600 font-black text-xl">?</span>
+                                  ) : currentLv >= i && isSuccess ? (
+                                      <motion.div initial={{scale: 0}} animate={{scale: 1}}><Sparkles size={24} className="text-green-400" /></motion.div>
                                   ) : currentLv >= i ? (
-                                      <Sparkles size={20} className="text-green-400 opacity-60" />
+                                      <Lock size={16} className="text-zinc-800/40"/>
                                   ) : (
                                       <Lock size={16} className="text-zinc-800"/>
                                   )}

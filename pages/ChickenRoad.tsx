@@ -1,11 +1,15 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, HelpCircle, Settings2, Coins } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+
+import ChickenRoadResultPopup from '../components/ChickenRoadResultPopup';
 
 interface ChickenProps {
     onBack: () => void;
+    userBalance: number;
     onResult: (result: GameResult) => void;
 }
 
@@ -20,12 +24,13 @@ const MULTIPLIERS: Record<Difficulty, number[]> = {
 
 const CAR_IMAGES = ['🚕', '🚓', '🚚', '🚑', '🚒', '🚐'];
 
-const FrogRoad: React.FC<ChickenProps> = ({ onBack, onResult }) => {
+const ChickenRoad: React.FC<ChickenProps> = ({ onBack, userBalance, onResult }) => {
     // Game State
     const [gameState, setGameState] = useState<'IDLE' | 'PLAYING' | 'CRASHING' | 'CRASHED' | 'WON'>('IDLE');
     const [currentLane, setCurrentLane] = useState(-1);
     const [betAmount, setBetAmount] = useState(10);
     const [difficulty, setDifficulty] = useState<Difficulty>('MEDIUM');
+    const [crResult, setCrResult] = useState<any | null>(null);
     
     // UI Refs
     const [crashLane, setCrashLane] = useState<number | null>(null);
@@ -36,9 +41,15 @@ const FrogRoad: React.FC<ChickenProps> = ({ onBack, onResult }) => {
         return () => stopAllSounds();
     }, []);
 
-    const startGame = () => {
-        playSound('click');
-        updateBalance(-betAmount, 'BET', 'Frog Road');
+    const startGame = async () => {
+        if (betAmount > userBalance) return;
+        playSound('bet_place');
+        setCrResult(null);
+        
+        // Record bet in Firestore removed to save quota for instant games
+        // addGameHistory will still record the result for the user
+
+        updateBalance(-betAmount, 'BET', 'Chicken Road');
         setGameState('PLAYING');
         setCurrentLane(-1);
         setCrashLane(null);
@@ -83,33 +94,29 @@ const FrogRoad: React.FC<ChickenProps> = ({ onBack, onResult }) => {
         // Step 2: Wait for car to hit (0.5s animation), then show Game Over
         setTimeout(() => {
             setGameState('CRASHED');
-            addGameHistory('Frog Road', betAmount, 0, `Crashed at ${(nextLane)}`);
-            onResult({
+            setCrResult({
                 win: false,
                 amount: betAmount,
-                game: 'Frog Road',
-                period: Date.now().toString().slice(-8),
-                resultDetails: [{ label: 'Result', value: 'Crash', color: 'bg-red-500' }]
+                multiplier: 0,
+                difficulty: difficulty,
+                lane: nextLane
             });
+            addGameHistory('Chicken Road', betAmount, 0, `Crashed at ${(nextLane)}`);
         }, 800);
     };
 
     const cashOut = (auto = false) => {
         const winAmount = betAmount * MULTIPLIERS[difficulty][currentLane];
-        updateBalance(winAmount, 'WIN', 'Frog Road Win');
-        addGameHistory('Frog Road', betAmount, winAmount, `Cashed out ${MULTIPLIERS[difficulty][currentLane]}x`);
-        playSound('win');
+        updateBalance(winAmount, 'WIN', 'Chicken Road Win');
+        addGameHistory('Chicken Road', betAmount, winAmount, `Cashed out ${MULTIPLIERS[difficulty][currentLane]}x`);
         setGameState('WON');
         
-        onResult({
+        setCrResult({
             win: true,
             amount: winAmount,
-            game: 'Frog Road',
-            period: Date.now().toString().slice(-8),
-            resultDetails: [
-                { label: 'Multiplier', value: `${MULTIPLIERS[difficulty][currentLane]}x`, color: 'bg-green-500' },
-                { label: 'Difficulty', value: difficulty, color: 'bg-blue-500' }
-            ]
+            multiplier: MULTIPLIERS[difficulty][currentLane],
+            difficulty: difficulty,
+            lane: currentLane
         });
     };
 
@@ -129,12 +136,13 @@ const FrogRoad: React.FC<ChickenProps> = ({ onBack, onResult }) => {
 
     return (
         <div className="bg-[#1a1c20] min-h-screen flex flex-col font-sans text-white overflow-hidden">
+            <ChickenRoadResultPopup result={crResult} onClose={() => setCrResult(null)} />
             {/* Header */}
             <div className="bg-[#24262b] p-3 flex items-center justify-between border-b border-gray-800 z-20">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack}><ArrowLeft className="text-gray-400" /></button>
                     <div className="flex items-center gap-2">
-                        <span className="font-black text-xl tracking-tighter italic">FROG <span className="text-green-500">ROAD</span></span>
+                        <span className="font-black text-xl tracking-tighter italic">CHICKEN <span className="text-yellow-500">ROAD</span></span>
                         <HelpCircle size={16} className="text-gray-500"/>
                     </div>
                 </div>
@@ -329,4 +337,4 @@ const FrogRoad: React.FC<ChickenProps> = ({ onBack, onResult }) => {
     );
 };
 
-export default FrogRoad;
+export default ChickenRoad;

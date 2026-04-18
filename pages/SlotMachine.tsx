@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, RotateCw, Trophy, History } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
 
 interface Props {
   onBack: () => void;
@@ -36,6 +37,19 @@ const SlotMachine: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
 
   const spin = async () => {
     if (isSpinning || userBalance < betAmount) return;
+
+    // Record bet in Firestore
+    if (auth.currentUser) {
+        try {
+            await addDoc(collection(db, 'slot_machine_bets'), {
+                uid: auth.currentUser.uid,
+                username: auth.currentUser.displayName || 'Player',
+                amount: betAmount,
+                target: 'BET',
+                timestamp: Date.now()
+            });
+        } catch (e) {}
+    }
 
     setIsSpinning(true);
     // FIX: Changed invalid sound name 'spin' to 'slot_reel'

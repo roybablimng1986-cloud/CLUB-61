@@ -1,11 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, History as HistoryIcon, X, Wallet, Volume2, VolumeX, HelpCircle, Clock, ChevronRight, AlertCircle } from 'lucide-react';
 import { WinGoGameState, GameResult, GameHistoryItem, WinGoHistory } from '../types';
-import { subscribeToWinGo, updateBalance, stopAllSounds, toggleMute, getMuteStatus, playSound, shouldForceLoss, getGameHistory, addGameHistory } from '../services/mockFirebase';
+import { subscribeToWinGo, updateBalance, stopAllSounds, toggleMute, getMuteStatus, playSound, shouldForceLoss, getGameHistory, addGameHistory, subscribeToWinGoBets, db, auth, addGameBet, getClockOffset } from '../services/supabaseService';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+
+import WinGoResultPopup from '../components/WinGoResultPopup';
 
 const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; setView: (v: any) => void; }> = ({ onBack, userBalance, onResult, setView }) => {
   const [gameState, setGameState] = useState<WinGoGameState | null>(null);
-  const [activeTab, setActiveTab] = useState<'History' | 'MyBets'>('History');
+  const [localTimeLeft, setLocalTimeLeft] = useState(0);
+  const [activeTab, setActiveTab] = useState<'History' | 'MyBets' | 'AllBets'>('History');
+  const [winGoResult, setWinGoResult] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (!gameState?.endTime) {
+        setLocalTimeLeft(gameState?.timeLeft || 0);
+        return;
+    }
+    
+    const updateTimer = () => {
+        const remaining = Math.max(0, Math.floor((gameState.endTime! - (Date.now() + getClockOffset())) / 1000));
+        setLocalTimeLeft(remaining);
+    };
+    
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [gameState?.endTime, gameState?.timeLeft]);
   const [betDrawerOpen, setBetDrawerOpen] = useState(false);
   const [selectedBetTarget, setSelectedBetTarget] = useState<string | null>(null);
   const [betMoney, setBetMoney] = useState(1);
@@ -14,15 +35,26 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   const [showBalanceError, setShowBalanceError] = useState(false);
   const [pendingBets, setPendingBets] = useState<{target: string; amount: number; period: number}[]>([]);
   const [myHistory, setMyHistory] = useState<GameHistoryItem[]>([]);
+  const [allBets, setAllBets] = useState<any[]>([]);
   
+  useEffect(() => {
+    if (localTimeLeft <= 5 && localTimeLeft > 0 && gameState?.status === 'BETTING') {
+        playSound('wingo_tick');
+    }
+  }, [localTimeLeft, gameState?.status]);
+
   const isMounted = useRef(true);
+  const resultHandledRef = useRef<string | null>(null);
 
   useEffect(() => {
     isMounted.current = true;
     const unsubHistory = getGameHistory('WinGo', (data) => {
         if(isMounted.current) setMyHistory(data);
     });
-    return () => { isMounted.current = false; stopAllSounds(); unsubHistory(); };
+    const unsubAllBets = subscribeToWinGoBets((data) => {
+        if(isMounted.current) setAllBets(data);
+    });
+    return () => { isMounted.current = false; stopAllSounds(); unsubHistory(); unsubAllBets(); };
   }, []);
 
   useEffect(() => {
@@ -47,14 +79,11 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
 
         setGameState(finalState);
         
-        if (finalState.timeLeft <= 5 && finalState.timeLeft > 0 && finalState.status === 'BETTING') {
-            playSound('wingo_tick');
-        }
-
-        if (finalState.timeLeft === 30 && finalState.lastResult) {
+        if (finalState.status === 'REVEALING' && finalState.lastResult && resultHandledRef.current !== finalState.lastResult.period) {
+            resultHandledRef.current = finalState.lastResult.period;
             playSound('wingo_draw');
             const finishedPeriod = finalState.lastResult.period;
-            const currentRoundBets = pendingBets.filter(b => b.period.toString() === finishedPeriod);
+            const currentRoundBets = pendingBets.filter(b => b.period?.toString() === finishedPeriod);
             
             if (currentRoundBets.length > 0) {
                 let totalWin = 0; let totalBet = 0; let hasWin = false;
@@ -80,43 +109,56 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
                 });
 
                 if (totalWin > 0) updateBalance(totalWin, 'WIN', 'WinGo Win');
-                onResult({ 
-                    win: hasWin, 
-                    amount: hasWin ? totalWin : totalBet, 
-                    game: 'WinGo', 
-                    period: finishedPeriod, 
-                    resultDetails: [
-                        { label: 'Number', value: num.toString(), color: num%2===0?'bg-red-500':'bg-green-500' },
-                        { label: 'Size', value: bS, color: bS==='Big'?'bg-yellow-500':'bg-blue-500' }
-                    ] 
+                
+                setWinGoResult({
+                    win: hasWin,
+                    amount: hasWin ? totalWin : totalBet,
+                    period: finishedPeriod,
+                    number: num,
+                    bigSmall: bS,
+                    color: finalState.lastResult.color,
+                    target: currentRoundBets.map(b => b.target).join(', ')
                 });
-                setPendingBets(prev => prev.filter(b => b.period.toString() !== finishedPeriod));
+
+                setPendingBets(prev => prev.filter(b => b.period?.toString() !== finishedPeriod));
             }
         }
     });
     return () => unsubscribe();
   }, [pendingBets, userBalance]);
 
-  const confirmBet = () => {
+  const confirmBet = async () => {
       const total = betMoney * betMultiplier;
       if (total > userBalance) { 
           setShowBalanceError(true); 
           setTimeout(() => setShowBalanceError(false), 3000); 
           return; 
       }
-      updateBalance(-total, 'BET', `WinGo Stake: ${selectedBetTarget}`);
-      setBetDrawerOpen(false);
-      setPendingBets(prev => [...prev, { target: selectedBetTarget!, amount: total, period: gameState!.period }]);
-      playSound('click');
+      
+      try {
+          await addGameBet('wingo_bets', {
+              target: selectedBetTarget,
+              amount: total,
+              period: gameState!.period,
+          });
+          
+          updateBalance(-total, 'BET', `WinGo Stake: ${selectedBetTarget}`);
+          setBetDrawerOpen(false);
+          setPendingBets(prev => [...prev, { target: selectedBetTarget!, amount: total, period: gameState!.period }]);
+          playSound('bet_place');
+      } catch (e) {
+          console.error("WinGo bet error:", e);
+      }
   };
 
   if (!gameState) return <div className="min-h-screen bg-[#0f172a] flex items-center justify-center text-white italic font-black uppercase tracking-widest">Entering Arena...</div>;
   
-  const isBetLocked = gameState.timeLeft <= 5;
+  const isBetLocked = localTimeLeft <= 5;
   const getBallColor = (n: number) => n===0?'bg-purple-500':n===5?'bg-purple-500':[1,3,7,9].includes(n)?'bg-green-500':'bg-red-500';
 
   return (
     <div className="bg-[#0f172a] min-h-screen pb-24 relative font-sans select-none overflow-x-hidden">
+      <WinGoResultPopup result={winGoResult} onClose={() => setWinGoResult(null)} />
       {/* Insufficient Balance Popup */}
       {showBalanceError && (
           <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] bg-red-600 px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border border-red-400 animate-in slide-in-from-top-4">
@@ -154,8 +196,8 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
                 <span className="bg-black/40 px-3 py-1 rounded-xl">0</span>
                 <span className="bg-black/40 px-3 py-1 rounded-xl">0</span>
                 <span className="text-blue-500">:</span>
-                <span className="bg-black/40 px-3 py-1 rounded-xl">{gameState.timeLeft < 10 ? '0' : Math.floor(gameState.timeLeft/10)}</span>
-                <span className="bg-black/40 px-3 py-1 rounded-xl">{gameState.timeLeft % 10}</span>
+                <span className="bg-black/40 px-3 py-1 rounded-xl">{localTimeLeft < 10 ? '0' : Math.floor(localTimeLeft/10)}</span>
+                <span className="bg-black/40 px-3 py-1 rounded-xl">{localTimeLeft % 10}</span>
             </div>
             <div className="flex gap-1.5 justify-center mt-6 overflow-x-auto no-scrollbar">
                 {(gameState.history || []).slice(0, 8).map((h, i) => (
@@ -182,6 +224,7 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
           <div className="mt-4">
               <div className="flex bg-[#0a0f1d] p-1 rounded-2xl mb-8 border border-white/5">
                   <button onClick={() => setActiveTab('History')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'History' ? 'bg-yellow-500 text-black shadow-lg' : 'text-slate-500'}`}>Game Logs</button>
+                  <button onClick={() => setActiveTab('AllBets')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'AllBets' ? 'bg-yellow-500 text-black shadow-lg' : 'text-slate-500'}`}>All Bets</button>
                   <button onClick={() => setActiveTab('MyBets')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'MyBets' ? 'bg-yellow-500 text-black shadow-lg' : 'text-slate-500'}`}>My Record</button>
               </div>
 
@@ -223,6 +266,26 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
                               ))}
                           </tbody>
                       </table>
+                  </div>
+              ) : activeTab === 'AllBets' ? (
+                  <div className="space-y-3">
+                      {allBets.map((b, i) => (
+                          <div key={i} className="bg-[#111827] p-4 rounded-2xl border border-white/5 flex justify-between items-center">
+                              <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[10px] font-black text-white shadow-lg">
+                                      {b.username?.charAt(0).toUpperCase() || 'U'}
+                                  </div>
+                                  <div>
+                                      <div className="text-[10px] font-black text-white uppercase tracking-tighter italic">{b.username || 'Anonymous'}</div>
+                                      <div className="text-[8px] text-slate-500 font-bold uppercase">Bet on {b.target}</div>
+                                  </div>
+                              </div>
+                              <div className="text-right">
+                                  <div className="text-sm font-black text-yellow-500">₹{b.amount}</div>
+                                  <div className="text-[8px] text-slate-600 font-bold uppercase">{new Date(b.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</div>
+                              </div>
+                          </div>
+                      ))}
                   </div>
               ) : (
                   <div className="space-y-4">

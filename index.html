@@ -38,6 +38,28 @@
         .animate-slot-spin {
             animation: slot-spin 0.1s infinite linear;
         }
+
+        .casino-gradient {
+            background: radial-gradient(circle at center, #1e3a8a 0%, #0f172a 100%);
+        }
+
+        .chip-shadow {
+            box-shadow: 0 4px 0 #000, 0 8px 15px rgba(0,0,0,0.5);
+        }
+
+        .card-shadow {
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+            100% { transform: translateY(0px); }
+        }
+
+        .animate-float {
+            animation: float 3s ease-in-out infinite;
+        }
     </style>
 <script type="importmap">
 {

@@ -1,0 +1,108 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User account and balance information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "username": { "type": "string" },
+        "balance": { "type": "number" },
+        "password": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] }
+      },
+      "required": ["uid", "phone", "email", "username", "balance"]
+    },
+    "GameState": {
+      "title": "Game State",
+      "description": "Global state for multiplayer games",
+      "type": "object",
+      "properties": {
+        "phase": { "type": "string" },
+        "multiplier": { "type": "number" },
+        "timeLeft": { "type": "number" },
+        "history": { "type": "array", "items": { "type": "number" } },
+        "crashPoint": { "type": "number" },
+        "lastUpdate": { "type": "number" }
+      },
+      "required": ["phase", "multiplier", "lastUpdate"]
+    },
+    "SevenUpDownRound": {
+      "title": "Seven Up Down Round",
+      "description": "Result of a specific round in Seven Up Down",
+      "type": "object",
+      "properties": {
+        "roundId": { "type": "number" },
+        "dice": { "type": "array", "items": { "type": "number" } },
+        "sum": { "type": "number" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["roundId", "dice", "sum", "timestamp"]
+    },
+    "SevenUpDownBet": {
+      "title": "Seven Up Down Bet",
+      "description": "A bet placed by a user in a Seven Up Down round",
+      "type": "object",
+      "properties": {
+        "roundId": { "type": "number" },
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "amount": { "type": "number" },
+        "target": { "type": "string", "enum": ["DOWN", "SEVEN", "UP"] },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["roundId", "uid", "username", "amount", "target", "timestamp"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "User transaction (deposit, withdraw, etc.)",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string" },
+        "timestamp": { "type": "object" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profiles"
+    },
+    "/game_states/{gameId}": {
+      "schema": "GameState",
+      "description": "Collection of global game states"
+    },
+    "/transactions/{userId}/items/{txId}": {
+      "schema": "Transaction",
+      "description": "User transactions"
+    },
+    "/game_history/{userId}/items/{historyId}": {
+      "schema": "object",
+      "description": "User game history"
+    },
+    "/chat/{msgId}": {
+      "schema": "object",
+      "description": "Global chat messages"
+    },
+    "/gift_codes/{code}": {
+      "schema": "object",
+      "description": "Gift codes"
+    },
+    "/app_settings/global": {
+      "schema": "object",
+      "description": "Global app settings"
+    },
+    "/seven_up_down_rounds/{roundId}": {
+      "schema": "SevenUpDownRound",
+      "description": "History of round results"
+    },
+    "/seven_up_down_bets/{betId}": {
+      "schema": "SevenUpDownBet",
+      "description": "Live bets for the current round"
+    }
+  }
+}

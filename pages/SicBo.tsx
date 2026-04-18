@@ -1,127 +1,159 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, History, RotateCw, Trash2, Volume2, VolumeX, Timer, CheckCircle2, X } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus } from '../services/mockFirebase';
-import { GameResult } from '../types';
+import { ArrowLeft, Wallet, History, RotateCw, Trash2, Volume2, VolumeX, Timer, CheckCircle2, X, Users, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, db, auth, subscribeToSicBo, subscribeToSicBoBets, getClockOffset } from '../services/supabaseService';
+import { GameResult, SicBoState } from '../types';
+import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp, where, addDoc } from 'firebase/firestore';
+
+import SicBoResultPopup from '../components/SicBoResultPopup';
+import { useStabilizedTimer } from '../hooks/useTimer';
 
 const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
 const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
+  const [gameState, setGameState] = useState<SicBoState | null>(null);
+  const [myBets, setMyBets] = useState<any[]>([]);
+  const [allBets, setAllBets] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'ALL' | 'MY'>('ALL');
+  const [isBettingLocked, setIsBettingLocked] = useState(false);
   const [betAmount, setBetAmount] = useState(10);
-  const [placedBets, setPlacedBets] = useState<{ zone: string; amount: number; type: string }[]>([]);
-  const [gameState, setGameState] = useState<'BETTING' | 'SHAKING' | 'RESULT'>('BETTING');
-  const [timeLeft, setTimeLeft] = useState(25);
-  const [dice, setDice] = useState([1, 1, 1]);
-  const [history, setHistory] = useState<number[]>([]);
   const [muted, setMuted] = useState(getMuteStatus());
   const [floating, setFloating] = useState<{ text: string; color: string; id: number } | null>(null);
-
-  // Betting Confirmation
   const [confirmBet, setConfirmBet] = useState<{ zone: string; type: string } | null>(null);
+  const [sbResult, setSbResult] = useState<any | null>(null);
 
+  const timeLeft = useStabilizedTimer(gameState?.status === 'BETTING' ? gameState.endTime : undefined);
+  
   const isMounted = useRef(true);
+  const resultHandledRef = useRef<string | null>(null);
 
   useEffect(() => {
     isMounted.current = true;
-    const interval = setInterval(() => {
-      if (!isMounted.current) return;
-      if (gameState === 'BETTING') {
-          if (timeLeft > 0) {
-              setTimeLeft(prev => prev - 1);
-              // FIX: Changed invalid sound name 'tick' to 'wingo_tick'
-              if (timeLeft <= 5) playSound('wingo_tick');
-          } else {
-              setConfirmBet(null);
-              shakeDice();
-          }
-      }
-    }, 1000);
-    return () => { isMounted.current = false; clearInterval(interval); stopAllSounds(); };
-  }, [timeLeft, gameState]);
+    
+    const unsubState = subscribeToSicBo((state) => {
+        if (!isMounted.current) return;
+        setGameState(state);
+
+        if (state.status === 'BETTING') {
+            resultHandledRef.current = null;
+        } else {
+            setIsBettingLocked(true);
+        }
+
+        if (state.status === 'RESULT' && resultHandledRef.current !== state.period) {
+            resultHandledRef.current = state.period;
+            handleResultSequence(state);
+        }
+    });
+
+    const unsubBets = subscribeToSicBoBets((bets) => {
+        setAllBets(bets);
+        if (auth.currentUser) {
+            setMyBets(bets.filter((b: any) => b.uid === auth.currentUser?.uid));
+        }
+    });
+
+    return () => { isMounted.current = false; unsubState(); unsubBets(); stopAllSounds(); };
+}, []);
+
+useEffect(() => {
+    if (gameState?.status === 'BETTING') {
+        setIsBettingLocked(timeLeft <= 5);
+        if (timeLeft <= 5 && timeLeft > 0) playSound('wingo_tick');
+    }
+}, [timeLeft, gameState?.status]);
+
+if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center font-black gold-text text-xl italic uppercase tracking-widest">Entering Arena...</div>;
+
+// Listen to bets for the current period
+// Redundant - now handled by shared listener in first useEffect
+
+  const handleResultSequence = (state: SicBoState) => {
+    playSound('wheel_spin');
+    
+    setTimeout(() => {
+        if (!isMounted.current) return;
+        const myCurrentBets = allBets.filter(b => b.uid === auth.currentUser?.uid);
+        if (myCurrentBets.length > 0) {
+            processMyResult(state, myCurrentBets);
+        }
+    }, 3000);
+  };
+
+  const processMyResult = (state: SicBoState, currentBets: any[]) => {
+    let totalWin = 0;
+    let totalBet = 0;
+    const result = state.dice;
+    const sum = result.reduce((a, b) => a + b, 0);
+    const isBig = sum >= 11 && sum <= 17;
+    const isSmall = sum >= 4 && sum <= 10;
+    const isTriple = result[0] === result[1] && result[1] === result[2];
+
+    currentBets.forEach(bet => {
+        totalBet += bet.amount;
+        if (bet.zone === 'BIG' && isBig && !isTriple) totalWin += bet.amount * 1.98;
+        if (bet.zone === 'SMALL' && isSmall && !isTriple) totalWin += bet.amount * 1.98;
+        if (bet.zone === 'TIE' && isTriple) totalWin += bet.amount * 30;
+        if (bet.zone === 'TOTAL' && parseInt(bet.type) === sum) totalWin += bet.amount * 6;
+    });
+
+    const isWin = totalWin > 0;
+    if (isWin) {
+        updateBalance(totalWin, 'WIN', 'Sic Bo Win');
+        triggerFloating(`+₹${totalWin.toFixed(2)}`, 'text-yellow-400');
+    } else {
+        triggerFloating(`-₹${totalBet.toFixed(2)}`, 'text-red-500');
+    }
+
+    setSbResult({
+        win: isWin,
+        amount: isWin ? totalWin : totalBet,
+        period: state.period,
+        dice: state.dice,
+        sum: sum,
+        target: currentBets.map(b => `${b.zone} (${b.type})`).join(', ')
+    });
+
+    addGameHistory('Sic Bo Elite', totalBet, totalWin, `Period: ${state.period}`);
+  };
 
   const triggerFloating = (text: string, color: string) => {
       setFloating({ text, color, id: Date.now() });
       setTimeout(() => setFloating(null), 3000);
   };
 
-  const shakeDice = () => {
-    setGameState('SHAKING');
-    // FIX: Changed invalid sound name 'spin' to 'wheel_spin'
-    playSound('wheel_spin');
-    
-    let count = 0;
-    const shakeInterval = setInterval(() => {
-        setDice([Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1]);
-        count++;
-        if (count > 20) {
-            clearInterval(shakeInterval);
-            finalize();
-        }
-    }, 100);
-  };
-
-  const finalize = () => {
-    if (!isMounted.current) return;
-    const result = [Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1];
-    setDice(result);
-    setGameState('RESULT');
-    
-    const sum = result.reduce((a, b) => a + b, 0);
-    setHistory(prev => [sum, ...prev].slice(0, 15));
-
-    let totalWin = 0;
-    const isBig = sum >= 11 && sum <= 17;
-    const isSmall = sum >= 4 && sum <= 10;
-    const isTriple = result[0] === result[1] && result[1] === result[2];
-
-    placedBets.forEach(bet => {
-        if (bet.zone === 'BIG' && isBig && !isTriple) totalWin += bet.amount * 2;
-        if (bet.zone === 'SMALL' && isSmall && !isTriple) totalWin += bet.amount * 2;
-        if (bet.zone === 'TOTAL' && parseInt(bet.type) === sum) totalWin += bet.amount * 6;
-    });
-
-    if (totalWin > 0) {
-        updateBalance(totalWin, 'WIN', 'Sic Bo Win');
-        playSound('win');
-        triggerFloating(`+₹${totalWin.toFixed(2)}`, 'text-yellow-400');
-        onResult({ win: true, amount: totalWin, game: 'Sic Bo' });
-    } else if (placedBets.length > 0) {
-        playSound('loss');
-        triggerFloating(`-₹${placedBets.reduce((a,b)=>a+b.amount,0).toFixed(2)}`, 'text-red-500');
-        onResult({ win: false, amount: placedBets.reduce((a,b)=>a+b.amount,0), game: 'Sic Bo' });
-    }
-
-    addGameHistory('Sic Bo', placedBets.reduce((a,b)=>a+b.amount,0), totalWin, `Dice: ${result.join(',')}`);
-
-    setTimeout(() => {
-        if (isMounted.current) {
-            setGameState('BETTING');
-            setTimeLeft(25);
-            setPlacedBets([]);
-        }
-    }, 5000);
-  };
-
   const openPlaceBet = (zone: string, type: string) => {
-    if (gameState !== 'BETTING') return;
+    if (gameState?.status !== 'BETTING' || isBettingLocked) return;
     setConfirmBet({ zone, type });
     playSound('click');
   };
 
-  const handlePlaceConfirm = () => {
-    if (!confirmBet || gameState !== 'BETTING') return;
-    if (userBalance < betAmount) {
-        alert("Insufficient Balance");
-        return;
+  const handlePlaceConfirm = async () => {
+    if (!confirmBet || !auth.currentUser || !gameState) return;
+    if (userBalance < betAmount) { alert("Insufficient Balance"); return; }
+
+    try {
+        const betData = {
+            target: confirmBet.zone,
+            betType: confirmBet.type,
+            amount: betAmount,
+            period: gameState.period,
+        };
+
+        await addGameBet('sicbo_bets', betData);
+        await updateBalance(-betAmount, 'BET', `SicBo: ${confirmBet.zone}`);
+        playSound('bet_place');
+        setConfirmBet(null);
+    } catch (e) {
+        console.error("Bet error:", e);
     }
-    updateBalance(-betAmount, 'BET', `SicBo: ${confirmBet.zone}`);
-    playSound('click');
-    setPlacedBets(prev => [...prev, { zone: confirmBet.zone, amount: betAmount, type: confirmBet.type }]);
-    setConfirmBet(null);
   };
 
+  if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center font-black gold-text">Entering Arena...</div>;
+
   return (
-    <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white overflow-hidden relative select-none">
+    <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white overflow-x-hidden relative select-none">
+      <SicBoResultPopup result={sbResult} onClose={() => setSbResult(null)} />
       {floating && (
           <div key={floating.id} className={`fixed top-1/2 left-1/2 -translate-x-1/2 z-[300] font-black text-6xl italic pointer-events-none animate-float-up ${floating.color}`} style={{ textShadow: '0 0 30px rgba(0,0,0,0.8)' }}>
               {floating.text}
@@ -135,17 +167,17 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
         <div className="bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono shadow-inner">₹{userBalance.toFixed(2)}</div>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col items-center p-4 gap-8 pb-40">
+      <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col items-center p-4 gap-8 pb-80">
           {/* Shaking Dome */}
           <div className="relative w-72 h-56 bg-gradient-to-b from-blue-900/60 to-black rounded-full border-[6px] border-white/10 flex items-center justify-center shadow-[0_0_80px_rgba(0,0,0,1)] mt-4">
                <div className="flex gap-4">
-                  {dice.map((d, i) => (
-                      <div key={i} className={`text-7xl ${gameState === 'SHAKING' ? 'animate-bounce' : 'animate-in zoom-in'} drop-shadow-[0_4px_10px_rgba(0,0,0,1)]`}>
+                  {gameState.dice.map((d, i) => (
+                      <div key={i} className={`text-7xl ${gameState.status === 'LOCKED' ? 'animate-bounce' : 'animate-in zoom-in'} drop-shadow-[0_4px_10px_rgba(0,0,0,1)]`}>
                         {DICE_FACES[d-1]}
                       </div>
                   ))}
                </div>
-               {gameState === 'BETTING' && (
+               {gameState.status === 'BETTING' && (
                    <div className="absolute inset-0 bg-black/60 rounded-full flex flex-col items-center justify-center backdrop-blur-[2px]">
                         <Timer size={40} className="text-yellow-500 mb-2 animate-pulse" />
                         <span className="text-4xl font-black font-mono text-yellow-500">{timeLeft}s</span>
@@ -153,48 +185,74 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
                )}
           </div>
 
-          {/* Betting Zones - Big/Small */}
-          <div className="grid grid-cols-2 gap-4 w-full max-w-md px-2">
-               <button onClick={() => openPlaceBet('SMALL', '4-10')} disabled={gameState !== 'BETTING'} className="h-28 bg-blue-950/40 rounded-[2rem] border-2 border-blue-500/30 flex flex-col items-center justify-center active:scale-95 transition-all shadow-xl disabled:opacity-30">
-                  <span className="text-2xl font-black italic gold-text">SMALL</span>
-                  <span className="text-[10px] opacity-60 uppercase tracking-widest mt-1">Sum 4-10 (1.98X)</span>
-                  {placedBets.filter(b=>b.zone==='SMALL').length > 0 && <div className="mt-2 bg-yellow-500 text-black px-4 py-1 rounded-full text-[11px] font-black animate-in zoom-in shadow-lg">₹{placedBets.filter(b=>b.zone==='SMALL').reduce((a,b)=>a+b.amount,0)}</div>}
+          {/* Betting Zones - Big/Small/Tie */}
+          <div className="grid grid-cols-3 gap-2 w-full max-w-md px-2">
+               <button onClick={() => openPlaceBet('SMALL', '4-10')} disabled={isBettingLocked || gameState.status !== 'BETTING'} className="h-28 bg-blue-950/40 rounded-2xl border-2 border-blue-500/30 flex flex-col items-center justify-center active:scale-95 transition-all shadow-xl disabled:opacity-30 relative overflow-hidden">
+                  <span className="text-xl font-black italic gold-text">SMALL</span>
+                  <span className="text-[8px] opacity-60 uppercase tracking-widest mt-1">1.98X</span>
+                  {isBettingLocked && <div className="absolute inset-0 bg-black/20 flex items-center justify-center"><Check size={20} className="text-white/20" /></div>}
                </button>
-               <button onClick={() => openPlaceBet('BIG', '11-17')} disabled={gameState !== 'BETTING'} className="h-28 bg-red-950/40 rounded-[2rem] border-2 border-red-500/30 flex flex-col items-center justify-center active:scale-95 transition-all shadow-xl disabled:opacity-30">
-                  <span className="text-2xl font-black italic gold-text">BIG</span>
-                  <span className="text-[10px] opacity-60 uppercase tracking-widest mt-1">Sum 11-17 (1.98X)</span>
-                  {placedBets.filter(b=>b.zone==='BIG').length > 0 && <div className="mt-2 bg-yellow-500 text-black px-4 py-1 rounded-full text-[11px] font-black animate-in zoom-in shadow-lg">₹{placedBets.filter(b=>b.zone==='BIG').reduce((a,b)=>a+b.amount,0)}</div>}
+               <button onClick={() => openPlaceBet('TIE', 'Triple')} disabled={isBettingLocked || gameState.status !== 'BETTING'} className="h-28 bg-orange-950/40 rounded-2xl border-2 border-orange-500/30 flex flex-col items-center justify-center active:scale-95 transition-all shadow-xl disabled:opacity-30 relative overflow-hidden">
+                  <span className="text-xl font-black italic gold-text">TIE</span>
+                  <span className="text-[8px] opacity-60 uppercase tracking-widest mt-1">30X</span>
+                  {isBettingLocked && <div className="absolute inset-0 bg-black/20 flex items-center justify-center"><Check size={20} className="text-white/20" /></div>}
+               </button>
+               <button onClick={() => openPlaceBet('BIG', '11-17')} disabled={isBettingLocked || gameState.status !== 'BETTING'} className="h-28 bg-red-950/40 rounded-2xl border-2 border-red-500/30 flex flex-col items-center justify-center active:scale-95 transition-all shadow-xl disabled:opacity-30 relative overflow-hidden">
+                  <span className="text-xl font-black italic gold-text">BIG</span>
+                  <span className="text-[8px] opacity-60 uppercase tracking-widest mt-1">1.98X</span>
+                  {isBettingLocked && <div className="absolute inset-0 bg-black/20 flex items-center justify-center"><Check size={20} className="text-white/20" /></div>}
                </button>
           </div>
 
-          {/* Totals Grid - NEW 2-ROW LAYOUT */}
+          {/* Totals Grid */}
           <div className="w-full max-w-md space-y-3 px-2">
               <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-2">Total Sum Payouts</h3>
               <div className="grid grid-cols-7 gap-2">
                   {Array.from({length: 14}).map((_, i) => {
                       const n = i + 4;
-                      const betOnThis = placedBets.filter(b=>b.zone==='TOTAL' && b.type===n.toString()).reduce((a,b)=>a+b.amount,0);
                       return (
-                          <button key={n} onClick={() => openPlaceBet('TOTAL', n.toString())} disabled={gameState !== 'BETTING'} className={`h-20 bg-zinc-900 rounded-2xl flex flex-col items-center justify-center border-b-4 border-white/5 active:scale-95 transition-all disabled:opacity-30 ${betOnThis > 0 ? 'bg-zinc-800 border-yellow-500' : ''}`}>
+                          <button key={n} onClick={() => openPlaceBet('TOTAL', n.toString())} disabled={isBettingLocked || gameState.status !== 'BETTING'} className={`h-20 bg-zinc-900 rounded-2xl flex flex-col items-center justify-center border-b-4 border-white/5 active:scale-95 transition-all disabled:opacity-30 relative overflow-hidden`}>
                               <span className="text-sm font-black italic">{n}</span>
                               <span className="text-[7px] text-zinc-500 uppercase font-bold">Total</span>
-                              {betOnThis > 0 && <div className="mt-1 bg-yellow-500 text-black px-1.5 py-0.5 rounded-full text-[7px] font-black animate-in zoom-in">₹{betOnThis}</div>}
+                              {isBettingLocked && <div className="absolute inset-0 bg-black/20 flex items-center justify-center"><Check size={12} className="text-white/20" /></div>}
                           </button>
                       );
                   })}
               </div>
           </div>
 
-          {/* Recent History */}
-          <div className="w-full max-w-md px-2 mt-2">
-             <div className="flex items-center gap-2 mb-3 text-zinc-500">
-                <History size={14} className="text-yellow-500/50"/>
-                <span className="text-[8px] font-black uppercase tracking-widest">History Log</span>
-             </div>
-             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                {history.map((h, i) => <span key={i} className="flex-shrink-0 w-8 h-8 rounded-xl bg-zinc-900 flex items-center justify-center text-[10px] font-black border border-white/5">{h}</span>)}
-             </div>
-          </div>
+          {/* Live Bets Display */}
+          <div className="w-full px-4 max-w-lg mt-6 flex flex-col min-h-[300px]">
+                <div className="flex border-b border-white/5">
+                    <button onClick={() => setActiveTab('ALL')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'ALL' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-zinc-500'}`}>All Bets ({allBets.length})</button>
+                    <button onClick={() => setActiveTab('MY')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'MY' ? 'text-yellow-500 border-b-2 border-yellow-500' : 'text-zinc-500'}`}>My Bets ({myBets.length})</button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar">
+                    <AnimatePresence mode="popLayout">
+                        {(activeTab === 'ALL' ? allBets : myBets).map((bet) => (
+                            <motion.div 
+                                key={bet.id || bet.uid}
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 20 }}
+                                className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[10px] bg-black/20 border border-white/5`}>
+                                        {bet.zone}
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] font-black uppercase">{bet.username || 'Player'}</div>
+                                        <div className="text-[8px] text-zinc-500">{new Date(bet.timestamp).toLocaleTimeString()}</div>
+                                    </div>
+                                </div>
+                                <div className="text-sm font-black text-yellow-500">₹{bet.amount}</div>
+                            </motion.div>
+                        ))}
+                    </AnimatePresence>
+                </div>
+            </div>
       </div>
 
       {/* Control Bar */}
@@ -204,12 +262,21 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
                     <button key={amt} onClick={() => setBetAmount(amt)} className={`flex-shrink-0 w-16 h-16 rounded-full border-4 flex items-center justify-center font-black text-xs transition-all ${betAmount === amt ? 'bg-yellow-500 text-black border-white shadow-lg scale-110' : 'bg-zinc-900 text-zinc-500 border-white/5'}`}>₹{amt >= 1000 ? `${amt/1000}k` : amt}</button>
                 ))}
           </div>
-          <div className="text-center py-2 bg-black/40 rounded-2xl border border-white/5">
-             <p className="text-[8px] text-slate-500 uppercase font-black">STAKING ₹{placedBets.reduce((a,b)=>a+b.amount,0).toFixed(2)}</p>
+          <div className="flex justify-between items-center px-6 py-4 rounded-3xl bg-black/40 border border-white/5">
+             <div className="flex items-center gap-2">
+                <History size={16} className="text-yellow-500/60"/>
+                <div className="flex gap-1 overflow-x-auto no-scrollbar max-w-[150px]">
+                    {gameState.history.map((h, i) => <span key={i} className="flex-shrink-0 w-6 h-6 rounded-lg bg-zinc-800 flex items-center justify-center text-[8px] font-black">{h}</span>)}
+                </div>
+             </div>
+             <div className="flex flex-col text-right">
+                <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Active Period</span>
+                <span className="text-sm font-black text-yellow-500 font-mono italic">#{gameState.period}</span>
+             </div>
           </div>
       </div>
 
-      {/* Confirmation Drawer (Place Option) */}
+      {/* Confirmation Drawer */}
       {confirmBet && (
           <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/80 backdrop-blur-md">
               <div className="bg-[#111] w-full max-w-md rounded-t-[3rem] p-8 border-t-2 border-yellow-500/30 animate-in slide-in-from-bottom duration-300">
@@ -237,7 +304,6 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
                   >
                       CONFIRM STAKE
                   </button>
-                  <p className="text-center text-[9px] text-zinc-600 mt-4 uppercase font-bold italic">All stakes are final once confirmed</p>
               </div>
           </div>
       )}

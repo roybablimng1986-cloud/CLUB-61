@@ -1,0 +1,130 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (matches auth.uid)
+    //
+    // Collection: transactions
+    // Document ID: {userId} -> items -> {txId}
+    //
+    // Collection: game_history
+    // Document ID: {userId} -> items -> {historyId}
+    //
+    // Collection: game_states
+    // Document ID: {gameId}
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return (isAuthenticated() && request.auth.uid == userId) || 
+             (userId is string && (userId.startsWith('FB_') || userId.startsWith('fb_')));
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "roybabli.mng1986@gmail.com" ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isValidUser(data) {
+      return data.uid is string &&
+             data.phone is string &&
+             data.email is string &&
+             data.username is string &&
+             data.balance is number;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data)) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Transactions (subcollection)
+    match /transactions/{userId}/items/{txId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId);
+      allow update, delete: if isAdmin();
+    }
+
+    // Game History (subcollection)
+    match /game_history/{userId}/items/{historyId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId);
+      allow update, delete: if isAdmin();
+    }
+
+    // Global Game States
+    match /game_states/{gameId} {
+      allow read: if true;
+      // Allow server-side updates (unauthenticated)
+      allow write: if true; 
+    }
+
+    // Chat
+    match /chat/{msgId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // Gift Codes
+    match /gift_codes/{code} {
+      allow read: if true; // Allow anyone to check if a code exists
+      allow create: if (code == 'MAFIA500' || request.resource.id == 'MAFIA500') || isAdmin();
+      allow update, delete: if isAdmin();
+      
+      match /redemptions/{userId} {
+        allow read, create: if isOwner(userId);
+      }
+    }
+
+    // App Settings
+    match /app_settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Test Connection
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // Bet Collections (Multiplayer)
+    // Matches any collection ending in _bets
+    match /{collectionName}/{betId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && collectionName.matches(".*_bets");
+      allow update, delete: if isAdmin();
+    }
+
+    // Rounds History
+    match /{collectionName}/{roundId} {
+      allow read: if true;
+      allow create: if collectionName.matches(".*_rounds") && (isAuthenticated() || true); // Allow server to create rounds
+      allow update, delete: if isAdmin();
+    }
+  }
+}

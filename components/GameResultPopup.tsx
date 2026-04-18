@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { GameResult } from '../types';
 import { X, Trophy, Frown, Sparkles, Star, Rocket, Bomb, Target, Skull, Zap } from 'lucide-react';
+import { playSound } from '../services/supabaseService';
 
 const Overlay: React.FC<{ children: React.ReactNode; visible: boolean }> = ({ children, visible }) => (
     <div className={`fixed inset-0 z-[100] flex items-center justify-center pointer-events-none ${visible ? 'opacity-100' : 'opacity-0'} transition-opacity duration-300`}>
@@ -16,6 +17,8 @@ const GameResultPopup: React.FC<{ result: GameResult | null; onClose: () => void
     useEffect(() => { 
         if (result) { 
             setVisible(true); 
+            if (result.win) playSound('win');
+            else playSound('loss');
             const t = setTimeout(handleClose, 2000); 
             return () => clearTimeout(t); 
         } 

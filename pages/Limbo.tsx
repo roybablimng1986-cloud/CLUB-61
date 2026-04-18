@@ -1,8 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, Rocket, Zap, HelpCircle, X } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds } from '../services/mockFirebase';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
+import { collection, addDoc } from 'firebase/firestore';
+
+import LimboResultPopup from '../components/LimboResultPopup';
 
 const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
   const [betAmount, setBetAmount] = useState(10);
@@ -10,6 +13,7 @@ const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   const [gameState, setGameState] = useState<'IDLE' | 'RISING' | 'DONE'>('IDLE');
   const [resultMult, setResultMult] = useState(1.0);
   const [history, setHistory] = useState<number[]>([]);
+  const [lbResult, setLbResult] = useState<any | null>(null);
   const [showRules, setShowRules] = useState(false);
 
   const isMounted = useRef(true);
@@ -29,15 +33,29 @@ const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
       setTargetMult(num);
   };
 
-  const startRound = () => {
+  const startRound = async () => {
     if (gameState === 'RISING' || userBalance < betAmount) return;
     
     // Ensure final target is valid before starting
     const finalTarget = Math.max(1.1, targetMult || 1.1);
     if (targetMult < 1.1) setTargetMult(1.1);
 
+    // Record bet in Firestore
+    if (auth.currentUser) {
+        try {
+            await addDoc(collection(db, 'limbo_bets'), {
+                uid: auth.currentUser.uid,
+                username: auth.currentUser.displayName || 'Player',
+                amount: betAmount,
+                target: finalTarget.toString(),
+                timestamp: Date.now()
+            });
+        } catch (e) {}
+    }
+
     updateBalance(-betAmount, 'BET', 'Limbo Stake');
-    playSound('click');
+    playSound('bet_place');
+    setLbResult(null);
     setGameState('RISING');
 
     // Provably fair generation (simulated)
@@ -64,15 +82,18 @@ const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
     const isWin = outcome >= target;
     const winAmt = isWin ? betAmount * target : 0;
     
+    setLbResult({
+        win: isWin,
+        amount: isWin ? winAmt : betAmount,
+        multiplier: outcome,
+        target: target
+    });
+
     if (isWin) {
         updateBalance(winAmt, 'WIN', 'Limbo Win');
-        playSound('win');
-    } else {
-        playSound('loss');
     }
 
     setHistory(prev => [outcome, ...prev].slice(0, 10));
-    onResult({ win: isWin, amount: isWin ? winAmt : betAmount, game: 'Limbo' });
     addGameHistory('Limbo', betAmount, winAmt, `Target ${target}x | Got ${outcome.toFixed(2)}x`);
 
     setTimeout(() => {
@@ -82,6 +103,7 @@ const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
 
   return (
     <div className="bg-[#0f172a] min-h-screen flex flex-col font-sans text-white relative">
+      <LimboResultPopup result={lbResult} onClose={() => setLbResult(null)} />
       <div className="p-4 flex justify-between items-center bg-black/40 border-b border-white/5">
         <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={20}/></button>
         <h1 className="text-xl font-black gold-text italic tracking-widest">LIMBO ARENA</h1>

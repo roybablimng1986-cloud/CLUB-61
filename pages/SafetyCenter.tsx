@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Key, ShieldCheck, ChevronRight, LogOut, X, Smartphone, Laptop } from 'lucide-react';
 import { View, UserProfile } from '../types';
-import { setWithdrawalPassword } from '../services/mockFirebase';
+import { setWithdrawalPassword } from '../services/supabaseService';
 
 interface SafetyProps {
     setView: (view: View) => void;

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, View, Transaction, GameHistoryItem } from '../types';
 import { Settings, Copy, Wallet, ArrowUpRight, ArrowDownLeft, ChevronRight, Gamepad2, RefreshCw, X, History, Shield, Crown, CheckCircle2, Sparkles, ShieldAlert, Zap, Gift } from 'lucide-react';
-import { logout, getGameHistory, getTransactionHistory, claimRebate, playSound } from '../services/mockFirebase';
+import { logout, getGameHistory, getTransactionHistory, claimRebate, playSound } from '../services/supabaseService';
 import AiSupportChat from '../components/AiSupportChat';
 
 interface ProfileProps {
