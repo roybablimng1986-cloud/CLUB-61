@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, History, Volume2, VolumeX, Trash2, Coins } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, db, auth } from '../services/supabaseService';
+import { ArrowLeft, Wallet, History, Volume2, VolumeX, Trash2, Coins, HelpCircle } from 'lucide-react';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
 import HeadTailsResultPopup from '../components/HeadTailsResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 interface Props {
   onBack: () => void;
@@ -21,6 +22,7 @@ const HeadTails: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [muted, setMuted] = useState(getMuteStatus());
   const [rotation, setRotation] = useState({ x: 0, y: 0 });
   const [htResult, setHtResult] = useState<any | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const isMounted = useRef(true);
 
@@ -42,12 +44,9 @@ const HeadTails: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     // Record bet in Firestore
     if (auth.currentUser) {
         try {
-            await addDoc(collection(db, 'head_tails_bets'), {
-                uid: auth.currentUser.uid,
-                username: auth.currentUser.displayName || 'Player',
+            await addGameBet('head_tails_bets', {
                 amount: betAmount,
-                target: selectedSide,
-                timestamp: Date.now()
+                target: selectedSide
             });
         } catch (e) {}
     }
@@ -102,18 +101,37 @@ const HeadTails: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   return (
     <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white relative overflow-hidden select-none">
       <HeadTailsResultPopup result={htResult} onClose={() => setHtResult(null)} />
+      <HowToPlay 
+          isOpen={showHelp} 
+          onClose={() => setShowHelp(false)} 
+          title="Head & Tails Rules"
+          rules={[
+              "Choose either HEADS or TAILS.",
+              "The coin is flipped in 3D space using Elite physics simulation.",
+              "A correct prediction pays 1.98x your stake.",
+              "History bar at the top shows recent landings."
+          ]}
+          payouts={[
+              { label: "Predict Correct", value: "1.98x" }
+          ]}
+      />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,_rgba(59,130,246,0.05)_0%,_transparent_60%)] pointer-events-none"></div>
 
       {/* Header */}
       <div className="p-4 flex justify-between items-center bg-[#111827]/90 backdrop-blur-xl border-b border-white/5 shadow-2xl relative z-50">
-        <button onClick={onBack} className="p-2.5 bg-slate-800/80 rounded-2xl border border-white/10 active:scale-90 transition-all"><ArrowLeft size={20}/></button>
-        <div className="text-center">
-            <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">HEAD & TAILS</h1>
-            <p className="text-[8px] text-slate-500 font-bold uppercase tracking-[0.2em]">Binary Fortune Arena</p>
+        <div className="flex items-center gap-3">
+            <button onClick={onBack} className="p-2.5 bg-slate-800/80 rounded-2xl border border-white/10 active:scale-90 transition-all"><ArrowLeft size={20}/></button>
+            <div className="flex flex-col">
+                <h1 className="text-sm font-black gold-text italic tracking-widest uppercase leading-none">HEAD & TAILS</h1>
+                <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">Binary Wallet</span>
+            </div>
         </div>
-        <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner">
-          <Wallet size={14} className="text-yellow-500" />
-          <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
+        <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner">
+                <Wallet size={14} className="text-yellow-500" />
+                <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
+            </div>
+            <button onClick={() => setShowHelp(true)} className="p-2 bg-yellow-500/10 text-yellow-500 rounded-xl border border-yellow-500/20 active:scale-90 transition-all"><HelpCircle className="w-5 h-5"/></button>
         </div>
       </div>
 

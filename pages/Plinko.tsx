@@ -16,6 +16,7 @@ const ROWS = 9; const PIN_RADIUS = 5; const BALL_RADIUS = 8;
 const CANVAS_WIDTH = 380; const CANVAS_HEIGHT = 540;
 
 import PlinkoResultPopup from '../components/PlinkoResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
   const [betAmount, setBetAmount] = useState(10);
@@ -139,6 +140,23 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
   return (
     <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white relative overflow-hidden">
       <PlinkoResultPopup result={plResult} onClose={() => setPlResult(null)} />
+      <HowToPlay 
+          isOpen={showRules} 
+          onClose={() => setShowRules(false)} 
+          title="Plinko Rules"
+          rules={[
+              "Choose your stake and drop the ball from the top.",
+              "The ball will bounce off pins until it lands in a multiplier slot.",
+              "Multipliers on the edges have higher values (up to 10x).",
+              "Multipliers in the center have lower values (as low as 0.2x).",
+              "Your win is calculated as stake × multiplier."
+          ]}
+          payouts={[
+              { label: "Center Slots", value: "0.2x - 1x" },
+              { label: "Mid Slots", value: "2x - 5x" },
+              { label: "Edge Slots", value: "10x" }
+          ]}
+      />
       {floatingResults.map(res => (
           <div key={res.id} className="fixed top-[40%] left-1/2 -translate-x-1/2 z-[100] w-full px-10 pointer-events-none animate-in fade-in zoom-in duration-300">
                <div className={`py-4 px-8 rounded-full border-4 shadow-2xl flex items-center justify-center gap-6 backdrop-blur-xl ${res.mult >= 1 ? 'bg-green-600/90 border-green-400' : 'bg-red-600/90 border-red-400'}`}>
@@ -149,14 +167,19 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
           </div>
       ))}
       <div className="p-4 flex justify-between items-center bg-[#111827]/95 backdrop-blur-xl border-b border-white/5 z-50">
-        <button onClick={onBack} className="p-2.5 bg-slate-800 rounded-2xl active:scale-90"><ArrowLeft size={20}/></button>
-        <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">PLINKO</h1>
-        <div className="flex gap-2">
-            <button onClick={() => setShowRules(true)} className="p-2.5 bg-slate-800 rounded-xl active:scale-90"><HelpCircle size={20}/></button>
-            <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20">
+        <div className="flex items-center gap-3">
+            <button onClick={onBack} className="p-2.5 bg-slate-800 rounded-2xl active:scale-90 transition-all"><ArrowLeft size={20}/></button>
+            <div className="flex flex-col">
+                <h1 className="text-sm font-black gold-text italic tracking-widest uppercase leading-none">PLINKO</h1>
+                <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">Arcade Wallet</span>
+            </div>
+        </div>
+        <div className="flex items-center gap-2">
+            <div className="bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner flex items-center gap-2">
               <Wallet size={14} className="text-yellow-500" />
               <span className="text-sm font-black text-yellow-500">₹{userBalance.toFixed(2)}</span>
             </div>
+            <button onClick={() => setShowRules(true)} className="p-2.5 bg-yellow-500/10 text-yellow-500 rounded-2xl border border-yellow-500/20 active:scale-90 transition-all"><HelpCircle size={20}/></button>
         </div>
       </div>
       <div className="flex-1 flex flex-col items-center justify-center p-4 relative">

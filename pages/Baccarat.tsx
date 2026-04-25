@@ -2,11 +2,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, History, HelpCircle, X, AlertCircle, Users, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, subscribeToBaccarat, subscribeToBaccaratBets, getClockOffset } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, subscribeToBaccarat, subscribeToBaccaratBets, getClockOffset, addGameBet } from '../services/supabaseService';
 import { GameResult, BaccaratState } from '../types';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp, where, addDoc } from 'firebase/firestore';
 
 import BaccaratResultPopup from '../components/BaccaratResultPopup';
+import HowToPlay from '../components/HowToPlay';
+import { useStabilizedTimer } from '../hooks/useTimer';
 
 type Card = { rank: string; suit: string; value: number; id: string };
 const SUITS = ['♠', '♣', '♥', '♦'];
@@ -30,14 +32,18 @@ const Baccarat: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
     const [selectedBet, setSelectedBet] = useState<'PLAYER' | 'BANKER' | 'TIE' | null>(null);
     const [myBets, setMyBets] = useState<any[]>([]);
     const [allBets, setAllBets] = useState<any[]>([]);
+    const allBetsRef = useRef<any[]>([]);
+    useEffect(() => { allBetsRef.current = allBets; }, [allBets]);
+
+    const timeLeft = useStabilizedTimer(gameState?.endTime);
+
     const [activeTab, setActiveTab] = useState<'ALL' | 'MY'>('ALL');
     const [isBettingLocked, setIsBettingLocked] = useState(false);
     const [playerHand, setPlayerHand] = useState<Card[]>([]);
     const [bankerHand, setBankerHand] = useState<Card[]>([]);
     const [dealing, setDealing] = useState(false);
     const [bcResult, setBcResult] = useState<any | null>(null);
-    
-    const [timeLeft, setTimeLeft] = useState(0);
+    const [showHelp, setShowHelp] = useState(false);
     
     const isMounted = useRef(true);
     const resultHandledRef = useRef<string | null>(null);
@@ -73,20 +79,6 @@ const Baccarat: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
 
         return () => { isMounted.current = false; unsubState(); unsubBets(); stopAllSounds(); };
     }, []);
-
-    useEffect(() => {
-        const timer = setInterval(() => {
-            if (gameState?.endTime) {
-                const remaining = Math.max(0, Math.floor((gameState.endTime - (Date.now() + getClockOffset())) / 1000));
-                setTimeLeft(remaining);
-                if (gameState.status === 'BETTING') {
-                    setIsBettingLocked(remaining <= 5);
-                    if (remaining <= 5 && remaining > 0) playSound('wingo_tick');
-                }
-            }
-        }, 1000);
-        return () => clearInterval(timer);
-    }, [gameState?.endTime, gameState?.status]);
 
     if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center font-black gold-text text-xl italic uppercase tracking-widest">Entering Arena...</div>;
 
@@ -131,7 +123,7 @@ const Baccarat: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
         }
 
         setDealing(false);
-        const myCurrentBets = allBets.filter(b => b.uid === auth.currentUser?.uid);
+        const myCurrentBets = allBetsRef.current.filter(b => b.uid === auth.currentUser?.uid);
         if (myCurrentBets.length > 0) {
             processMyResult(state, myCurrentBets);
         }
@@ -203,19 +195,44 @@ const Baccarat: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
     return (
         <div className="bg-[#051c14] min-h-screen flex flex-col font-sans text-white select-none overflow-x-hidden relative">
             <BaccaratResultPopup result={bcResult} onClose={() => setBcResult(null)} />
+            <HowToPlay 
+                isOpen={showHelp} 
+                onClose={() => setShowHelp(false)} 
+                title="Baccarat Elite Rules"
+                rules={[
+                    "Predict which hand will be closer to a total of 9: Player or Banker.",
+                    "Winning on Player pays 2.0x, Banker pays 1.95x (after commission), Tie pays 9.0x.",
+                    "Cards 2-9 are worth face value. Face cards and 10s are 0. Aces are 1.",
+                    "If the sum is 10 or more, the last digit is the score (e.g., 15 becomes 5).",
+                    "A result of 8 or 9 is a 'Natural' and usually ends the round."
+                ]}
+                payouts={[
+                    { label: "Tie Bet", value: "9x" },
+                    { label: "Player / Banker", value: "2x" }
+                ]}
+            />
             {/* Header */}
             <div className="p-4 flex justify-between bg-black/40 border-b border-white/5 shadow-lg items-center z-50">
-                <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={18}/></button>
-                <h1 className="text-sm font-black italic gold-text uppercase tracking-widest">BACCARAT ELITE</h1>
-                <div className="bg-black/50 px-3 py-2 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono shadow-inner flex items-center gap-2">
-                    <Wallet size={14} />
-                    <span>₹{userBalance.toFixed(2)}</span>
+                <div className="flex items-center gap-3">
+                    <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={18}/></button>
+                    <div className="flex flex-col">
+                        <h1 className="text-xs font-black gold-text uppercase tracking-widest leading-none">BACCARAT ELITE</h1>
+                        <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">VIP Wallet</span>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="bg-black/50 px-3 py-2 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono shadow-inner flex items-center gap-2">
+                        <Wallet size={14} />
+                        <span className="font-black">₹{userBalance.toFixed(2)}</span>
+                    </div>
+                    <button onClick={() => setShowHelp(true)} className="p-2 bg-yellow-500/10 text-yellow-500 rounded-xl border border-yellow-500/20 active:scale-90"><HelpCircle size={18}/></button>
                 </div>
             </div>
 
             {/* Game Content */}
             <div className="flex-1 flex flex-col items-center p-4 relative bg-[url('https://www.transparenttextures.com/patterns/felt.png')] overflow-y-auto no-scrollbar pb-80">
                 
+
                 {/* History (Top) */}
                 <div className="w-full mb-4">
                     <div className="flex gap-1 overflow-x-auto no-scrollbar py-2">

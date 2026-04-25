@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, Volume2, VolumeX, History, Trophy, RotateCw } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute } from '../services/supabaseService';
+import { ArrowLeft, Wallet, Volume2, VolumeX, History, Trophy, RotateCw, HelpCircle } from 'lucide-react';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, shouldForceLoss } from '../services/supabaseService';
 import { GameResult } from '../types';
 
 import LuckyWheelResultPopup from '../components/LuckyWheelResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 interface Props {
   onBack: () => void;
@@ -13,14 +14,14 @@ interface Props {
 }
 
 const SEGMENTS = [
-  { label: '10X', val: 10, color: '#ef4444' },
-  { label: '2X', val: 2, color: '#3b82f6' },
-  { label: '5X', val: 5, color: '#10b981' },
+  { label: '1.2X', val: 1.2, color: '#ef4444' },
+  { label: '0X', val: 0, color: '#3b82f6' },
+  { label: '2X', val: 2, color: '#10b981' },
   { label: '0.5X', val: 0.5, color: '#6366f1' },
-  { label: '20X', val: 20, color: '#f59e0b' },
-  { label: '1.5X', val: 1.5, color: '#ec4899' },
-  { label: 'JACKPOT', val: 50, color: '#8b5cf6' },
-  { label: '0.1X', val: 0.1, color: '#64748b' },
+  { label: '1.5X', val: 1.5, color: '#f59e0b' },
+  { label: '0X', val: 0, color: '#ec4899' },
+  { label: 'JACKPOT', val: 10, color: '#8b5cf6' },
+  { label: '0.5X', val: 0.5, color: '#64748b' },
 ];
 
 const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
@@ -30,6 +31,7 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [history, setHistory] = useState<string[]>(['10X', '2X', '5X', '0.5X']);
   const [muted, setMuted] = useState(getMuteStatus());
   const [lwResult, setLwResult] = useState<any | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   
   const isMounted = useRef(true);
 
@@ -51,12 +53,20 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     setIsSpinning(true);
     playSound('bet_place');
     setLwResult(null);
-    // Instant Deduction
     updateBalance(-betAmount, 'BET', 'Lucky Wheel Stake');
 
+    const forced = shouldForceLoss(betAmount, userBalance);
     const totalSegments = SEGMENTS.length;
     const segmentAngle = 360 / totalSegments;
-    const randomSegment = Math.floor(Math.random() * totalSegments);
+    
+    let randomSegment = Math.floor(Math.random() * totalSegments);
+    if (forced && SEGMENTS[randomSegment].val >= 1) {
+        // Force to a < 1X segment
+        const lossSegments = SEGMENTS.map((s, i) => s.val < 1 ? i : -1).filter(i => i !== -1);
+        if (lossSegments.length > 0) {
+            randomSegment = lossSegments[Math.floor(Math.random() * lossSegments.length)];
+        }
+    }
     
     // Calculate rotation: multiple full turns + offset to land on segment
     const extraTurns = 1800 + Math.random() * 1800;
@@ -70,12 +80,12 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
       setIsSpinning(false);
       const normalizedRotation = (targetRotation % 360);
       const landedIdx = Math.floor(((360 - (normalizedRotation % 360)) % 360) / segmentAngle);
-      const result = SEGMENTS[landedIdx];
+      const result = SEGMENTS[landedIdx % totalSegments];
 
       const winAmount = betAmount * result.val;
       setLwResult({
           win: result.val >= 1,
-          amount: result.val >= 1 ? winAmount : betAmount,
+          amount: winAmount > 0 ? winAmount : betAmount,
           multiplier: result.val,
           label: result.label
       });
@@ -92,18 +102,40 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   return (
     <div className="bg-[#0f0a1f] min-h-screen flex flex-col font-sans text-white relative overflow-hidden select-none">
       <LuckyWheelResultPopup result={lwResult} onClose={() => setLwResult(null)} />
+      <HowToPlay 
+          isOpen={showHelp} 
+          onClose={() => setShowHelp(false)} 
+          title="Lucky Spin Rules"
+          rules={[
+              "Place your bet and click SPIN NOW to start the wheel.",
+              "Wait for the wheel to stop! The segment at the top pointer is the winner.",
+              "Winning segments multiply your stake by the displayed value.",
+              "JACKPOT segments pay out the highest (10x).",
+              "Some segments result in 0x (loss of stake)."
+          ]}
+          payouts={[
+              { label: "JACKPOT", value: "10x" },
+              { label: "Standard Win", value: "2x" },
+              { label: "Partial Win", value: "0.5x" }
+          ]}
+      />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,_rgba(139,92,246,0.1)_0%,_transparent_70%)] pointer-events-none"></div>
 
       {/* Header */}
       <div className="p-4 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
-        <button onClick={onBack} className="p-2.5 bg-zinc-900 rounded-2xl active:scale-90 border border-white/5"><ArrowLeft size={20}/></button>
-        <div className="text-center">
-            <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">LUCKY SPIN</h1>
-            <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-[0.4em]">Premium Fortune Wheel</p>
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="p-2.5 bg-zinc-900 rounded-2xl active:scale-90 border border-white/5 transition-all"><ArrowLeft size={18}/></button>
+          <div className="flex flex-col text-left">
+              <h1 className="text-sm font-black italic gold-text tracking-widest uppercase leading-none">LUCKY SPIN</h1>
+              <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Fortune Wallet</p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 bg-zinc-900/80 px-4 py-2 rounded-2xl border border-yellow-500/20">
-          <Wallet size={14} className="text-yellow-500" />
-          <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
+        <div className="flex items-center gap-2">
+          <div className="bg-zinc-900/80 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner flex items-center gap-2">
+            <Wallet size={14} className="text-yellow-500" />
+            <span className="text-sm font-black font-mono text-yellow-500 italic">₹{userBalance.toFixed(2)}</span>
+          </div>
+          <button onClick={() => setShowHelp(true)} className="p-2.5 bg-yellow-500/10 text-yellow-500 rounded-2xl border border-yellow-500/20 active:scale-90 transition-all"><HelpCircle size={18}/></button>
         </div>
       </div>
 

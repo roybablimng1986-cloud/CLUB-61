@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, History, Volume2, VolumeX, ChevronUp, ChevronDown } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, db, auth } from '../services/supabaseService';
+import { ArrowLeft, Wallet, History, Volume2, VolumeX, ChevronUp, ChevronDown, HelpCircle } from 'lucide-react';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 import HiLoResultPopup from '../components/HiLoResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 interface Props {
   onBack: () => void;
@@ -36,6 +37,7 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [muted, setMuted] = useState(getMuteStatus());
   const [hlResult, setHlResult] = useState<any | null>(null);
   const [floatingText, setFloatingText] = useState<{ text: string; color: string; id: number } | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   
   const isMounted = useRef(true);
   const deckRef = useRef<Card[]>([]);
@@ -56,12 +58,9 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     // Record bet in Firestore
     if (auth.currentUser) {
         try {
-            await addDoc(collection(db, 'hilo_bets'), {
-                uid: auth.currentUser.uid,
-                username: auth.currentUser.displayName || 'Player',
+            await addGameBet('hilo_bets', {
                 amount: betAmount,
-                target: 'BET',
-                timestamp: Date.now()
+                target: 'BET'
             });
         } catch (e) {}
     }
@@ -156,16 +155,36 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   return (
     <div className="bg-[#0f172a] min-h-screen flex flex-col font-sans text-white select-none overflow-hidden relative">
       <HiLoResultPopup result={hlResult} onClose={() => setHlResult(null)} />
+      <HowToPlay 
+          isOpen={showHelp} 
+          onClose={() => setShowHelp(false)} 
+          title="Hi-Lo Rules"
+          rules={[
+              "Predict if the next card will be Higher or Lower than the current one.",
+              "Ace is the high/low flexible card depending on comparison.",
+              "Correct predictions increase your multiplier.",
+              "You can cash out at any time after the first correct guess.",
+              "If you guess wrong, you lose your stake."
+          ]}
+          payouts={[
+              { label: "Predict Correct", value: "Increases Multiplier" }
+          ]}
+      />
       {/* Header */}
       <div className="p-4 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
-        <button onClick={onBack} className="p-2.5 bg-slate-800 rounded-2xl active:scale-90"><ArrowLeft size={20}/></button>
-        <div className="text-center">
-            <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">HI-LO ROYALE</h1>
-            <p className="text-[7px] text-zinc-300 font-bold uppercase tracking-[0.4em]">Elite Prediction</p>
+        <div className="flex items-center gap-3">
+            <button onClick={onBack} className="p-2.5 bg-slate-800 rounded-2xl border border-white/10 active:scale-90 transition-all"><ArrowLeft size={20}/></button>
+            <div className="flex flex-col">
+                <h1 className="text-sm font-black gold-text italic tracking-widest uppercase leading-none">HI-LO ELITE</h1>
+                <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">Prediction Wallet</span>
+            </div>
         </div>
-        <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner">
-          <Wallet size={14} className="text-yellow-500" />
-          <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
+        <div className="flex items-center gap-2">
+            <div className="bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner flex items-center gap-2">
+                <Wallet size={14} className="text-yellow-500" />
+                <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
+            </div>
+            <button onClick={() => setShowHelp(true)} className="p-2.5 bg-yellow-500/10 text-yellow-500 rounded-2xl border border-yellow-500/20 active:scale-90 transition-all"><HelpCircle size={18}/></button>
         </div>
       </div>
 

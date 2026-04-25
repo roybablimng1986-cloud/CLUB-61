@@ -5,6 +5,7 @@ import { subscribeToWinGo, updateBalance, stopAllSounds, toggleMute, getMuteStat
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 import WinGoResultPopup from '../components/WinGoResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; setView: (v: any) => void; }> = ({ onBack, userBalance, onResult, setView }) => {
   const [gameState, setGameState] = useState<WinGoGameState | null>(null);
@@ -34,9 +35,15 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   const [muted, setMuted] = useState(getMuteStatus());
   const [showBalanceError, setShowBalanceError] = useState(false);
   const [pendingBets, setPendingBets] = useState<{target: string; amount: number; period: number}[]>([]);
+  const pendingBetsRef = useRef<{target: string; amount: number; period: number}[]>([]);
   const [myHistory, setMyHistory] = useState<GameHistoryItem[]>([]);
   const [allBets, setAllBets] = useState<any[]>([]);
-  
+  const [showHelp, setShowHelp] = useState(false);
+
+  useEffect(() => {
+    pendingBetsRef.current = pendingBets;
+  }, [pendingBets]);
+
   useEffect(() => {
     if (localTimeLeft <= 5 && localTimeLeft > 0 && gameState?.status === 'BETTING') {
         playSound('wingo_tick');
@@ -61,7 +68,6 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
     const unsubscribe = subscribeToWinGo((state) => {
         if (!isMounted.current) return;
         
-        // Pre-generate fake history if empty to ensure table is always populated
         let finalState = { ...state };
         if (!finalState.history || finalState.history.length === 0) {
             const fakeHistory: WinGoHistory[] = [];
@@ -82,8 +88,9 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
         if (finalState.status === 'REVEALING' && finalState.lastResult && resultHandledRef.current !== finalState.lastResult.period) {
             resultHandledRef.current = finalState.lastResult.period;
             playSound('wingo_draw');
-            const finishedPeriod = finalState.lastResult.period;
-            const currentRoundBets = pendingBets.filter(b => b.period?.toString() === finishedPeriod);
+            const finishedPeriod = finalState.lastResult.period.toString();
+            // Use ref to read current pending bets without re-subscribing
+            const currentRoundBets = pendingBetsRef.current.filter(b => b.period?.toString() === finishedPeriod);
             
             if (currentRoundBets.length > 0) {
                 let totalWin = 0; let totalBet = 0; let hasWin = false;
@@ -93,16 +100,13 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
                 currentRoundBets.forEach(bet => {
                     totalBet += bet.amount;
                     let betWin = false, mult = 0;
-                    const forcedLoss = shouldForceLoss(bet.amount, userBalance);
                     
-                    if (!forcedLoss) {
-                        if (bet.target === 'Green' && [1,3,5,7,9].includes(num)) { betWin = true; mult = num===5?1.5:2; }
-                        else if (bet.target === 'Red' && [0,2,4,6,8].includes(num)) { betWin = true; mult = num===0?1.5:2; }
-                        else if (bet.target === 'Violet' && [0,5].includes(num)) { betWin = true; mult = 4.5; }
-                        else if (bet.target === 'Big' && bS === 'Big') { betWin = true; mult = 2; }
-                        else if (bet.target === 'Small' && bS === 'Small') { betWin = true; mult = 2; }
-                        else if (bet.target === num.toString()) { betWin = true; mult = 9; }
-                    }
+                    if (bet.target === 'Green' && [1,3,5,7,9].includes(num)) { betWin = true; mult = num===5?1.5:2; }
+                    else if (bet.target === 'Red' && [0,2,4,6,8].includes(num)) { betWin = true; mult = num===0?1.5:2; }
+                    else if (bet.target === 'Violet' && [0,5].includes(num)) { betWin = true; mult = 4.5; }
+                    else if (bet.target === 'Big' && bS === 'Big') { betWin = true; mult = 2; }
+                    else if (bet.target === 'Small' && bS === 'Small') { betWin = true; mult = 2; }
+                    else if (bet.target === num.toString()) { betWin = true; mult = 9; }
 
                     if (betWin) { hasWin = true; totalWin += bet.amount * mult; }
                     addGameHistory('WinGo', bet.amount, betWin ? bet.amount * mult : 0, `P:${finishedPeriod} | Target:${bet.target} | Result:${num}`);
@@ -125,7 +129,7 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
         }
     });
     return () => unsubscribe();
-  }, [pendingBets, userBalance]);
+  }, []); // Dependencies omitted, uses refs
 
   const confirmBet = async () => {
       const total = betMoney * betMultiplier;
@@ -159,6 +163,24 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   return (
     <div className="bg-[#0f172a] min-h-screen pb-24 relative font-sans select-none overflow-x-hidden">
       <WinGoResultPopup result={winGoResult} onClose={() => setWinGoResult(null)} />
+      <HowToPlay 
+          isOpen={showHelp} 
+          onClose={() => setShowHelp(false)} 
+          title="WinGo Rules"
+          rules={[
+              "Predict the number (0-9), size (Big/Small), or color (Red/Green/Violet).",
+              "Green: 1, 3, 7, 9. Red: 2, 4, 6, 8. Violet: 0, 5.",
+              "Small: 0-4. Big: 5-9.",
+              "Bets are locked when the timer reaches 5 seconds.",
+              "Calculated based on standard lottery rules."
+          ]}
+          payouts={[
+              { label: "Number (0-9)", value: "9.0x" },
+              { label: "Big / Small", value: "2.0x" },
+              { label: "Color (R/G)", value: "2.0x" },
+              { label: "Violet (0/5)", value: "4.5x" }
+          ]}
+      />
       {/* Insufficient Balance Popup */}
       {showBalanceError && (
           <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] bg-red-600 px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border border-red-400 animate-in slide-in-from-top-4">
@@ -172,9 +194,14 @@ const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
             <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl"><ArrowLeft size={20} /></button>
             <h1 className="text-lg font-black italic gold-text uppercase">WINGO 30S</h1>
         </div>
-        <button onClick={()=>{setMuted(toggleMute())}} className="p-2 bg-slate-800 rounded-xl">
-            {muted?<VolumeX size={20} className="text-slate-400"/>:<Volume2 size={20} className="text-slate-400"/>}
-        </button>
+        <div className="flex gap-2">
+            <button onClick={() => setShowHelp(true)} className="p-2 bg-slate-800 rounded-xl text-yellow-500">
+                <HelpCircle size={20} />
+            </button>
+            <button onClick={()=>{setMuted(toggleMute())}} className="p-2 bg-slate-800 rounded-xl">
+                {muted?<VolumeX size={20} className="text-slate-400"/>:<Volume2 size={20} className="text-slate-400"/>}
+            </button>
+        </div>
       </div>
 
       <div className="bg-[#1e293b] m-4 p-5 rounded-[2rem] flex justify-between items-center shadow-xl border border-white/5">

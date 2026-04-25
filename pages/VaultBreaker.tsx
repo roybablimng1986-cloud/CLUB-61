@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, Lock, Unlock, ShieldCheck, X, HelpCircle } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
 import VaultBreakerResultPopup from '../components/VaultBreakerResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 const VaultBreaker: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
   const [bet, setBet] = useState(10);
@@ -28,12 +29,9 @@ const VaultBreaker: React.FC<{ onBack: () => void; userBalance: number; onResult
       // Record bet in Firestore
       if (auth.currentUser) {
           try {
-              await addDoc(collection(db, 'vault_breaker_bets'), {
-                  uid: auth.currentUser.uid,
-                  username: auth.currentUser.displayName || 'Player',
+              await addGameBet('vault_breaker_bets', {
                   amount: bet,
-                  target: 'BET',
-                  timestamp: Date.now()
+                  target: 'BET'
               });
           } catch (e) {}
       }
@@ -91,14 +89,36 @@ const VaultBreaker: React.FC<{ onBack: () => void; userBalance: number; onResult
   return (
     <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white select-none">
         <VaultBreakerResultPopup result={vbResult} onClose={() => setVbResult(null)} />
+        <HowToPlay 
+            isOpen={showRules} 
+            onClose={() => setShowRules(false)} 
+            title="Vault Breaker Rules"
+            rules={[
+                "Your goal is to crack a secret combination of 4 numbers (1-4).",
+                "There are 3 security tiers to bypass.",
+                "Correctly guess the sequence for the current level to advance.",
+                "If you guess a number correctly, you move to the next digit.",
+                "If you guess wrong at any point, the alarm sounds and you lose.",
+                "Success through all 3 tiers grants a 5x payout."
+            ]}
+            payouts={[
+                { label: "Crack the Vault", value: "5x" }
+            ]}
+        />
         <div className="p-4 flex justify-between items-center bg-black/40 border-b border-blue-500/20 sticky top-0 z-50">
             <div className="flex items-center gap-3">
-                <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={18}/></button>
-                <h1 className="text-xl font-black italic gold-text">VAULT BREAKER</h1>
+                <button onClick={onBack} className="p-2.5 bg-slate-800 rounded-2xl active:scale-90 transition-all"><ArrowLeft size={18}/></button>
+                <div className="flex flex-col">
+                    <h1 className="text-sm font-black gold-text italic leading-none">VAULT BREAKER</h1>
+                    <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">Heist Wallet</span>
+                </div>
             </div>
-            <div className="flex gap-2">
-                <button onClick={() => setShowRules(true)} className="p-2 bg-slate-800 rounded-xl active:scale-90"><HelpCircle size={18}/></button>
-                <div className="text-blue-400 font-mono text-sm bg-black/40 px-3 py-1.5 rounded-xl border border-blue-500/20">₹{userBalance.toFixed(2)}</div>
+            <div className="flex items-center gap-2">
+                <div className="text-yellow-500 font-mono text-sm bg-black/40 px-3 py-1.5 rounded-2xl border border-yellow-500/20 shadow-inner flex items-center gap-2">
+                    <Wallet size={14} className="text-yellow-500" />
+                    <span className="font-black">₹{userBalance.toFixed(2)}</span>
+                </div>
+                <button onClick={() => setShowRules(true)} className="p-2.5 bg-yellow-500/10 text-yellow-500 rounded-2xl border border-yellow-500/20 active:scale-90 transition-all"><HelpCircle size={18}/></button>
             </div>
         </div>
 

@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { UserProfile, GiftCode, AppSettings, Transaction } from '../types';
-import { getAllUsers, adminUpdateUserBalance, adminBlockUser, adminDeleteUser, adminGetSettings, adminUpdateSettings, adminCreateGiftCode, adminGetAllGiftCodes, getAllPendingTransactions, approveTransaction, rejectTransaction } from '../services/supabaseService';
+import { getAllUsers, adminUpdateUserBalance, adminBlockUser, adminDeleteUser, adminGetSettings, adminUpdateSettings, adminCreateGiftCode, adminGetAllGiftCodes, getAllPendingTransactions, approveTransaction, rejectTransaction, db } from '../services/supabaseService';
+import { onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { ArrowLeft, Users, Gamepad2, Gift, ShieldCheck, Wallet, Trash2, Ban, Search, CheckCircle2, X, Plus, Power, CreditCard, Clock, CheckCircle } from 'lucide-react';
 
 const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -15,14 +16,28 @@ const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [showGiftModal, setShowGiftModal] = useState(false);
     const [newGift, setNewGift] = useState({ code: '', amount: 100, limit: 10, minVip: 0 });
 
+    const adminGetResultControl = (cb: (data: any) => void) => {
+        return onSnapshot(doc(db, 'admin_control', 'game_results'), (s) => {
+            cb(s.data() || {});
+        });
+    };
+
+    const adminSetNextResult = async (gameId: string, result: any) => {
+        const ref = doc(db, 'admin_control', 'game_results');
+        await setDoc(ref, { [gameId]: result }, { merge: true });
+    };
+
+    const [adminResults, setAdminResults] = useState<any>({});
+
     useEffect(() => {
         setLoading(true);
         getAllUsers(setUsers);
         adminGetAllGiftCodes(setGiftCodes);
         getAllPendingTransactions(setPendingRequests);
-        const unsub = adminGetSettings(setSettings);
+        const unsubSettings = adminGetSettings(setSettings);
+        const unsubResults = adminGetResultControl(setAdminResults);
         setLoading(false);
-        return unsub;
+        return () => { unsubSettings(); unsubResults(); };
     }, []);
 
     const handleMoneyAction = async (uid: string, amount: number, isGift: boolean) => {
@@ -48,10 +63,8 @@ const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         { id: 'GAME_AVIATOR', name: 'Aviator' },
         { id: 'GAME_MINES', name: 'Mines' }, 
         { id: 'GAME_7UP_DOWN', name: '7 Up Down' },
-        { id: 'GAME_CAR_ROULETTE', name: 'Car Roulette' },
         { id: 'GAME_JHANDI_MUNDA', name: 'Jhandi Munda' },
         { id: 'GAME_SPACE_RAID', name: 'Space Raid' },
-        { id: 'GAME_DOG', name: 'Dog Road' },
         { id: 'GAME_BURST', name: 'Cyber Burst' },
         { id: 'GAME_DRAGON_TIGER', name: 'Dragon Tiger' },
         { id: 'GAME_ROULETTE', name: 'Roulette' },
@@ -152,13 +165,34 @@ const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 )}
 
                 {activeTab === 'GAMES' && (
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-6">
                         {GAMES_LIST.map(game => (
-                            <div key={game.id} className="bg-[#111827] p-6 rounded-3xl border border-white/5 flex items-center justify-between shadow-xl">
-                                <h4 className="font-black text-sm uppercase italic gold-text tracking-widest">{game.name}</h4>
-                                <button onClick={() => toggleGame(game.id)} className={`px-8 py-3 rounded-xl font-black text-[10px] uppercase transition-all shadow-lg ${settings?.disabledGames?.[game.id] ? 'bg-red-600 text-white' : 'bg-green-600 text-black'}`}>
-                                    {settings?.disabledGames?.[game.id] ? 'OFFLINE' : 'LIVE'}
-                                </button>
+                            <div key={game.id} className="bg-[#111827] p-6 rounded-[2rem] border border-white/5 shadow-xl flex flex-col gap-6">
+                                <div className="flex items-center justify-between">
+                                    <h4 className="font-black text-sm uppercase italic gold-text tracking-widest">{game.name}</h4>
+                                    <button onClick={() => toggleGame(game.id)} className={`px-6 py-2 rounded-xl font-black text-[9px] uppercase transition-all shadow-lg ${settings?.disabledGames?.[game.id] ? 'bg-red-600 text-white' : 'bg-green-600 text-black'}`}>
+                                        {settings?.disabledGames?.[game.id] ? 'OFFLINE' : 'LIVE'}
+                                    </button>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Force Next Result</p>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {game.id === 'GAME_WINGO' && ['0','1','2','3','4','5','6','7','8','9','Big','Small'].map(r => (
+                                            <button key={r} onClick={() => adminSetNextResult('wingo', r)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${adminResults.wingo === r ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-white/5 border-white/10 text-white'}`}>{r}</button>
+                                        ))}
+                                        {game.id === 'GAME_7UP_DOWN' && ['Down', 'Seven', 'Up'].map(r => (
+                                            <button key={r} onClick={() => adminSetNextResult('seven_up_down', r)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${adminResults.seven_up_down === r ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-white/5 border-white/10 text-white'}`}>{r}</button>
+                                        ))}
+                                        {game.id === 'GAME_DRAGON_TIGER' && ['Dragon', 'Tiger', 'Tie'].map(r => (
+                                            <button key={r} onClick={() => adminSetNextResult('dragon_tiger', r)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${adminResults.dragon_tiger === r ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-white/5 border-white/10 text-white'}`}>{r}</button>
+                                        ))}
+                                        {game.id === 'GAME_AVIATOR' && [1.0, 1.1, 1.2, 1.5, 1.9].map(r => (
+                                            <button key={r} onClick={() => adminSetNextResult('aviator', r)} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${adminResults.aviator === r ? 'bg-yellow-500 text-black border-yellow-500' : 'bg-white/5 border-white/10 text-white'}`}>{r}x</button>
+                                        ))}
+                                    </div>
+                                    <button onClick={() => adminSetNextResult(game.id.replace('GAME_','').toLowerCase(), null)} className="text-[10px] text-red-500 font-bold uppercase underline">Clear Override</button>
+                                </div>
                             </div>
                         ))}
                     </div>

@@ -1,5 +1,5 @@
 
-export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_BURST' | 'GAME_VORTEX' | 'GAME_LUCKY_WHEEL' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS' | 'REWARDS_HUB' | 'GAME_DRAGON_TIGER' | 'GAME_ROULETTE' | 'GAME_SICBO' | 'GAME_BACCARAT' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'GAME_HEAD_TAILS' | 'GAME_LIMBO' | 'GAME_PLINKO' | 'GAME_HILO' | 'GAME_DRAGON_TOWER' | 'GAME_KENO' | 'GAME_DICE' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_MOTO_RACING' | 'LEADERBOARD' | 'GAME_DOG' | 'CHAT' | 'GAME_CRICKET' | 'GAME_TOWER' | 'GAME_SLOT_MACHINE' | 'GAME_ANDAR_BAHAR' | 'GAME_7UP_DOWN' | 'GAME_CAR_ROULETTE' | 'GAME_JHANDI_MUNDA' | 'GAME_SPACE_RAID' | 'GIFT_CODE' | 'GAME_CHICKEN_ROAD';
+export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_BURST' | 'GAME_VORTEX' | 'GAME_LUCKY_WHEEL' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS' | 'REWARDS_HUB' | 'GAME_DRAGON_TIGER' | 'GAME_ROULETTE' | 'GAME_SICBO' | 'GAME_BACCARAT' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'GAME_HEAD_TAILS' | 'GAME_LIMBO' | 'GAME_PLINKO' | 'GAME_HILO' | 'GAME_DRAGON_TOWER' | 'GAME_KENO' | 'GAME_DICE' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_MOTO_RACING' | 'LEADERBOARD' | 'CHAT' | 'GAME_CRICKET' | 'GAME_TOWER' | 'GAME_SLOT_MACHINE' | 'GAME_ANDAR_BAHAR' | 'GAME_7UP_DOWN' | 'GAME_JHANDI_MUNDA' | 'GAME_SPACE_RAID' | 'GIFT_CODE' | 'GAME_CHICKEN_ROAD';
 
 export interface UserProfile {
   uid: string;
@@ -155,15 +155,6 @@ export interface AndarBaharState {
     baharCards: any[];
     winner: 'ANDAR' | 'BAHAR' | 'TIE' | null;
     history: ('A' | 'B' | 'T')[];
-}
-
-export interface CarRouletteState {
-    status: 'BETTING' | 'LOCKED' | 'RESULT';
-    timeLeft: number;
-    endTime?: number;
-    period: string;
-    resultIdx: number | null;
-    history: string[];
 }
 
 export interface SpaceRaidState {

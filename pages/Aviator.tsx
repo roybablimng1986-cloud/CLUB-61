@@ -6,6 +6,7 @@ import { collection, addDoc } from 'firebase/firestore';
 import { GameResult, AviatorState } from '../types';
 
 import AviatorResultPopup from '../components/AviatorResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 import { useStabilizedTimer } from '../hooks/useTimer';
 
@@ -15,6 +16,7 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
   const localMultiplierRef = useRef(1.0);
   const localTimeLeft = useStabilizedTimer(globalState?.phase === 'WAITING' ? globalState.endTime : undefined);
   const [aviatorResult, setAviatorResult] = useState<any | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     if (!globalState) return;
@@ -43,8 +45,8 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
     }
   }, [globalState?.phase, globalState?.startTime, globalState?.multiplier]);
 
-  const [bet1, setBet1] = useState({ amount: 10, active: false, isAuto: false, autoValue: 2.0 });
-  const [bet2, setBet2] = useState({ amount: 10, active: false, isAuto: false, autoValue: 2.0 });
+  const [bet1, setBet1] = useState({ amount: 10, active: false, isAuto: false, autoValue: 2.0, queued: false });
+  const [bet2, setBet2] = useState({ amount: 10, active: false, isAuto: false, autoValue: 2.0, queued: false });
   const [muted, setMuted] = useState(getMuteStatus());
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef(0);
@@ -72,6 +74,12 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
         
         const b1 = bet1Ref.current;
         const b2 = bet2Ref.current;
+
+        if (state.phase === 'WAITING' && (lastPhaseRef.current === 'CRASHED' || lastPhaseRef.current === 'FLYING')) {
+            // Activate queued bets
+            if (b1.queued) setBet1(prev => ({ ...prev, queued: false, active: true }));
+            if (b2.queued) setBet2(prev => ({ ...prev, queued: false, active: true }));
+        }
 
         if (state.phase === 'CRASHED' && lastPhaseRef.current === 'FLYING') {
             playSound('plane_crash');
@@ -112,28 +120,8 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
       const bet = betNum === 1 ? bet1 : bet2;
       const setBet = betNum === 1 ? setBet1 : setBet2;
 
-      if (globalState.phase === 'WAITING' || globalState.phase === 'CRASHED') {
-          if (!bet.active) {
-              if (bet.amount > userBalance) return;
-              
-              try {
-                  await addGameBet('aviator_bets', {
-                      amount: bet.amount,
-                      target: 'BET'
-                  });
-                  
-                  setBet(prev => ({ ...prev, active: true }));
-                  updateBalance(-bet.amount, 'BET', 'Aviator Stake');
-                  playSound('click');
-              } catch (e) {
-                  console.error("Aviator bet error:", e);
-              }
-          } else {
-              // Cancel bet if still waiting
-              setBet(prev => ({ ...prev, active: false }));
-              updateBalance(bet.amount, 'WIN', 'Aviator Cancel');
-          }
-      } else if (globalState.phase === 'FLYING' && bet.active) {
+      if (bet.active && globalState.phase === 'FLYING') {
+          // CASH OUT
           const currentMult = localMultiplierRef.current;
           const win = bet.amount * currentMult;
           updateBalance(win, 'WIN', 'Aviator Payout');
@@ -141,6 +129,37 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
           playSound('cash_out');
           setAviatorResult({ win: true, amount: win, multiplier: currentMult, game: 'Aviator' });
           addGameHistory('Aviator', bet.amount, win, `Exited @ ${currentMult.toFixed(2)}x`);
+          return;
+      }
+
+      if (bet.active || bet.queued) {
+          // CANCEL
+          const refundAmount = bet.amount;
+          updateBalance(refundAmount, 'WIN', 'Aviator Refund');
+          setBet(prev => ({ ...prev, active: false, queued: false }));
+          playSound('click');
+          return;
+      }
+
+      // PLACE BET
+      if (bet.amount > userBalance) return;
+      
+      try {
+          await addGameBet('aviator_bets', {
+              amount: bet.amount,
+              target: 'BET'
+          });
+          
+          updateBalance(-bet.amount, 'BET', 'Aviator Stake');
+          playSound('click');
+          
+          if (globalState.phase === 'WAITING') {
+              setBet(prev => ({ ...prev, active: true }));
+          } else {
+              setBet(prev => ({ ...prev, queued: true }));
+          }
+      } catch (e) {
+          console.error("Aviator bet error:", e);
       }
   };
 
@@ -336,6 +355,18 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
   return (
     <div className="bg-[#141516] min-h-screen text-white flex flex-col font-sans select-none overflow-hidden">
         <AviatorResultPopup result={aviatorResult} onClose={() => setAviatorResult(null)} />
+        <HowToPlay 
+            isOpen={showHelp} 
+            onClose={() => setShowHelp(false)} 
+            title="Aviator Rules"
+            rules={[
+                "Place one or two bets before the round starts.",
+                "Watch the plane take off and the multiplier climb.",
+                "Cash out at any time to win your bet multiplied by the current value.",
+                "But beware: if the plane flies away before you cash out, you lose!",
+                "Auto-cashout can be set to automatically take profit at a certain value."
+            ]}
+        />
         {/* Header */}
         <div className="px-4 py-2 flex justify-between items-center bg-[#1b1c1d] border-b border-white/5 z-50">
             <div className="flex items-center gap-2">
@@ -371,8 +402,26 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
             <button className="ml-2 p-1 text-zinc-500"><History size={16}/></button>
         </div>
 
+        {/* Betting Area */}
+        <div className="px-2 py-2 grid grid-cols-1 md:grid-cols-2 gap-2 overflow-y-auto no-scrollbar scroll-smooth order-2">
+            <BetPanel 
+                bet={bet1} 
+                setBet={setBet1} 
+                onAction={() => handleBetAction(1)} 
+                phase={globalState.phase} 
+                multiplier={localMultiplier}
+            />
+            <BetPanel 
+                bet={bet2} 
+                setBet={setBet2} 
+                onAction={() => handleBetAction(2)} 
+                phase={globalState.phase} 
+                multiplier={localMultiplier}
+            />
+        </div>
+
         {/* Game Area */}
-        <div className="h-[320px] md:h-[400px] relative flex flex-col bg-[#000000] m-2 rounded-2xl overflow-hidden border border-white/5">
+        <div className="h-[280px] md:h-[400px] relative flex flex-col bg-[#000000] mx-2 mb-2 rounded-2xl overflow-hidden border border-white/5 order-1">
             {/* Info Overlay */}
             <div className="absolute top-2 left-4 right-4 flex justify-between items-center z-30 text-[10px] text-zinc-500 font-medium">
                 <div className="flex items-center gap-1">
@@ -441,7 +490,7 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
                                     </div>
                                     <div className="flex items-center gap-2 mt-3">
                                         <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
-                                            <Plus size={10} className="text-black rotate-45"/>
+                                            <Plus size={10} className="text-zinc-900 rotate-45"/>
                                         </div>
                                         <span className="text-[10px] font-bold text-green-500 uppercase">Official Game</span>
                                     </div>
@@ -453,30 +502,14 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
             </div>
         </div>
 
-        {/* Betting Area */}
-        <div className="px-2 pb-4 grid grid-cols-1 md:grid-cols-2 gap-2 overflow-y-auto no-scrollbar">
-            <BetPanel 
-                bet={bet1} 
-                setBet={setBet1} 
-                onAction={() => handleBetAction(1)} 
-                phase={globalState.phase} 
-                multiplier={localMultiplier}
-            />
-            <BetPanel 
-                bet={bet2} 
-                setBet={setBet2} 
-                onAction={() => handleBetAction(2)} 
-                phase={globalState.phase} 
-                multiplier={localMultiplier}
-            />
-
-            {/* Live Bets Section */}
-            <div className="md:col-span-2 bg-[#141516] rounded-2xl overflow-hidden border border-white/5">
+        {/* Live Bets Section */}
+        <div className="px-2 pb-6 overflow-y-auto no-scrollbar">
+            <div className="bg-[#1b1c1d] rounded-2xl overflow-hidden border border-white/5">
                 <div className="px-4 py-3 border-b border-white/5 flex justify-between items-center">
                     <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Live Bets</span>
                     <span className="text-[10px] font-black text-green-500">{allBets.length} Online</span>
                 </div>
-                <div className="max-h-[300px] overflow-y-auto no-scrollbar">
+                <div className="max-h-[200px] overflow-y-auto no-scrollbar">
                     {allBets.map((b, idx) => (
                         <div key={b.id || `avi-bet-${idx}-${b.uid}`} className="px-4 py-2 flex items-center justify-between border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
                             <div className="flex items-center gap-3">
@@ -505,8 +538,8 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
 };
 
 const BetPanel: React.FC<{ 
-    bet: { amount: number, active: boolean, isAuto: boolean, autoValue: number }, 
-    setBet: React.Dispatch<React.SetStateAction<{ amount: number, active: boolean, isAuto: boolean, autoValue: number }>>,
+    bet: { amount: number, active: boolean, isAuto: boolean, autoValue: number, queued: boolean }, 
+    setBet: React.Dispatch<React.SetStateAction<{ amount: number, active: boolean, isAuto: boolean, autoValue: number, queued: boolean }>>,
     onAction: () => void,
     phase: string,
     multiplier: number
@@ -533,9 +566,9 @@ const BetPanel: React.FC<{
                 </button>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex flex-col gap-4">
                 {/* Amount Controls */}
-                <div className="flex-1 flex flex-col gap-3">
+                <div className="flex flex-col gap-3">
                     <div className="flex items-center bg-black/60 rounded-2xl border border-white/10 p-1.5 shadow-inner">
                         <button 
                             onClick={() => setBet(prev => ({ ...prev, amount: Math.max(10, prev.amount - 10) }))}
@@ -557,12 +590,12 @@ const BetPanel: React.FC<{
                         </button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-4 gap-2">
                         {[100, 200, 500, 1000].map(val => (
                             <button 
                                 key={val}
                                 onClick={() => setBet(prev => ({ ...prev, amount: val }))}
-                                className="bg-black/40 py-2 rounded-xl text-xs font-black text-zinc-400 active:scale-95 border border-white/10"
+                                className="bg-black/40 py-2 rounded-xl text-[10px] font-black text-zinc-400 active:scale-95 border border-white/10"
                             >
                                 ₹{val}
                             </button>
@@ -584,24 +617,24 @@ const BetPanel: React.FC<{
                     )}
                 </div>
 
-                {/* Main Action Button */}
+                {/* Main Action Button - BELOW THE TILES */}
                 <button 
                     onClick={onAction}
-                    disabled={phase === 'CRASHED' || (phase === 'FLYING' && !bet.active)}
-                    className={`flex-1 rounded-[2.5rem] flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-[0_15px_50px_rgba(0,0,0,0.6)] border-b-[10px] group h-32 ${
+                    className={`w-full py-6 rounded-[2.5rem] flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-[0_15px_50px_rgba(0,0,0,0.6)] border-b-[8px] group ${
                         bet.active && phase === 'FLYING' 
                             ? 'bg-gradient-to-br from-[#ff9a00] to-[#e68a00] border-[#995c00] hover:brightness-110' 
-                            : bet.active 
+                            : (bet.active || bet.queued)
                                 ? 'bg-gradient-to-br from-[#ff0000] to-[#cc0000] border-[#800000] hover:brightness-110' 
                                 : 'bg-gradient-to-br from-[#28a745] to-[#218838] border-[#145523] hover:brightness-110'
-                    } disabled:opacity-50 disabled:grayscale`}
+                    }`}
                 >
                     <span className="text-xl font-black uppercase tracking-tighter group-hover:scale-110 transition-transform">
-                        {bet.active && phase === 'FLYING' ? 'CASH OUT' : bet.active ? 'CANCEL' : 'BET'}
+                        {bet.active && phase === 'FLYING' ? 'CASH OUT' : (bet.active || bet.queued) ? 'CANCEL' : 'BET'}
                     </span>
                     <span className="text-xs font-black opacity-80 font-mono">
                         {bet.active && phase === 'FLYING' ? `₹${(bet.amount * multiplier).toFixed(2)}` : `₹${bet.amount}`}
                     </span>
+                    {bet.queued && <span className="text-[10px] font-bold text-white/55 animate-pulse">Waiting for next round</span>}
                 </button>
             </div>
         </div>

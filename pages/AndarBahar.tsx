@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, History, Volume2, VolumeX, Timer, X, Play, Users, Check } from 'lucide-react';
+import { ArrowLeft, Wallet, History, Volume2, VolumeX, Timer, X, Play, Users, Check, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, subscribeToAndarBahar, subscribeToAndarBaharBets, getClockOffset } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, subscribeToAndarBahar, subscribeToAndarBaharBets, getClockOffset, addGameBet } from '../services/supabaseService';
 import { GameResult, AndarBaharState } from '../types';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp, where, addDoc } from 'firebase/firestore';
 
 import AndarBaharResultPopup from '../components/AndarBaharResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 interface Props {
   onBack: () => void;
@@ -22,15 +23,64 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [selectedSide, setSelectedSide] = useState<'ANDAR' | 'BAHAR' | null>(null);
   const [myBets, setMyBets] = useState<any[]>([]);
   const [allBets, setAllBets] = useState<any[]>([]);
+  const allBetsRef = useRef<any[]>([]);
+  useEffect(() => { allBetsRef.current = allBets; }, [allBets]);
+
   const [activeTab, setActiveTab] = useState<'ALL' | 'MY'>('ALL');
   const [isBettingLocked, setIsBettingLocked] = useState(false);
   const [showCards, setShowCards] = useState(false);
   const [abResult, setAbResult] = useState<any | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   
-  const timeLeft = useStabilizedTimer(gameState?.status === 'BETTING' ? gameState.endTime : undefined);
+  const timeLeft = useStabilizedTimer(gameState?.endTime);
   
   const isMounted = useRef(true);
   const resultHandledRef = useRef<string | null>(null);
+
+  async function handleRevealingSequence(state: AndarBaharState) {
+    await new Promise(r => setTimeout(r, 1000));
+    if (!isMounted.current) return;
+    setShowCards(true);
+    playSound('dt_card');
+    
+    await new Promise(r => setTimeout(r, 2000));
+    if (isMounted.current) {
+        const myCurrentBets = allBetsRef.current.filter(b => b.uid === auth.currentUser?.uid);
+        if (myCurrentBets.length > 0) {
+            processMyResult(state, myCurrentBets);
+        }
+    }
+  }
+
+  function processMyResult(state: AndarBaharState, currentBets: any[]) {
+    const winner = state.winner;
+    let totalWin = 0;
+    let totalBet = 0;
+    
+    currentBets.forEach(bet => {
+        totalBet += bet.amount;
+        if (bet.target === winner) {
+            const mult = winner === 'TIE' ? 15 : 1.95;
+            totalWin += bet.amount * mult;
+        }
+    });
+
+    const isWin = totalWin > 0;
+    if (isWin) updateBalance(totalWin, 'WIN', 'Andar Bahar Win');
+    
+    setAbResult({
+        win: isWin,
+        amount: isWin ? totalWin : totalBet,
+        period: state.period,
+        winner: winner || '',
+        joker: state.joker,
+        andarCards: state.andarCards,
+        baharCards: state.baharCards,
+        target: currentBets.map(b => b.target).join(', ')
+    });
+
+    addGameHistory('Andar Bahar', totalBet, totalWin, `Period: ${state.period}`);
+  }
 
   useEffect(() => {
     isMounted.current = true;
@@ -60,64 +110,16 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     });
 
     return () => { isMounted.current = false; unsubState(); unsubBets(); stopAllSounds(); };
-}, []);
+  }, []);
 
-useEffect(() => {
+  useEffect(() => {
     if (gameState?.status === 'BETTING') {
         setIsBettingLocked(timeLeft <= 3);
         if (timeLeft <= 5 && timeLeft > 0) playSound('wingo_tick');
     }
-}, [timeLeft, gameState?.status]);
+  }, [timeLeft, gameState?.status]);
 
-if (!gameState) return <div className="min-h-screen bg-black flex items-center justify-center font-black gold-text">Syncing Arena...</div>;
-
-// Listen to bets for the current period
-// Redundant - now handled by shared listener in first useEffect
-
-  const handleRevealingSequence = async (state: AndarBaharState) => {
-    await new Promise(r => setTimeout(r, 1000));
-    if (!isMounted.current) return;
-    setShowCards(true);
-    playSound('dt_card');
-    
-    await new Promise(r => setTimeout(r, 2000));
-    if (isMounted.current) {
-        const myCurrentBets = allBets.filter(b => b.uid === auth.currentUser?.uid);
-        if (myCurrentBets.length > 0) {
-            processMyResult(state, myCurrentBets);
-        }
-    }
-  };
-
-  const processMyResult = (state: AndarBaharState, currentBets: any[]) => {
-    const winner = state.winner;
-    let totalWin = 0;
-    let totalBet = 0;
-    
-    currentBets.forEach(bet => {
-        totalBet += bet.amount;
-        if (bet.target === winner) {
-            const mult = winner === 'TIE' ? 15 : 1.95;
-            totalWin += bet.amount * mult;
-        }
-    });
-
-    const isWin = totalWin > 0;
-    if (isWin) updateBalance(totalWin, 'WIN', 'Andar Bahar Win');
-    
-    setAbResult({
-        win: isWin,
-        amount: isWin ? totalWin : totalBet,
-        period: state.period,
-        winner: winner || '',
-        joker: state.joker,
-        andarCards: state.andarCards,
-        baharCards: state.baharCards,
-        target: currentBets.map(b => b.target).join(', ')
-    });
-
-    addGameHistory('Andar Bahar', totalBet, totalWin, `Period: ${state.period}`);
-  };
+  if (!gameState) return <div className="min-h-screen bg-black flex items-center justify-center font-black gold-text">Syncing Arena...</div>;
 
   const handlePlaceBet = async () => {
     if (!selectedSide || !auth.currentUser || !gameState) return;
@@ -152,11 +154,37 @@ if (!gameState) return <div className="min-h-screen bg-black flex items-center j
   return (
     <div className="bg-[#064e3b] min-h-screen flex flex-col font-sans text-white select-none overflow-x-hidden relative">
       <AndarBaharResultPopup result={abResult} onClose={() => setAbResult(null)} />
+      <HowToPlay 
+          isOpen={showHelp} 
+          onClose={() => setShowHelp(false)} 
+          title="Andar Bahar Rules"
+          rules={[
+              "Predict which side (Andar or Bahar) will receive a card matching the Joker.",
+              "Winning on Andar or Bahar pays roughly 1.95x.",
+              "If the card matches the joker on the very first card drawn for Andar, it's a TIE (rare) and pays 15x.",
+              "Cards are dealt alternately until a match is found."
+          ]}
+          payouts={[
+              { label: "Andar / Bahar", value: "1.95x" },
+              { label: "Tie", value: "15x" }
+          ]}
+      />
       {/* Header */}
       <div className="p-4 flex justify-between items-center bg-black/40 border-b border-white/5 z-50">
-        <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={18}/></button>
-        <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">ANDAR BAHAR</h1>
-        <div className="bg-black/50 px-3 py-1.5 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono shadow-inner">₹{userBalance.toFixed(2)}</div>
+        <div className="flex items-center gap-3">
+            <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={18}/></button>
+            <div className="flex flex-col">
+                <h1 className="text-xs font-black gold-text italic tracking-widest uppercase leading-none">ANDAR BAHAR</h1>
+                <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">Palace Wallet</span>
+            </div>
+        </div>
+        <div className="flex items-center gap-2">
+            <div className="bg-black/50 px-3 py-1.5 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono shadow-inner flex items-center gap-2">
+                <Wallet size={14} className="text-yellow-500" />
+                <span className="font-black">₹{userBalance.toFixed(2)}</span>
+            </div>
+            <button onClick={() => setShowHelp(true)} className="p-2 bg-yellow-500/10 text-yellow-500 rounded-xl border border-yellow-500/20 active:scale-90"><HelpCircle size={18}/></button>
+        </div>
       </div>
 
       {/* Game Content */}

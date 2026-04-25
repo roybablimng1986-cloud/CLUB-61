@@ -6,6 +6,7 @@ import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
 import DragonTowerResultPopup from '../components/DragonTowerResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 const LEVELS = [1.5, 3.2, 6.8, 14.5, 32.0, 75.0, 200.0, 500.0];
 
@@ -16,6 +17,7 @@ const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   const [showRules, setShowRules] = useState(false);
   const [revealedIdx, setRevealedIdx] = useState<number | null>(null);
   const [tResult, setTResult] = useState<any | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const start = async () => {
     if (userBalance < bet) return;
@@ -39,7 +41,8 @@ const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
 
     await new Promise(r => setTimeout(r, 800));
 
-    const isWin = Math.random() > 0.35; 
+    // Refined RTP: 66% win rate per floor (1/3 chance of hitting trap)
+    const isWin = Math.random() > 0.33; 
 
     if (isWin) {
         playSound('win');
@@ -84,13 +87,47 @@ const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   return (
     <div className="bg-[#0c0a1a] min-h-screen flex flex-col font-sans text-white overflow-hidden relative">
       <DragonTowerResultPopup result={tResult} onClose={() => setTResult(null)} />
+      <HowToPlay 
+          isOpen={showHelp} 
+          onClose={() => setShowHelp(false)} 
+          title="Tower Rules"
+          rules={[
+              "Start your climb from the bottom floor.",
+              "Each floor has 3 tiles: 2 are safe, 1 is a trap.",
+              "Picking a safe tile moves you up and increases your multiplier.",
+              "Cash Out at any level to take your winnings.",
+              "If you hit a trap, you lose your stake."
+          ]}
+          payouts={[
+              { label: "Floor 1", value: "1.5x" },
+              { label: "Floor 4", value: "14.5x" },
+              { label: "Top Floor", value: "500x" }
+          ]}
+      />
       <div className="p-4 flex justify-between items-center bg-black/40 border-b border-white/5 relative z-50">
-        <button onClick={onBack} disabled={gameState === 'PLAYING'} className="p-2 bg-slate-800 rounded-xl"><ArrowLeft size={20}/></button>
-        <h1 className="text-xl font-black gold-text italic tracking-widest uppercase">TOWER ELITE</h1>
-        <button onClick={() => setShowRules(true)} className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl"><HelpCircle size={20}/></button>
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} disabled={gameState === 'PLAYING'} className="p-2.5 bg-slate-800 rounded-2xl active:scale-90 transition-all"><ArrowLeft size={18}/></button>
+          <div className="flex flex-col text-left">
+              <h1 className="text-sm font-black gold-text italic tracking-widest uppercase leading-none">TOWER ELITE</h1>
+              <p className="text-[8px] text-indigo-400 font-bold uppercase tracking-widest mt-1">Stair Wallet</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+            <div className="bg-black/50 px-4 py-2 rounded-2xl border border-indigo-500/20 shadow-inner flex items-center gap-2">
+                <Wallet size={14} className="text-indigo-400" />
+                <span className="text-sm font-black font-mono text-indigo-400 italic">₹{userBalance.toFixed(2)}</span>
+            </div>
+            <button onClick={() => setShowHelp(true)} className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-2xl border border-indigo-500/20 active:scale-90 transition-all"><HelpCircle size={18}/></button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar p-6 flex flex-col-reverse gap-4 bg-[url('https://img.freepik.com/free-vector/dark-blue-night-sky-background-with-clouds-stars_1017-26154.jpg')] bg-cover">
+      <div className="flex-1 overflow-y-auto no-scrollbar p-6 flex flex-col-reverse gap-4 bg-[url('https://img.freepik.com/free-vector/dark-blue-night-sky-background-with-clouds-stars_1017-26154.jpg')] bg-cover relative">
+          {gameState === 'IDLE' && (
+              <div className="absolute top-4 left-4 right-4 bg-black/40 p-3 rounded-xl border border-white/10 text-[9px] text-slate-300 leading-relaxed z-10 backdrop-blur-sm">
+                  <h4 className="font-black text-indigo-400 mb-1 uppercase">How to Play</h4>
+                  <p>1. Start from the bottom floor. Pick 1 of 3 tiles.<br/>2. Two tiles are SAFE, one is a TRAP.<br/>3. Choosing SAFE moves you UP and increases payout.<br/>4. Cash out any time to take winnings!</p>
+              </div>
+          )}
           {LEVELS.map((m, i) => (
               <div key={i} className={`h-16 w-full rounded-2xl border-2 flex items-center justify-between px-6 transition-all duration-500 ${currentLv === i ? 'bg-indigo-600 border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-105' : i === currentLv + 1 ? 'bg-slate-800/80 border-slate-600' : 'bg-black/40 border-white/5 opacity-40'}`}>
                   <span className="font-black text-lg italic">{m}x</span>

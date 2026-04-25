@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, RotateCw, Trash2, Volume2, VolumeX, Timer, History, HelpCircle, X, ShieldCheck, Users, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, db, auth, subscribeToRoulette, subscribeToRouletteBets, getClockOffset } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, db, auth, subscribeToRoulette, subscribeToRouletteBets, getClockOffset, addGameBet } from '../services/supabaseService';
 import { GameResult, RouletteBet, RouletteState } from '../types';
-import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp, where, addDoc } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp, where } from 'firebase/firestore';
 
 import RouletteResultPopup from '../components/RouletteResultPopup';
 
@@ -14,6 +14,9 @@ const Roulette: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
   const [gameState, setGameState] = useState<RouletteState | null>(null);
   const [myBets, setMyBets] = useState<any[]>([]);
   const [allBets, setAllBets] = useState<any[]>([]);
+  const allBetsRef = useRef<any[]>([]);
+  useEffect(() => { allBetsRef.current = allBets; }, [allBets]);
+
   const [activeTab, setActiveTab] = useState<'ALL' | 'MY'>('ALL');
   const [isBettingLocked, setIsBettingLocked] = useState(false);
   const [wheelRotation, setWheelRotation] = useState(0);
@@ -94,7 +97,7 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
     setTimeout(() => {
         if (!isMounted.current) return;
         setLastResult(result);
-        const myCurrentBets = allBets.filter(b => b.uid === auth.currentUser?.uid);
+        const myCurrentBets = allBetsRef.current.filter(b => b.uid === auth.currentUser?.uid);
         if (myCurrentBets.length > 0) {
             processMyResult(state, myCurrentBets);
         }
@@ -197,33 +200,41 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
       <div className="p-4 flex justify-between items-center bg-[#111] border-b border-yellow-500/20 z-[110] shadow-2xl">
         <div className="flex items-center gap-3">
             <button onClick={onBack} className="p-2.5 bg-zinc-900 rounded-2xl active:scale-90 border border-white/5"><ArrowLeft size={20}/></button>
-            <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner">
-                <Wallet size={14} className="text-yellow-500" />
-                <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
+            <div className="flex flex-col">
+                <h1 className="text-xs font-black gold-text italic tracking-widest uppercase leading-none">MAFIA ROULETTE</h1>
+                <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">Casino Wallet</span>
             </div>
         </div>
-        <h1 className="text-sm font-black gold-text italic tracking-widest uppercase">MAFIA ROULETTE</h1>
-        <div className="flex gap-2">
-            <button onClick={() => setShowPaytable(true)} className="p-2.5 bg-zinc-900 rounded-2xl border border-white/5"><HelpCircle size={18}/></button>
-            <button onClick={() => setMuted(toggleMute())} className="p-2.5 bg-zinc-900 rounded-2xl border border-white/5">
-                {muted ? <VolumeX size={18}/> : <Volume2 size={18}/>}
-            </button>
+        <div className="flex items-center gap-3">
+            <div className="bg-black/80 px-4 py-2 rounded-2xl border-2 border-yellow-500/40 text-yellow-500 font-mono shadow-[0_0_15px_rgba(234,179,8,0.2)] flex items-center gap-2">
+                <Wallet size={14} className="text-yellow-500" />
+                <span className="font-black">₹{userBalance.toFixed(2)}</span>
+            </div>
+            <div className="flex gap-1">
+                <button onClick={() => setShowPaytable(true)} className="p-2.5 bg-zinc-900 rounded-2xl border border-white/5 text-yellow-500"><HelpCircle size={18}/></button>
+                <button onClick={() => setMuted(toggleMute())} className="p-2.5 bg-zinc-900 rounded-2xl border border-white/5 text-yellow-500">
+                    {muted ? <VolumeX size={18}/> : <Volume2 size={18}/>}
+                </button>
+            </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col items-center py-4 pb-80 gap-8">
+      <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col items-center py-2 pb-80 gap-4">
           
-          <div className="relative w-full max-w-lg aspect-square flex items-center justify-center transition-all px-4 mt-2">
-              <div className="absolute top-[-8px] left-1/2 -translate-x-1/2 z-[80] flex flex-col items-center pointer-events-none">
+          <div className="relative w-full max-w-[280px] sm:max-w-lg aspect-square flex items-center justify-center transition-all px-4 mt-1">
+              <div className="absolute top-[-4px] left-1/2 -translate-x-1/2 z-[80] flex flex-col items-center pointer-events-none">
                    <div 
-                      className="w-14 h-16 bg-yellow-500 shadow-[0_0_50px_rgba(234,179,8,1)]" 
+                      className="w-10 h-12 bg-yellow-500 shadow-[0_0_30px_rgba(234,179,8,1)]" 
                       style={{ clipPath: 'polygon(50% 100%, 0 0, 100% 0)' }}
                    ></div>
               </div>
 
               <div 
-                className="w-full h-full rounded-full border-[14px] border-zinc-900 shadow-[0_0_150px_rgba(0,0,0,1)] transition-transform duration-[5000ms] cubic-bezier(0.1, 0, 0.1, 1) relative bg-zinc-900"
-                style={{ transform: `rotate(${wheelRotation}deg)` }}
+                className="w-full h-full rounded-full border-[8px] sm:border-[14px] border-zinc-900 shadow-[0_0_100px_rgba(0,0,0,1)] relative bg-zinc-900"
+                style={{ 
+                    transform: `rotate(${wheelRotation}deg)`,
+                    transition: 'transform 4s cubic-bezier(0.1, 0, 0.1, 1)'
+                }}
               >
                  <div className="absolute inset-0 rounded-full" style={{ background: `conic-gradient(${WHEEL_ORDER.map((n, i) => `${n===0?'#16a34a':REDS.includes(n)?'#dc2626':'#1a1a1a'} ${i*(360/37)}deg ${(i+1)*(360/37)}deg`).join(', ')})` }}></div>
                  {WHEEL_ORDER.map((n, i) => (
@@ -241,32 +252,33 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
               </div>
 
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[70]">
-                  <div className="w-36 h-36 md:w-52 md:h-52 rounded-full bg-[#0a0a0a] border-[12px] border-zinc-800 shadow-[inset_0_0_80px_rgba(0,0,0,1),0_0_60px_rgba(234,179,8,0.15)] flex flex-col items-center justify-center overflow-hidden relative">
+                  <div className="w-24 h-24 sm:w-52 sm:h-52 rounded-full bg-[#0a0a0a] border-[8px] sm:border-[12px] border-zinc-800 shadow-[inset_0_0_80px_rgba(0,0,0,1),0_0_60px_rgba(234,179,8,0.15)] flex flex-col items-center justify-center overflow-hidden relative">
                       <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
-                      <div className={`text-7xl md:text-8xl font-black italic tracking-tighter transition-all duration-500 ${lastResult!==null ? 'scale-110 drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]' : 'scale-100'} ${lastResult===0?'text-green-500':REDS.includes(lastResult||-1)?'text-red-500':'text-white'}`}>
+                      <div className={`text-4xl sm:text-8xl font-black italic tracking-tighter transition-all duration-500 ${lastResult!==null ? 'scale-110 drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]' : 'scale-100'} ${lastResult===0?'text-green-500':REDS.includes(lastResult||-1)?'text-red-500':'text-white'}`}>
                           {lastResult !== null ? lastResult : timeLeft}
                       </div>
-                      <div className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.4em] mt-3">{gameState.status === 'BETTING' ? 'TIME LEFT' : 'TARGET HIT'}</div>
+                      <div className="text-[7px] sm:text-[10px] font-black text-zinc-600 uppercase tracking-[0.4em] mt-1 sm:mt-3">{gameState.status === 'BETTING' ? 'TIME' : 'HIT'}</div>
                   </div>
               </div>
           </div>
 
           <div className="w-full px-4 max-w-lg space-y-3">
-             <div className="flex gap-2 h-24">
-                <button onClick={() => openBetConfirm('NUMBER', 0)} disabled={isBettingLocked || gameState.status !== 'BETTING'} className="flex-[0.5] bg-green-600 rounded-3xl flex items-center justify-center font-black border-2 border-white/20 active:scale-95 text-3xl shadow-2xl disabled:opacity-30">0</button>
+
+             <div className="flex gap-2 h-20">
+                <button onClick={() => openBetConfirm('NUMBER', 0)} disabled={isBettingLocked || gameState.status !== 'BETTING'} className="flex-[0.5] bg-green-600 rounded-2xl flex items-center justify-center font-black border-2 border-white/20 active:scale-95 text-2xl shadow-2xl disabled:opacity-30">0</button>
                 <div className="flex-[2] grid grid-cols-2 gap-2">
                     <OutsideBet label="RED" color="bg-red-600" onClick={() => openBetConfirm('COLOR', 'RED')} status={gameState.status} isLocked={isBettingLocked} />
                     <OutsideBet label="BLACK" color="bg-zinc-950" onClick={() => openBetConfirm('COLOR', 'BLACK')} status={gameState.status} isLocked={isBettingLocked} />
                 </div>
              </div>
 
-             <div className="bg-zinc-950/80 p-5 rounded-[2.5rem] border border-white/10 shadow-2xl space-y-3">
+             <div className="bg-zinc-950/80 p-2 sm:p-3 rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 shadow-2xl space-y-1 sm:space-y-2">
                 {rows.map((row, rIdx) => (
-                    <div key={rIdx} className="grid grid-cols-6 gap-3">
+                    <div key={rIdx} className="grid grid-cols-6 gap-1 sm:gap-2">
                         {row.map(n => {
                             const color = REDS.includes(n) ? 'bg-red-600' : 'bg-zinc-900';
                             return (
-                                <button key={n} onClick={() => openBetConfirm('NUMBER', n)} disabled={isBettingLocked || gameState.status !== 'BETTING'} className={`${color} h-18 rounded-2xl flex flex-col items-center justify-center font-black text-2xl relative active:scale-95 border-2 border-white/10 shadow-xl disabled:opacity-30`}>
+                                <button key={n} onClick={() => openBetConfirm('NUMBER', n)} disabled={isBettingLocked || gameState.status !== 'BETTING'} className={`${color} h-10 sm:h-12 rounded-lg sm:rounded-xl flex flex-col items-center justify-center font-black text-sm sm:text-lg relative active:scale-95 border border-white/10 shadow-xl disabled:opacity-30`}>
                                     {n}
                                 </button>
                             );
@@ -275,12 +287,12 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
                 ))}
              </div>
 
-             <div className="grid grid-cols-2 gap-3">
-                <div className="grid grid-cols-2 gap-3">
+             <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                     <OutsideBet label="1-18" onClick={() => openBetConfirm('RANGE', '1-18')} status={gameState.status} isLocked={isBettingLocked} />
                     <OutsideBet label="EVEN" onClick={() => openBetConfirm('ODD_EVEN', 'EVEN')} status={gameState.status} isLocked={isBettingLocked} />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                     <OutsideBet label="ODD" onClick={() => openBetConfirm('ODD_EVEN', 'ODD')} status={gameState.status} isLocked={isBettingLocked} />
                     <OutsideBet label="19-36" onClick={() => openBetConfirm('RANGE', '19-36')} status={gameState.status} isLocked={isBettingLocked} />
                 </div>
@@ -363,16 +375,24 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
 
       {showPaytable && (
           <div className="fixed inset-0 z-[250] flex items-center justify-center p-6 bg-black/95 backdrop-blur-2xl">
-               <div className="bg-zinc-900 border border-yellow-500/30 w-full max-w-sm p-10 rounded-[3.5rem] shadow-2xl animate-in zoom-in duration-300">
+               <div className="bg-zinc-900 border border-yellow-500/30 w-full max-w-sm p-10 rounded-[3.5rem] shadow-2xl animate-in zoom-in duration-300 overflow-y-auto max-h-[80vh]">
                     <div className="flex justify-between items-center mb-10">
-                        <h2 className="text-3xl font-black gold-text italic uppercase tracking-tighter">MAFIA LOGS</h2>
+                        <h2 className="text-3xl font-black gold-text italic uppercase tracking-tighter">CASINO RULES</h2>
                         <button onClick={() => setShowPaytable(false)} className="p-3 bg-zinc-800 rounded-full hover:bg-slate-700 transition-colors"><X/></button>
                     </div>
-                    <div className="space-y-4">
-                        <PayoutRow label="Straight Target" mult="36.00X" color="text-yellow-500" />
-                        <PayoutRow label="Binary Color" mult="2.00X" color="text-red-500" />
-                        <PayoutRow label="Even / Odd" mult="2.00X" color="text-blue-500" />
-                        <PayoutRow label="Range Tier" mult="2.00X" color="text-emerald-500" />
+                    <div className="space-y-6">
+                        <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-2 text-[10px] text-zinc-400">
+                           <p>• Pick your lucky number or bet on Red/Black/Odd/Even.</p>
+                           <p>• Straight bets on 0-36 pay 36x your stake.</p>
+                           <p>• Outside bets (Red/Black etc) pay 2x your stake.</p>
+                           <p>• Bets are locked when 5 seconds remain on the clock.</p>
+                        </div>
+                        <div className="space-y-4">
+                            <PayoutRow label="Straight Target" mult="36.00X" color="text-yellow-500" />
+                            <PayoutRow label="Binary Color" mult="2.00X" color="text-red-500" />
+                            <PayoutRow label="Even / Odd" mult="2.00X" color="text-blue-500" />
+                            <PayoutRow label="Range Tier" mult="2.00X" color="text-emerald-500" />
+                        </div>
                     </div>
                </div>
           </div>

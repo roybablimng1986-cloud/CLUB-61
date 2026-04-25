@@ -1,9 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, RotateCw, Trophy, History } from 'lucide-react';
+import { ArrowLeft, Wallet, RotateCw, Trophy, History, HelpCircle } from 'lucide-react';
 import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
+
+import HowToPlay from '../components/HowToPlay';
 
 interface Props {
   onBack: () => void;
@@ -19,6 +21,7 @@ const SlotMachine: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [reels, setReels] = useState<string[]>(['💎', '7️⃣', '💎']);
   const [history, setHistory] = useState<string[]>([]);
   const [floating, setFloating] = useState<{ text: string; color: string; id: number } | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   
   const isMounted = useRef(true);
 
@@ -40,15 +43,11 @@ const SlotMachine: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
 
     // Record bet in Firestore
     if (auth.currentUser) {
-        try {
-            await addDoc(collection(db, 'slot_machine_bets'), {
-                uid: auth.currentUser.uid,
-                username: auth.currentUser.displayName || 'Player',
-                amount: betAmount,
-                target: 'BET',
-                timestamp: Date.now()
-            });
-        } catch (e) {}
+        addGameBet('slot_machine_bets', {
+            amount: betAmount,
+            target: 'BET',
+            timestamp: Date.now()
+        });
     }
 
     setIsSpinning(true);
@@ -72,24 +71,37 @@ const SlotMachine: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     }, 80);
   };
 
-  const finalizeSpin = () => {
+    const finalizeSpin = () => {
     if (!isMounted.current) return;
     
-    const outcome = [
-        SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
-        SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
-        SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]
-    ];
+    // Balanced RTP: More controlled random outcome
+    const r = Math.random();
+    let outcome;
+    if (r < 0.02) { // 2% Jackpot
+        const sym = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+        outcome = [sym, sym, sym];
+    } else if (r < 0.15) { // 13% Pair
+        const sym = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+        let other;
+        do { other = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]; } while(other === sym);
+        outcome = [sym, sym, other];
+    } else { // 85% Empty
+        outcome = [
+            SYMBOLS[0], 
+            SYMBOLS[2], 
+            SYMBOLS[4]
+        ].sort(() => Math.random() - 0.5);
+    }
 
     setReels(outcome);
     setIsSpinning(false);
 
-    const isJackpot = outcome[0] === outcome[1] && outcome[1] === outcome[2];
+    const isTrio = outcome[0] === outcome[1] && outcome[1] === outcome[2];
     const isPair = outcome[0] === outcome[1] || outcome[1] === outcome[2] || outcome[0] === outcome[2];
 
     let multiplier = 0;
-    if (isJackpot) multiplier = outcome[0] === '7️⃣' ? 50 : 20;
-    else if (isPair) multiplier = 2;
+    if (isTrio) multiplier = outcome[0] === '7️⃣' ? 30 : 15;
+    else if (isPair) multiplier = 1.2;
 
     const winAmount = betAmount * multiplier;
     
@@ -108,6 +120,23 @@ const SlotMachine: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen flex flex-col font-sans text-white relative overflow-hidden select-none">
+      <HowToPlay 
+          isOpen={showHelp} 
+          onClose={() => setShowHelp(false)} 
+          title="Royal Slots Rules"
+          rules={[
+              "Choose your bet amount and click SPIN REELS.",
+              "Wait for the reels to stop. Payouts are based on symbol combinations.",
+              "3 of a kind (Trio) pays the highest multipliers.",
+              "7-7-7 is the Royal Jackpot paying 30x!",
+              "Any 2 matching symbols (Pair) pays a 1.2x consolation prize."
+          ]}
+          payouts={[
+              { label: "7-7-7 Trio", value: "30x" },
+              { label: "Any Other Trio", value: "15x" },
+              { label: "Any Pair", value: "1.2x" }
+          ]}
+      />
       {floating && (
           <div key={floating.id} className={`fixed top-1/2 left-1/2 -translate-x-1/2 z-[100] font-black text-5xl italic pointer-events-none animate-float-up ${floating.color}`} style={{ textShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
               {floating.text}
@@ -115,17 +144,34 @@ const SlotMachine: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
       )}
 
       <div className="p-4 flex justify-between items-center bg-black/60 backdrop-blur-xl border-b border-white/5 z-50">
-        <button onClick={onBack} className="p-2.5 bg-zinc-900 rounded-2xl border border-white/10 active:scale-90 transition-all"><ArrowLeft size={20}/></button>
-        <div className="text-center">
-            <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">ROYAL SLOTS</h1>
+        <div className="flex items-center gap-3">
+            <button onClick={onBack} className="p-2.5 bg-zinc-900 rounded-2xl border border-white/10 active:scale-90 transition-all"><ArrowLeft size={18}/></button>
+            <div className="flex flex-col text-left">
+                <h1 className="text-sm font-black italic gold-text tracking-widest uppercase leading-none">ROYAL SLOTS</h1>
+                <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Spin Wallet</p>
+            </div>
         </div>
-        <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner">
-          <Wallet size={14} className="text-yellow-500" />
-          <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
+        <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner">
+                <Wallet size={14} className="text-yellow-500" />
+                <span className="text-sm font-black font-mono text-yellow-500 italic">₹{userBalance.toFixed(2)}</span>
+            </div>
+            <button onClick={() => setShowHelp(true)} className="p-2.5 bg-yellow-500/10 text-yellow-500 rounded-2xl border border-yellow-500/20 active:scale-90 transition-all"><HelpCircle size={18}/></button>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center p-6">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 relative">
+        {!isSpinning && (
+            <div className="absolute top-4 left-4 right-4 bg-zinc-900/50 p-4 rounded-2xl border border-yellow-500/10 text-[9px] text-zinc-400 leading-relaxed z-[10]">
+                <h4 className="font-black text-yellow-500 mb-1 uppercase">Royal Paytable</h4>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <p>7-7-7: 50.00x</p>
+                    <p>Jackpot: 20.00x</p>
+                    <p>Any Pair: 2.00x</p>
+                    <p>RTP: 92.5%</p>
+                </div>
+            </div>
+        )}
         <div className="w-full max-w-sm bg-gradient-to-b from-zinc-800 to-zinc-950 p-6 rounded-[2.5rem] border-[8px] border-zinc-800 shadow-[0_0_80px_rgba(0,0,0,1)] relative overflow-hidden">
              <div className="bg-[#111] p-4 rounded-[2.5rem] flex justify-between gap-3 border-4 border-zinc-800 shadow-inner mt-4">
                 {reels.map((symbol, i) => (

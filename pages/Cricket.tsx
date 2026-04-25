@@ -7,6 +7,7 @@ import { GameResult, CricketState } from '../types';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp, where, addDoc } from 'firebase/firestore';
 
 import CricketResultPopup from '../components/CricketResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 const OUTCOMES = [
     { label: '1 Run', val: 1, mult: 2.1, color: 'bg-blue-600' },
@@ -28,6 +29,7 @@ const Cricket: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
   const [bowling, setBowling] = useState(false);
   const [landedResult, setLandedResult] = useState<number | null>(null);
   const [crResult, setCrResult] = useState<any | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   
   const [timeLeft, setTimeLeft] = useState(0);
   
@@ -150,15 +152,51 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
   return (
     <div className="bg-[#111] min-h-screen flex flex-col font-sans text-white select-none overflow-x-hidden relative">
         <CricketResultPopup result={crResult} onClose={() => setCrResult(null)} />
+        <HowToPlay 
+            isOpen={showHelp} 
+            onClose={() => setShowHelp(false)} 
+            title="Cricket Hero Rules"
+            rules={[
+                "Bet on the outcome of the next ball in the elite match.",
+                "Options: 1 Run, 2 Runs, 4 Runs, 6 Runs, or WICKET.",
+                "Wicket pays a high multiplier (60x) due to its rarity.",
+                "6 Runs pays 25x, and 4 Runs pays 12x.",
+                "Bets are closed 5 seconds before the bowler launches the ball."
+            ]}
+            payouts={[
+                { label: "WICKET", value: "60x" },
+                { label: "6 RUNS", value: "25x" },
+                { label: "4 RUNS", value: "12x" },
+                { label: "2 RUNS", value: "4.2x" },
+                { label: "1 RUN", value: "2.1x" }
+            ]}
+        />
         {/* Header */}
         <div className="p-4 flex justify-between items-center bg-[#064e3b] border-b border-white/5 z-50 shadow-xl">
-            <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={18}/></button>
-            <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">CRICKET HERO</h1>
-            <div className="bg-black/50 px-3 py-1.5 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono text-sm">₹{userBalance.toFixed(2)}</div>
+            <div className="flex items-center gap-3">
+                <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={18}/></button>
+                <div className="flex flex-col text-left">
+                    <h1 className="text-xs font-black gold-text italic tracking-widest uppercase leading-none">CRICKET HERO</h1>
+                    <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">Pitch Wallet</span>
+                </div>
+            </div>
+            <div className="flex items-center gap-2">
+                <div className="bg-black/50 px-3 py-1.5 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono text-sm flex items-center gap-2">
+                    <Wallet size={14} className="text-yellow-500" />
+                    <span className="font-black">₹{userBalance.toFixed(2)}</span>
+                </div>
+                <button onClick={() => setShowHelp(true)} className="p-2 bg-yellow-500/10 text-yellow-500 rounded-xl border border-yellow-500/20 active:scale-90"><HelpCircle size={18}/></button>
+            </div>
         </div>
 
         {/* Game Content */}
         <div className="flex-1 flex flex-col items-center p-4 relative overflow-y-auto no-scrollbar pb-80">
+            {gameState.status === 'BETTING' && (
+                <div className="w-full bg-black/40 backdrop-blur-xl p-4 rounded-2xl border border-white/10 text-[9px] text-slate-400 leading-relaxed max-w-sm mb-4">
+                    <h4 className="font-black gold-text mb-1 uppercase tracking-widest text-[10px]">Stadium Guide</h4>
+                    <p>1. Predict the outcome of the next delivery.<br/>2. Wicket (W) pays a massive 60.0x!<br/>3. Boundaries (4s, 6s) pay up to 25.0x.<br/>4. Secure your innings before the bowler runs in.</p>
+                </div>
+            )}
             
             {/* History (Top) */}
             <div className="w-full mb-4">

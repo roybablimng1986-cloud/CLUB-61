@@ -64,7 +64,7 @@ const AdminWebsite = () => {
         { id: 'GAME_WINGO', name: 'Win Go' }, { id: 'GAME_AVIATOR', name: 'Aviator' },
         { id: 'GAME_MINES', name: 'Mines' }, { id: 'GAME_DRAGON_TIGER', name: 'Dragon Tiger' },
         { id: 'GAME_ROULETTE', name: 'Roulette' }, { id: 'GAME_SICBO', name: 'Sic Bo' },
-        { id: 'GAME_BACCARAT', name: 'Baccarat' }, { id: 'GAME_DOG', name: 'Dog Road' }
+        { id: 'GAME_BACCARAT', name: 'Baccarat' }
     ];
 
     return (

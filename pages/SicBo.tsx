@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, History, RotateCw, Trash2, Volume2, VolumeX, Timer, CheckCircle2, X, Users, Check } from 'lucide-react';
+import { ArrowLeft, Wallet, History, RotateCw, Trash2, Volume2, VolumeX, Timer, CheckCircle2, X, Users, Check, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, db, auth, subscribeToSicBo, subscribeToSicBoBets, getClockOffset } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, db, auth, subscribeToSicBo, subscribeToSicBoBets, getClockOffset, addGameBet } from '../services/supabaseService';
 import { GameResult, SicBoState } from '../types';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp, where, addDoc } from 'firebase/firestore';
 
 import SicBoResultPopup from '../components/SicBoResultPopup';
 import { useStabilizedTimer } from '../hooks/useTimer';
+import HowToPlay from '../components/HowToPlay';
 
 const DICE_FACES = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
@@ -14,6 +15,9 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   const [gameState, setGameState] = useState<SicBoState | null>(null);
   const [myBets, setMyBets] = useState<any[]>([]);
   const [allBets, setAllBets] = useState<any[]>([]);
+  const allBetsRef = useRef<any[]>([]);
+  useEffect(() => { allBetsRef.current = allBets; }, [allBets]);
+
   const [activeTab, setActiveTab] = useState<'ALL' | 'MY'>('ALL');
   const [isBettingLocked, setIsBettingLocked] = useState(false);
   const [betAmount, setBetAmount] = useState(10);
@@ -21,66 +25,26 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   const [floating, setFloating] = useState<{ text: string; color: string; id: number } | null>(null);
   const [confirmBet, setConfirmBet] = useState<{ zone: string; type: string } | null>(null);
   const [sbResult, setSbResult] = useState<any | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
-  const timeLeft = useStabilizedTimer(gameState?.status === 'BETTING' ? gameState.endTime : undefined);
+  const timeLeft = useStabilizedTimer(gameState?.endTime);
   
   const isMounted = useRef(true);
   const resultHandledRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    isMounted.current = true;
-    
-    const unsubState = subscribeToSicBo((state) => {
-        if (!isMounted.current) return;
-        setGameState(state);
-
-        if (state.status === 'BETTING') {
-            resultHandledRef.current = null;
-        } else {
-            setIsBettingLocked(true);
-        }
-
-        if (state.status === 'RESULT' && resultHandledRef.current !== state.period) {
-            resultHandledRef.current = state.period;
-            handleResultSequence(state);
-        }
-    });
-
-    const unsubBets = subscribeToSicBoBets((bets) => {
-        setAllBets(bets);
-        if (auth.currentUser) {
-            setMyBets(bets.filter((b: any) => b.uid === auth.currentUser?.uid));
-        }
-    });
-
-    return () => { isMounted.current = false; unsubState(); unsubBets(); stopAllSounds(); };
-}, []);
-
-useEffect(() => {
-    if (gameState?.status === 'BETTING') {
-        setIsBettingLocked(timeLeft <= 5);
-        if (timeLeft <= 5 && timeLeft > 0) playSound('wingo_tick');
-    }
-}, [timeLeft, gameState?.status]);
-
-if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center font-black gold-text text-xl italic uppercase tracking-widest">Entering Arena...</div>;
-
-// Listen to bets for the current period
-// Redundant - now handled by shared listener in first useEffect
-
-  const handleResultSequence = (state: SicBoState) => {
+  function handleResultSequence(state: SicBoState) {
     playSound('wheel_spin');
     
     setTimeout(() => {
         if (!isMounted.current) return;
-        const myCurrentBets = allBets.filter(b => b.uid === auth.currentUser?.uid);
+        const myCurrentBets = allBetsRef.current.filter(b => b.uid === auth.currentUser?.uid);
         if (myCurrentBets.length > 0) {
             processMyResult(state, myCurrentBets);
         }
     }, 3000);
-  };
+  }
 
-  const processMyResult = (state: SicBoState, currentBets: any[]) => {
+  function processMyResult(state: SicBoState, currentBets: any[]) {
     let totalWin = 0;
     let totalBet = 0;
     const result = state.dice;
@@ -115,7 +79,45 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
     });
 
     addGameHistory('Sic Bo Elite', totalBet, totalWin, `Period: ${state.period}`);
-  };
+  }
+
+  useEffect(() => {
+    isMounted.current = true;
+    
+    const unsubState = subscribeToSicBo((state) => {
+        if (!isMounted.current) return;
+        setGameState(state);
+
+        if (state.status === 'BETTING') {
+            resultHandledRef.current = null;
+        } else {
+            setIsBettingLocked(true);
+        }
+
+        if (state.status === 'RESULT' && resultHandledRef.current !== state.period) {
+            resultHandledRef.current = state.period;
+            handleResultSequence(state);
+        }
+    });
+
+    const unsubBets = subscribeToSicBoBets((bets) => {
+        setAllBets(bets);
+        if (auth.currentUser) {
+            setMyBets(bets.filter((b: any) => b.uid === auth.currentUser?.uid));
+        }
+    });
+
+    return () => { isMounted.current = false; unsubState(); unsubBets(); stopAllSounds(); };
+  }, []);
+
+  useEffect(() => {
+    if (gameState?.status === 'BETTING') {
+        setIsBettingLocked(timeLeft <= 5);
+        if (timeLeft <= 5 && timeLeft > 0) playSound('wingo_tick');
+    }
+  }, [timeLeft, gameState?.status]);
+
+  if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center font-black gold-text text-xl italic uppercase tracking-widest">Entering Arena...</div>;
 
   const triggerFloating = (text: string, color: string) => {
       setFloating({ text, color, id: Date.now() });
@@ -149,8 +151,6 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
     }
   };
 
-  if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center font-black gold-text">Entering Arena...</div>;
-
   return (
     <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white overflow-x-hidden relative select-none">
       <SicBoResultPopup result={sbResult} onClose={() => setSbResult(null)} />
@@ -160,14 +160,42 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
           </div>
       )}
 
+      <HowToPlay 
+          isOpen={showHelp} 
+          onClose={() => setShowHelp(false)} 
+          title="Sic Bo Rules"
+          rules={[
+              "Predict the outcome of 3 dice.",
+              "SMALL (4-10), BIG (11-17), or precise SUM.",
+              "TIE (Triple) pays 30.0x!",
+              "Place your markers before the dome shakes."
+          ]}
+          payouts={[
+              { label: "Big / Small", value: "1.98x" },
+              { label: "Triple (Tie)", value: "30x" },
+              { label: "Sum Total", value: "6x" }
+          ]}
+      />
+
       {/* Header */}
       <div className="p-4 flex justify-between items-center bg-[#111827] border-b border-yellow-500/20 z-50">
-        <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={20}/></button>
-        <h1 className="text-xl font-black gold-text italic tracking-widest uppercase">SIC BO ELITE</h1>
-        <div className="bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono shadow-inner">₹{userBalance.toFixed(2)}</div>
+        <div className="flex items-center gap-3">
+            <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={20}/></button>
+            <div className="flex flex-col">
+                <h1 className="text-xs font-black gold-text italic tracking-widest uppercase leading-none">SIC BO ELITE</h1>
+                <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">Temple Wallet</span>
+            </div>
+        </div>
+        <div className="flex items-center gap-2">
+            <div className="bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 text-yellow-500 font-mono shadow-inner flex items-center gap-2">
+                <Wallet size={14} className="text-yellow-500" />
+                <span className="font-black">₹{userBalance.toFixed(2)}</span>
+            </div>
+            <button onClick={() => setShowHelp(true)} className="p-2 bg-yellow-500/10 text-yellow-500 rounded-xl border border-yellow-500/20 active:scale-90 transition-colors"><HelpCircle size={18}/></button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col items-center p-4 gap-8 pb-80">
+      <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col items-center p-4 gap-8 pb-80 relative">
           {/* Shaking Dome */}
           <div className="relative w-72 h-56 bg-gradient-to-b from-blue-900/60 to-black rounded-full border-[6px] border-white/10 flex items-center justify-center shadow-[0_0_80px_rgba(0,0,0,1)] mt-4">
                <div className="flex gap-4">

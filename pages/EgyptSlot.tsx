@@ -6,6 +6,7 @@ import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
 import SlotResultPopup from '../components/SlotResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 const SYMBOLS = ['🏺', '👁️', '🐈', '☥', '🪲', '🪙', '👸'];
 
@@ -56,13 +57,24 @@ const EgyptSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
     }, 60);
   };
 
-  const finalize = () => {
+    const finalize = () => {
     if (!isMounted.current) return;
-    const outcome = [
-        SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
-        SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
-        SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]
-    ];
+    
+    // Balanced RTP 92%
+    const r = Math.random();
+    let outcome;
+    if (r < 0.015) { // 1.5% Jackpot
+        const sym = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+        outcome = [sym, sym, sym];
+    } else if (r < 0.12) { // 10.5% Pair
+        const sym = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+        let other;
+        do { other = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]; } while(other === sym);
+        outcome = [sym, sym, other];
+    } else { // 88% Empty
+        outcome = [SYMBOLS[0], SYMBOLS[2], SYMBOLS[4]].sort(() => Math.random() - 0.5);
+    }
+
     setReels(outcome);
     setSpinning(false);
 
@@ -94,6 +106,23 @@ const EgyptSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
   return (
     <div className="bg-[#1a1200] min-h-screen flex flex-col font-sans text-white relative overflow-hidden">
         <SlotResultPopup result={egResult} onClose={() => setEgResult(null)} />
+        <HowToPlay 
+            isOpen={showRules} 
+            onClose={() => setShowRules(false)} 
+            title="Egypt Gold Rules"
+            rules={[
+                "Uncover the secrets of the pharaohs by spinning the golden reels.",
+                "Match 3 special symbols like the Urn (🏺) for a massive 100x payout.",
+                "Other 3-symbol matches pay 40x.",
+                "Any 2-symbol match pays a steady 3.0x multiplier.",
+                "Seek the blessing of the reels for ancient riches!"
+            ]}
+            payouts={[
+                { label: "3x URN (🏺)", value: "100x" },
+                { label: "3x Others", value: "40x" },
+                { label: "Any 2 Symbols", value: "3.0x" }
+            ]}
+        />
         {floating && (
             <div key={floating.id} className={`fixed top-1/2 left-1/2 -translate-x-1/2 z-[100] font-black text-5xl italic pointer-events-none animate-float-up ${floating.color}`} style={{ textShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
                 {floating.text}

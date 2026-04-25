@@ -15,6 +15,7 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
   const [showRules, setShowRules] = useState(false);
   const [keResult, setKeResult] = useState<any | null>(null);
   const [floating, setFloating] = useState<{ text: string; color: string; id: number } | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const isMounted = useRef(true);
 
@@ -113,11 +114,23 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
 
       <div className="p-4 flex justify-between items-center bg-black/40 border-b border-emerald-500/20 shadow-2xl relative z-50">
         <button onClick={onBack} className="p-2 bg-zinc-900 rounded-xl"><ArrowLeft size={20}/></button>
-        <h1 className="text-xl font-black gold-text italic tracking-widest uppercase">KENO ELITE</h1>
+        <div className="flex flex-col items-center text-center">
+            <h1 className="text-xl font-black gold-text italic tracking-widest uppercase leading-none">KENO ELITE</h1>
+            <div className="flex items-center gap-1 mt-1">
+                <Wallet size={12} className="text-emerald-500" />
+                <span className="text-[10px] font-mono font-black text-emerald-500">₹{userBalance.toFixed(2)}</span>
+            </div>
+        </div>
         <button onClick={() => setShowRules(true)} className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl"><HelpCircle size={20}/></button>
       </div>
 
-      <div className="flex-1 p-4 flex flex-col items-center justify-center">
+      <div className="flex-1 p-4 flex flex-col items-center justify-center relative">
+          {gameState === 'IDLE' && (
+              <div className="absolute top-4 left-4 right-4 bg-zinc-900/80 backdrop-blur-xl p-4 rounded-2xl border border-emerald-500/20 text-[10px] text-zinc-400 leading-relaxed z-[60] shadow-2xl">
+                  <h4 className="font-black text-emerald-400 mb-1 uppercase tracking-widest">How to Play</h4>
+                  <p>1. Select up to 10 numbers on the grid.<br/>2. Click "START DRAW" to begin.<br/>3. 15 numbers will be randomly drawn.<br/>4. Match more numbers to win up to 100x!</p>
+              </div>
+          )}
           <div className="grid grid-cols-8 gap-1.5 w-full max-w-sm mb-6">
               {Array.from({length: 40}).map((_, i) => {
                   const n = i + 1;

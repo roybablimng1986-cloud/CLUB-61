@@ -6,6 +6,7 @@ import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
 import SlotResultPopup from '../components/SlotResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 const FRUITS = ['🍎', '🍓', '🍋', '🍉', '🍇', '🍒', '🍊'];
 
@@ -56,13 +57,24 @@ const FruitSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
     }, 80);
   };
 
-  const finalize = () => {
+    const finalize = () => {
     if (!isMounted.current) return;
-    const outcome = [
-        FRUITS[Math.floor(Math.random() * FRUITS.length)],
-        FRUITS[Math.floor(Math.random() * FRUITS.length)],
-        FRUITS[Math.floor(Math.random() * FRUITS.length)]
-    ];
+    
+    // Balanced RTP 91.5%
+    const r = Math.random();
+    let outcome;
+    if (r < 0.02) { // 2% Jackpot
+        const sym = FRUITS[Math.floor(Math.random() * FRUITS.length)];
+        outcome = [sym, sym, sym];
+    } else if (r < 0.14) { // 12% Pair
+        const sym = FRUITS[Math.floor(Math.random() * FRUITS.length)];
+        let other;
+        do { other = FRUITS[Math.floor(Math.random() * FRUITS.length)]; } while(other === sym);
+        outcome = [sym, sym, other];
+    } else { // 84% Empty
+        outcome = [FRUITS[0], FRUITS[2], FRUITS[4]].sort(() => Math.random() - 0.5);
+    }
+
     setReels(outcome);
     setSpinning(false);
 
@@ -94,6 +106,22 @@ const FruitSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
   return (
     <div className="bg-[#1e0a11] min-h-screen flex flex-col font-sans text-white relative overflow-hidden">
         <SlotResultPopup result={fsResult} onClose={() => setFsResult(null)} />
+        <HowToPlay 
+            isOpen={showRules} 
+            onClose={() => setShowRules(false)} 
+            title="Fruit Party Rules"
+            rules={[
+                "Spin the reels to match fruit symbols and win multipliers.",
+                "Match 3 of the same fruit for a Jackpot (25x stake).",
+                "Match any 2 fruits for a minor payout (2.5x stake).",
+                "All results are calculated instantly using Elite RNG.",
+                "Balance is updated immediately after the animation completes."
+            ]}
+            payouts={[
+                { label: "3 Matching Fruits", value: "25x" },
+                { label: "2 Matching Fruits", value: "2.5x" }
+            ]}
+        />
         {floating && (
             <div key={floating.id} className={`fixed top-1/2 left-1/2 -translate-x-1/2 z-[100] font-black text-5xl italic pointer-events-none animate-float-up ${floating.color}`} style={{ textShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
                 {floating.text}

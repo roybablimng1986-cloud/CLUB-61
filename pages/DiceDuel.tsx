@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, RotateCw, History, HelpCircle, X } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
 import DiceDuelResultPopup from '../components/DiceDuelResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
   const [bet, setBet] = useState(10);
@@ -34,12 +35,9 @@ const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
     // Record bet in Firestore
     if (auth.currentUser) {
         try {
-            await addDoc(collection(db, 'dice_duel_bets'), {
-                uid: auth.currentUser.uid,
-                username: auth.currentUser.displayName || 'Player',
+            await addGameBet('dice_duel_bets', {
                 amount: bet,
-                target: target,
-                timestamp: Date.now()
+                target: target
             });
         } catch (e) {}
     }
@@ -97,6 +95,22 @@ const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
   return (
     <div className="bg-[#0f172a] min-h-screen flex flex-col font-sans text-white relative overflow-hidden">
         <DiceDuelResultPopup result={ddResult} onClose={() => setDdResult(null)} />
+        <HowToPlay 
+            isOpen={showRules} 
+            onClose={() => setShowRules(false)} 
+            title="Dice Duel Rules"
+            rules={[
+                "Predict the sum of two rolled dice: SMALL, BIG, or TIE.",
+                "SMALL: Wins if the sum is 2-6 (Pays 1.95x).",
+                "BIG: Wins if the sum is 8-12 (Pays 1.95x).",
+                "TIE: Wins if both dice show the same number (Pays 6x).",
+                "All rolls are verified by Elite RNG algorithms."
+            ]}
+            payouts={[
+                { label: "Small / Big", value: "1.95x" },
+                { label: "Tie (Same Dice)", value: "6x" }
+            ]}
+        />
         {floating && (
             <div key={floating.id} className={`fixed top-1/2 left-1/2 -translate-x-1/2 z-[100] font-black text-5xl italic pointer-events-none animate-float-up ${floating.color}`} style={{ textShadow: '0 0 20px rgba(0,0,0,0.5)' }}>
                 {floating.text}

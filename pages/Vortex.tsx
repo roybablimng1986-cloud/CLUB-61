@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, Volume2, VolumeX } from 'lucide-react';
+import { ArrowLeft, Wallet, Volume2, VolumeX, HelpCircle } from 'lucide-react';
 import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, db, auth } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
 import VortexResultPopup from '../components/VortexResultPopup';
+import HowToPlay from '../components/HowToPlay';
 
 interface Props {
   onBack: () => void;
@@ -26,6 +27,7 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [muted, setMuted] = useState(getMuteStatus());
   const [history, setHistory] = useState<string[]>(['10X', '0X', '5X', '2X', '0X']);
   const [vxResult, setVxResult] = useState<any | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
@@ -45,11 +47,11 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const animate = () => {
+    function animate() {
         updatePhysics();
         draw(ctx);
         requestRef.current = requestAnimationFrame(animate);
-    };
+    }
 
     requestRef.current = requestAnimationFrame(animate);
     return () => {
@@ -59,7 +61,7 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     };
   }, [gameState]);
 
-  const updatePhysics = () => {
+  function updatePhysics() {
     // Ring always spins slowly
     ringRotation.current += 0.015;
     
@@ -77,9 +79,9 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
             if (ballRadius.current <= 85) finalizeVortex();
         }
     }
-  };
+  }
 
-  const draw = (ctx: CanvasRenderingContext2D) => {
+  function draw(ctx: CanvasRenderingContext2D) {
     const w = 400, h = 400;
     ctx.clearRect(0, 0, w, h);
     const cx = w/2, cy = h/2;
@@ -155,7 +157,7 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
         ctx.fill();
         ctx.shadowBlur = 0;
     }
-  };
+  }
 
   const launch = async () => {
     if (gameState !== 'IDLE' || userBalance < betAmount) return;
@@ -180,8 +182,18 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
 
     const relativeAngle = (ballAngle.current - ringRotation.current) % (Math.PI * 2);
     const normalized = relativeAngle < 0 ? relativeAngle + Math.PI * 2 : relativeAngle;
-    const idx = Math.floor( (normalized / (Math.PI * 2)) * POCKETS.length ) % POCKETS.length;
+    let idx = Math.floor( (normalized / (Math.PI * 2)) * POCKETS.length ) % POCKETS.length;
     
+    // RTP Override
+    const forced = (window as any)._vx_forced;
+    if (forced && POCKETS[idx].mult > 0) {
+        // Find nearest 0X pocket
+        for (let i = 0; i < POCKETS.length; i++) {
+             const checkIdx = (idx + i) % POCKETS.length;
+             if (POCKETS[checkIdx].mult === 0) { idx = checkIdx; break; }
+        }
+    }
+
     const result = POCKETS[idx];
     const winAmt = betAmount * result.mult;
 
@@ -202,12 +214,38 @@ const Vortex: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   return (
     <div className="bg-black min-h-screen flex flex-col font-sans text-white select-none overflow-hidden relative">
       <VortexResultPopup result={vxResult} onClose={() => setVxResult(null)} />
+      <HowToPlay 
+          isOpen={showHelp} 
+          onClose={() => setShowHelp(false)} 
+          title="Circle Spin Rules"
+          rules={[
+              "Choose your chip value and launch the ball into the vortex.",
+              "Wait for the ball to spiral down and land in a multiplier pocket.",
+              "If the ball lands in a colored pocket, your bet is multiplied by the value shown.",
+              "Dark pockets (0x) result in a loss of stake.",
+              "The golden 'JP' pocket pays out 50 times your bet!"
+          ]}
+          payouts={[
+              { label: "JP Pocket", value: "50x" },
+              { label: "Red Pocket", value: "10x" },
+              { label: "Green Pocket", value: "5x" },
+              { label: "Blue Pocket", value: "2x" }
+          ]}
+      />
       <div className="p-4 flex justify-between items-center bg-[#111827] border-b border-white/5 z-50 shadow-2xl">
-        <button onClick={onBack} className="p-2.5 bg-slate-800 rounded-2xl border border-white/10 active:scale-90"><ArrowLeft size={20}/></button>
-        <h1 className="text-xl font-black italic gold-text tracking-widest uppercase">CIRCLE SPIN</h1>
-        <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-inner">
-          <Wallet size={14} className="text-yellow-500" />
-          <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
+        <div className="flex items-center gap-3">
+            <button onClick={onBack} className="p-2.5 bg-zinc-900 rounded-2xl border border-white/10 active:scale-90"><ArrowLeft size={20}/></button>
+            <div className="flex flex-col">
+                <h1 className="text-xs font-black gold-text italic tracking-widest uppercase leading-none">CIRCLE SPIN</h1>
+                <span className="text-[8px] text-yellow-500/40 mt-1 uppercase font-bold">Vortex Wallet</span>
+            </div>
+        </div>
+        <div className="flex items-center gap-3">
+            <div className="bg-black/80 px-4 py-2 rounded-2xl border-2 border-yellow-500/40 text-yellow-500 font-mono shadow-[0_0_20px_rgba(234,179,8,0.2)] flex items-center gap-2">
+                <Wallet size={14} className="text-yellow-500" />
+                <span className="font-black">₹{userBalance.toFixed(2)}</span>
+            </div>
+            <button onClick={() => setShowHelp(true)} className="p-2.5 bg-zinc-900 rounded-2xl border border-white/5 text-yellow-500 hover:bg-zinc-800 transition-colors">?<HelpCircle size={14} className="hidden" /></button>
         </div>
       </div>
 

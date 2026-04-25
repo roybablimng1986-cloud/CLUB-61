@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Plus, Minus, Info, HelpCircle, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, subscribeToSevenUpDown, subscribeToSevenUpDownBets, getClockOffset } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, subscribeToSevenUpDown, subscribeToSevenUpDownBets, getClockOffset, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { db, auth } from '../services/supabaseService';
 import { doc, onSnapshot, setDoc, getDoc, collection, query, where, limit, orderBy, serverTimestamp, addDoc } from 'firebase/firestore';
@@ -15,6 +15,7 @@ const RESULT_TIME = 5000;     // 5s result display
 
 import SevenUpDownResultPopup from '../components/SevenUpDownResultPopup';
 import { useStabilizedTimer } from '../hooks/useTimer';
+import HowToPlay from '../components/HowToPlay';
 
 const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
   const [gameState, setGameState] = useState<any>(null);
@@ -24,13 +25,17 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
   const [dice, setDice] = useState([1, 1]);
   const [history, setHistory] = useState<number[]>([]);
   const [suResult, setSuResult] = useState<any | null>(null);
-  const timeLeft = useStabilizedTimer(gameState?.status === 'BETTING' ? gameState.endTime : undefined);
+  const timeLeft = useStabilizedTimer(gameState?.endTime);
   const [isLocked, setIsLocked] = useState(false);
   const [activeTab, setActiveTab] = useState<'ALL' | 'MY'>('ALL');
   const [allBets, setAllBets] = useState<any[]>([]);
+  const allBetsRef = useRef<any[]>([]);
+  useEffect(() => { allBetsRef.current = allBets; }, [allBets]);
+
   const [myBets, setMyBets] = useState<any[]>([]);
   const [currentRoundId, setCurrentRoundId] = useState<string>('0');
   const [phase, setPhase] = useState<'BETTING' | 'LOCKOUT' | 'ROLLING' | 'RESULT'>('BETTING');
+  const [showHelp, setShowHelp] = useState(false);
   
   const isMounted = useRef(true);
   const lastPhaseRef = useRef<string>('');
@@ -100,24 +105,35 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
     const sum = state.sum;
     const outcome = sum < 7 ? 'DOWN' : sum > 7 ? 'UP' : 'SEVEN';
     
-    if (target && hasBetThisRound.current) {
-      const isWin = target === outcome;
-      const mult = outcome === 'SEVEN' ? 3 : 2;
-      const winAmt = isWin ? bet * mult : 0;
+    const myCurrentBets = allBetsRef.current.filter(b => b.uid === auth.currentUser?.uid);
+    if (myCurrentBets.length > 0) {
+        let totalWin = 0;
+        let totalBet = 0;
+        let wonAtLeastOne = false;
 
-      setSuResult({
-        win: isWin,
-        amount: isWin ? winAmt : bet,
-        period: state.period,
-        dice: state.dice,
-        sum: sum,
-        target: target
-      });
+        myCurrentBets.forEach(bet => {
+            totalBet += bet.amount;
+            const isWin = bet.target === outcome;
+            if (isWin) {
+                wonAtLeastOne = true;
+                const mult = outcome === 'SEVEN' ? 3 : 2;
+                totalWin += bet.amount * mult;
+            }
+        });
 
-      if (isWin) {
-        updateBalance(winAmt, 'WIN', '7 Up Down Win');
-      }
-      addGameHistory('7 Up Down', bet, winAmt, `Landed ${sum}`);
+        setSuResult({
+            win: wonAtLeastOne,
+            amount: wonAtLeastOne ? totalWin : totalBet,
+            period: state.period,
+            dice: state.dice,
+            sum: sum,
+            target: myCurrentBets.map(b => b.target).join(', ')
+        });
+
+        if (totalWin > 0) {
+            updateBalance(totalWin, 'WIN', '7 Up Down Win');
+        }
+        addGameHistory('7 Up Down', totalBet, totalWin, `Landed ${sum}`);
     }
   };
 
@@ -159,6 +175,21 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
             backgroundBlendMode: 'overlay'
          }}>
         <SevenUpDownResultPopup result={suResult} onClose={() => setSuResult(null)} />
+        <HowToPlay 
+            isOpen={showHelp} 
+            onClose={() => setShowHelp(false)} 
+            title="7 Up Down Rules"
+            rules={[
+                "Two dice are rolled. Predict if the sum will be UNDER 7 (2-6), EQUAL to 7, or OVER 7 (8-12).",
+                "Winner payout: Under 7 pays 2x, Over 7 pays 2x, 7 pays 3x.",
+                "Place your bets while the dice are sitting idle."
+            ]}
+            payouts={[
+                { label: "Under 7 (2-6)", value: "2x" },
+                { label: "Over 7 (8-12)", value: "2x" },
+                { label: "Exactly 7", value: "3x" }
+            ]}
+        />
         
         {/* Header */}
         <div className="p-4 flex justify-between items-center relative z-10 shrink-0">
@@ -174,17 +205,14 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
 
         {/* Ribbon Title */}
         <div className="flex justify-center -mt-2 relative z-10 shrink-0">
-            <div className="relative">
+            <button onClick={() => setShowHelp(true)} className="relative">
                 <div className="bg-[#e21b22] px-12 py-2 rounded-sm shadow-2xl border-y-2 border-yellow-500/50">
                     <h1 className="text-2xl font-black text-white italic tracking-tighter drop-shadow-lg">7 Up Down</h1>
                 </div>
                 <div className="absolute -left-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center border-2 border-[#4a0404] shadow-lg">
                     <HelpCircle size={16} className="text-[#4a0404]" />
                 </div>
-                <div className="absolute -right-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center border-2 border-[#4a0404] shadow-lg">
-                    <Info size={16} className="text-[#4a0404]" />
-                </div>
-            </div>
+            </button>
         </div>
 
         {/* Game Content */}
@@ -363,7 +391,8 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
                                     ) : new Date(b.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
                             </div>
-                        })}
+                        );
+                    })}
                         {(activeTab === 'MY' && myBets.length === 0) && (
                             <div className="text-center py-8 text-white/20 text-xs italic">No bets placed yet</div>
                         )}
