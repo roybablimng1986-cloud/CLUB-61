@@ -27,6 +27,7 @@ const Roulette: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
   const [floating, setFloating] = useState<{ text: string; color: string; id: number } | null>(null);
   const [confirmDrawer, setConfirmDrawer] = useState<{ open: boolean; type: RouletteBet['type']; value: string | number } | null>(null);
   const [rlResult, setRlResult] = useState<any | null>(null);
+  const [isSpinning, setIsSpinning] = useState(false);
 
   const [timeLeft, setTimeLeft] = useState(0);
   
@@ -83,25 +84,28 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
 // Redundant - now handled by shared listener in first useEffect
 
   const handleSpinSequence = (state: RouletteState) => {
+    setIsSpinning(true);
     playSound('wheel_spin');
     const result = state.winningNumber!;
     const resultIdx = WHEEL_ORDER.indexOf(result);
     const segmentAngle = 360 / WHEEL_ORDER.length;
     
-    const extraRots = 360 * 10; 
+    // Higher degree for more rotations
+    const extraRots = 360 * 15; 
     const offset = resultIdx * segmentAngle;
-    const finalRotation = wheelRotation + extraRots + (360 - (wheelRotation % 360)) - offset;
+    const finalRotation = extraRots + (360 - offset);
     
-    setWheelRotation(finalRotation);
+    setWheelRotation(prev => prev + finalRotation);
     
     setTimeout(() => {
         if (!isMounted.current) return;
         setLastResult(result);
+        setIsSpinning(false);
         const myCurrentBets = allBetsRef.current.filter(b => b.uid === auth.currentUser?.uid);
         if (myCurrentBets.length > 0) {
             processMyResult(state, myCurrentBets);
         }
-    }, 5000);
+    }, 4500); // match animation duration slightly less
   };
 
   const processMyResult = (state: RouletteState, currentBets: any[]) => {
@@ -255,9 +259,9 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
                   <div className="w-24 h-24 sm:w-52 sm:h-52 rounded-full bg-[#0a0a0a] border-[8px] sm:border-[12px] border-zinc-800 shadow-[inset_0_0_80px_rgba(0,0,0,1),0_0_60px_rgba(234,179,8,0.15)] flex flex-col items-center justify-center overflow-hidden relative">
                       <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent"></div>
                       <div className={`text-4xl sm:text-8xl font-black italic tracking-tighter transition-all duration-500 ${lastResult!==null ? 'scale-110 drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]' : 'scale-100'} ${lastResult===0?'text-green-500':REDS.includes(lastResult||-1)?'text-red-500':'text-white'}`}>
-                          {lastResult !== null ? lastResult : timeLeft}
+                          {isSpinning ? '...' : (lastResult !== null ? lastResult : timeLeft)}
                       </div>
-                      <div className="text-[7px] sm:text-[10px] font-black text-zinc-600 uppercase tracking-[0.4em] mt-1 sm:mt-3">{gameState.status === 'BETTING' ? 'TIME' : 'HIT'}</div>
+                      <div className="text-[7px] sm:text-[10px] font-black text-zinc-600 uppercase tracking-[0.4em] mt-1 sm:mt-3">{isSpinning ? 'SPINNING' : (gameState.status === 'BETTING' ? 'TIME' : 'HIT')}</div>
                   </div>
               </div>
           </div>
@@ -317,11 +321,14 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
                                 className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5"
                             >
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[10px] bg-black/20 border border-white/5`}>
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[10px] bg-black/20 border border-white/5 ${bet.type === 'COLOR' && bet.value === 'RED' ? 'text-red-500' : 'text-zinc-100'}`}>
                                         {bet.value}
                                     </div>
                                     <div>
-                                        <div className="text-[10px] font-black uppercase">{bet.username || 'Player'}</div>
+                                        <div className="text-[10px] font-black uppercase flex items-center gap-2">
+                                            {bet.username || 'Player'}
+                                            <span className="text-[6px] text-zinc-500 font-bold uppercase">{bet.type}</span>
+                                        </div>
                                         <div className="text-[8px] text-zinc-500">{new Date(bet.timestamp).toLocaleTimeString()}</div>
                                     </div>
                                 </div>

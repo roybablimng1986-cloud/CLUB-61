@@ -26,6 +26,7 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   const [confirmBet, setConfirmBet] = useState<{ zone: string; type: string } | null>(null);
   const [sbResult, setSbResult] = useState<any | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [isShaking, setIsShaking] = useState(false);
 
   const timeLeft = useStabilizedTimer(gameState?.endTime);
   
@@ -33,15 +34,17 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
   const resultHandledRef = useRef<string | null>(null);
 
   function handleResultSequence(state: SicBoState) {
+    setIsShaking(true);
     playSound('wheel_spin');
     
     setTimeout(() => {
         if (!isMounted.current) return;
+        setIsShaking(false);
         const myCurrentBets = allBetsRef.current.filter(b => b.uid === auth.currentUser?.uid);
         if (myCurrentBets.length > 0) {
             processMyResult(state, myCurrentBets);
         }
-    }, 3000);
+    }, 4000);
   }
 
   function processMyResult(state: SicBoState, currentBets: any[]) {
@@ -197,16 +200,21 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
 
       <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col items-center p-4 gap-8 pb-80 relative">
           {/* Shaking Dome */}
-          <div className="relative w-72 h-56 bg-gradient-to-b from-blue-900/60 to-black rounded-full border-[6px] border-white/10 flex items-center justify-center shadow-[0_0_80px_rgba(0,0,0,1)] mt-4">
-               <div className="flex gap-4">
+          <div className="relative w-72 h-56 bg-gradient-to-b from-blue-900/40 to-black/80 rounded-full border-[6px] border-white/10 flex items-center justify-center shadow-[0_0_80px_rgba(0,0,0,1)] mt-4 overflow-hidden">
+               <div className={`flex gap-4 ${isShaking ? 'animate-shake' : ''}`}>
                   {gameState.dice.map((d, i) => (
-                      <div key={i} className={`text-7xl ${gameState.status === 'LOCKED' ? 'animate-bounce' : 'animate-in zoom-in'} drop-shadow-[0_4px_10px_rgba(0,0,0,1)]`}>
-                        {DICE_FACES[d-1]}
+                      <div key={i} className={`text-7xl ${isShaking ? 'opacity-30' : 'animate-in zoom-in'} drop-shadow-[0_4px_10px_rgba(0,0,0,1)] transition-all`}>
+                        {isShaking ? DICE_FACES[Math.floor(Math.random()*6)] : DICE_FACES[d-1]}
                       </div>
                   ))}
                </div>
+               {isShaking && (
+                   <div className="absolute inset-0 bg-black/20 flex items-center justify-center pointer-events-none">
+                       <span className="text-xs font-black gold-text uppercase animate-pulse">Shaking Dome...</span>
+                   </div>
+               )}
                {gameState.status === 'BETTING' && (
-                   <div className="absolute inset-0 bg-black/60 rounded-full flex flex-col items-center justify-center backdrop-blur-[2px]">
+                   <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center backdrop-blur-[2px]">
                         <Timer size={40} className="text-yellow-500 mb-2 animate-pulse" />
                         <span className="text-4xl font-black font-mono text-yellow-500">{timeLeft}s</span>
                    </div>
@@ -268,10 +276,13 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
                             >
                                 <div className="flex items-center gap-3">
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[10px] bg-black/20 border border-white/5`}>
-                                        {bet.zone}
+                                        {bet.target}
                                     </div>
                                     <div>
-                                        <div className="text-[10px] font-black uppercase">{bet.username || 'Player'}</div>
+                                        <div className="text-[10px] font-black uppercase flex items-center gap-2">
+                                            {bet.username || 'Player'}
+                                            <span className="text-[6px] text-zinc-500 font-bold uppercase">{bet.betType}</span>
+                                        </div>
                                         <div className="text-[8px] text-zinc-500">{new Date(bet.timestamp).toLocaleTimeString()}</div>
                                     </div>
                                 </div>
@@ -345,6 +356,20 @@ const SicBo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
             100% { transform: translate(-50%, -200px); opacity: 0; scale: 1.5; }
         }
         .animate-float-up { animation: float-up 3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+        @keyframes shake {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        .animate-shake { animation: shake 0.2s infinite; }
       `}</style>
     </div>
   );

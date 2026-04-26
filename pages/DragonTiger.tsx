@@ -18,7 +18,7 @@ interface Props {
     onResult: (r: GameResult) => void;
 }
 
-type BetTarget = 'D' | 'T' | 'Tie' | 'ST';
+type BetTarget = 'D' | 'T' | 'Tie';
 
 const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult }) => {
     const [gameState, setGameState] = useState<DragonTigerState | null>(null);
@@ -65,13 +65,10 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
         const dSum = state.dragonCards.reduce((a, b) => a + b.rank, 0);
         const tSum = state.tigerCards.reduce((a, b) => a + b.rank, 0);
         
-        let winner: 'D' | 'T' | 'Tie' | 'ST' = 'Tie';
+        let winner: 'D' | 'T' | 'Tie' = 'Tie';
         if (dSum > tSum) winner = 'D';
         else if (tSum > dSum) winner = 'T';
-        else {
-            if (state.dragonCards[0].suit === state.tigerCards[0].suit) winner = 'ST';
-            else winner = 'Tie';
-        }
+        else winner = 'Tie';
         
         let totalWin = 0;
         let totalBet = 0;
@@ -81,7 +78,6 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
             if (bet.target === winner) {
                 let multi = 2;
                 if (winner === 'Tie') multi = 11;
-                if (winner === 'ST') multi = 50;
                 totalWin += bet.amount * multi;
             }
         });
@@ -191,23 +187,26 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
         <div className="flex flex-col items-center gap-2">
             <div className="flex gap-1">
                 {cards.map((card, idx) => (
-                    <div key={idx} className="card-container" style={{ width: '60px', height: '84px' }}>
+                    <div key={idx} className="card-container">
                         <div className={`card-inner ${show ? 'flip' : ''}`}>
-                            <div className="card-front" style={{ fontSize: '1.2rem' }}>?</div>
-                            <div className="card-back flex flex-col items-center justify-center relative">
-                                <span className={`absolute top-0.5 left-1 text-[10px] font-bold ${['♥', '♦'].includes(card?.suit || '') ? 'text-red-600' : 'text-zinc-900'}`}>
+                            <div className="card-front text-2xl">?</div>
+                            <div className="card-back flex flex-col items-center justify-center relative shadow-xl overflow-hidden rounded-lg">
+                                <span className={`absolute top-1 left-2 text-sm font-black ${['♥', '♦'].includes(card?.suit || '') ? 'text-red-600' : 'text-zinc-900'}`}>
                                     {getCardRank(card?.rank)}
                                 </span>
-                                <span className={`text-2xl ${['♥', '♦'].includes(card?.suit || '') ? 'text-red-600' : 'text-zinc-900'}`}>
+                                <span className={`text-4xl ${['♥', '♦'].includes(card?.suit || '') ? 'text-red-600' : 'text-zinc-900'}`}>
                                     {card?.suit}
+                                </span>
+                                <span className={`absolute bottom-1 right-2 text-sm font-black rotate-180 ${['♥', '♦'].includes(card?.suit || '') ? 'text-red-600' : 'text-zinc-900'}`}>
+                                    {getCardRank(card?.rank)}
                                 </span>
                             </div>
                         </div>
                     </div>
                 ))}
                 {cards.length === 0 && (
-                    <div className="card-container" style={{ width: '60px', height: '84px' }}>
-                        <div className="card-front" style={{ fontSize: '1.2rem' }}>?</div>
+                    <div className="card-container">
+                        <div className="card-front text-2xl">?</div>
                     </div>
                 )}
             </div>
@@ -228,12 +227,11 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
                     "Two cards are dealt: one to the Dragon and one to the Tiger.",
                     "Bet on which card will be higher. King is the highest, Ace is the lowest.",
                     "Payout for Dragon or Tiger is 1:1.",
-                    "A Tie pays 1:8, and a Suited Tie (same rank and suit) pays 1:50."
+                    "A Tie pays 1:8."
                 ]}
                 payouts={[
                     { label: "Dragon / Tiger", value: "2x" },
-                    { label: "Tie", value: "9x" },
-                    { label: "Suited Tie", value: "51x" }
+                    { label: "Tie", value: "9x" }
                 ]}
             />
             {/* Header */}
@@ -264,86 +262,70 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
                             <span key={i} className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-black text-[10px] shadow-lg border border-white/10 ${h==='D'?'bg-red-600':h==='T'?'bg-orange-600':'bg-green-600'}`}>{h}</span>
                         ))}
                     </div>
-                </div>
-
-                {/* Table Layout */}
-                <div className="w-full max-w-md px-4 mt-4">
-                    <div className="bg-[#064e3b] rounded-[3rem] p-8 border-4 border-[#065f46] shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
+                              {/* Layout Optimization */}
+                <div className="w-full max-w-sm px-4 mt-2">
+                    <div className="bg-slate-900/60 rounded-[2.5rem] p-6 border-4 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
                         <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
                         
-                        <div className="flex justify-between items-center mb-8">
+                        <div className="flex justify-between items-center mb-6">
                             <Card cards={gameState.dragonCards || []} show={showDragon} label="Dragon" />
                             
                             <div className="flex flex-col items-center">
-                                <div className={`w-16 h-16 rounded-full border-4 flex flex-col items-center justify-center font-black shadow-2xl bg-black/60 ${gameState.status === 'BETTING' ? (isBettingLocked ? 'border-orange-500 text-orange-500' : 'border-green-500 text-green-500') : 'border-red-600 text-red-600 animate-pulse'}`}>
-                                    <span className="text-2xl font-mono leading-none">{timeLeft}</span>
+                                <div className={`w-14 h-14 rounded-full border-2 flex flex-col items-center justify-center font-black shadow-2xl bg-black/60 ${gameState.status === 'BETTING' ? (isBettingLocked ? 'border-orange-500 text-orange-500' : 'border-green-500 text-green-500') : 'border-red-600 text-red-600 animate-pulse'}`}>
+                                    <span className="text-xl font-mono leading-none">{timeLeft}</span>
                                 </div>
-                                <span className="text-[8px] font-black text-white/40 uppercase tracking-widest mt-2">{gameState.status}</span>
                             </div>
 
                             <Card cards={gameState.tigerCards || []} show={showTiger} label="Tiger" />
                         </div>
 
                         <div className="text-center">
-                            <div className="text-[10px] font-bold text-white/30 uppercase tracking-tighter">Period: {gameState.period}</div>
+                            <span className="text-[8px] font-black text-white/40 uppercase tracking-[0.2em]">{gameState.status}</span>
                         </div>
                     </div>
                 </div>
 
-                {/* Betting Grid */}
-                <div className="px-4 grid grid-cols-2 gap-4 mb-4 mt-4 w-full max-w-md">
+                {/* Betting Grid - Refined */}
+                <div className="px-4 grid grid-cols-2 gap-4 mt-2 w-full max-w-sm">
                     <button 
                         disabled={isBettingLocked || gameState.status !== 'BETTING'}
                         onClick={() => handleTargetClick('D')}
-                        className={`relative h-32 rounded-[2rem] overflow-hidden border-2 transition-all active:scale-95 ${isBettingLocked ? 'opacity-50 grayscale' : 'hover:border-red-500/50'} ${confirmTarget === 'D' ? 'border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]' : 'border-white/5 bg-red-950/20'}`}
+                        className={`relative h-28 rounded-2xl overflow-hidden border-2 transition-all active:scale-95 ${isBettingLocked ? 'opacity-50 grayscale' : 'hover:border-red-500/50'} ${confirmTarget === 'D' ? 'border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.3)]' : 'border-white/5 bg-red-950/20'}`}
                     >
                         <div className="absolute inset-0 bg-gradient-to-br from-red-600/20 to-transparent"></div>
                         <div className="relative h-full flex flex-col items-center justify-center p-2">
-                            <span className="text-2xl font-black italic text-red-500 mb-1 tracking-tighter">DRAGON</span>
-                            <span className="text-[8px] font-black text-red-500/60 uppercase tracking-widest mb-2">Payout 1:1</span>
-                            <span className="text-sm font-black text-white italic">₹{gameState.totalBets.D.toLocaleString()}</span>
+                            <span className="text-xl font-black italic text-red-500 tracking-tighter">DRAGON</span>
+                            <span className="text-[7px] font-black text-red-500/60 uppercase tracking-widest mt-1">Payout 1:1</span>
+                            <span className="text-xs font-black text-white italic mt-2">₹{(gameState?.totalBets?.D || 0).toLocaleString()}</span>
                         </div>
                     </button>
 
                     <button 
                         disabled={isBettingLocked || gameState.status !== 'BETTING'}
                         onClick={() => handleTargetClick('T')}
-                        className={`relative h-32 rounded-[2rem] overflow-hidden border-2 transition-all active:scale-95 ${isBettingLocked ? 'opacity-50 grayscale' : 'hover:border-orange-500/50'} ${confirmTarget === 'T' ? 'border-orange-500 shadow-[0_0_30px_rgba(249,115,22,0.3)]' : 'border-white/5 bg-orange-950/20'}`}
+                        className={`relative h-28 rounded-2xl overflow-hidden border-2 transition-all active:scale-95 ${isBettingLocked ? 'opacity-50 grayscale' : 'hover:border-orange-500/50'} ${confirmTarget === 'T' ? 'border-orange-500 shadow-[0_0_30px_rgba(249,115,22,0.3)]' : 'border-white/5 bg-orange-950/20'}`}
                     >
                         <div className="absolute inset-0 bg-gradient-to-br from-orange-600/20 to-transparent"></div>
                         <div className="relative h-full flex flex-col items-center justify-center p-2">
-                            <span className="text-2xl font-black italic text-orange-500 mb-1 tracking-tighter">TIGER</span>
-                            <span className="text-[8px] font-black text-orange-500/60 uppercase tracking-widest mb-2">Payout 1:1</span>
-                            <span className="text-sm font-black text-white italic">₹{gameState.totalBets.T.toLocaleString()}</span>
+                            <span className="text-xl font-black italic text-orange-500 tracking-tighter">TIGER</span>
+                            <span className="text-[7px] font-black text-orange-500/60 uppercase tracking-widest mt-1">Payout 1:1</span>
+                            <span className="text-xs font-black text-white italic mt-2">₹{(gameState?.totalBets?.T || 0).toLocaleString()}</span>
                         </div>
                     </button>
                 </div>
 
-                <div className="px-4 grid grid-cols-2 gap-4 mb-4 w-full max-w-md">
+                <div className="px-4 w-full max-w-sm mt-4">
                     <button 
                         disabled={isBettingLocked || gameState.status !== 'BETTING'}
                         onClick={() => handleTargetClick('Tie')}
-                        className={`relative h-24 rounded-[1.5rem] overflow-hidden border-2 transition-all active:scale-95 ${isBettingLocked ? 'opacity-50 grayscale' : 'hover:border-green-500/50'} ${confirmTarget === 'Tie' ? 'border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.3)]' : 'border-white/5 bg-green-950/20'}`}
+                        className={`w-full relative h-16 rounded-xl overflow-hidden border-2 transition-all active:scale-95 ${isBettingLocked ? 'opacity-50 grayscale' : 'hover:border-green-500/50'} ${confirmTarget === 'Tie' ? 'border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.3)]' : 'border-white/5 bg-green-950/20'}`}
                     >
-                        <div className="relative h-full flex flex-col items-center justify-center p-2">
-                            <span className="text-lg font-black italic text-green-500 mb-1 tracking-tighter">TIE</span>
-                            <span className="text-[8px] font-black text-green-500/60 uppercase tracking-widest mb-1">Payout 1:8</span>
-                            <span className="text-xs font-black text-white italic">₹{gameState.totalBets.Tie.toLocaleString()}</span>
+                        <div className="relative h-full flex items-center justify-between px-6">
+                            <span className="text-lg font-black italic text-green-500 tracking-tighter">TIE (1:8)</span>
+                            <span className="text-sm font-black text-white italic font-mono">₹{(gameState?.totalBets?.Tie || 0).toLocaleString()}</span>
                         </div>
                     </button>
-
-                    <button 
-                        disabled={isBettingLocked || gameState.status !== 'BETTING'}
-                        onClick={() => handleTargetClick('ST')}
-                        className={`relative h-24 rounded-[1.5rem] overflow-hidden border-2 transition-all active:scale-95 ${isBettingLocked ? 'opacity-50 grayscale' : 'hover:border-yellow-500/50'} ${confirmTarget === 'ST' ? 'border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.3)]' : 'border-white/5 bg-yellow-950/20'}`}
-                    >
-                        <div className="relative h-full flex flex-col items-center justify-center p-2">
-                            <span className="text-lg font-black italic text-yellow-500 mb-1 tracking-tighter">SUITED TIE</span>
-                            <span className="text-[8px] font-black text-yellow-500/60 uppercase tracking-widest mb-1">Payout 1:50</span>
-                            <span className="text-xs font-black text-white italic">₹{gameState.totalBets.SuitedTie.toLocaleString()}</span>
-                        </div>
-                    </button>
-                </div>
+                </div>            </div>
 
                 {/* Live Bets Section */}
                 <div className="w-full mt-4 flex-1 flex flex-col min-h-[300px]">
@@ -367,7 +349,10 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
                                             {bet.target}
                                         </div>
                                         <div>
-                                            <div className="text-[10px] font-black uppercase">{bet.username || 'Player'}</div>
+                                            <div className="text-[10px] font-black uppercase flex items-center gap-2">
+                                                {bet.username || 'Player'}
+                                                {bet.target === 'D' ? <span className="text-[6px] text-red-500 font-bold uppercase">Dragon</span> : bet.target === 'T' ? <span className="text-[6px] text-orange-500 font-bold uppercase">Tiger</span> : <span className="text-[6px] text-green-500 font-bold uppercase">Tie</span>}
+                                            </div>
                                             <div className="text-[8px] text-zinc-500">{new Date(bet.timestamp).toLocaleTimeString()}</div>
                                         </div>
                                     </div>
@@ -382,12 +367,10 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
                 </div>
             </div>
 
-            {/* Betting Controls */}
-            <div className="bg-[#111] p-4 border-t border-white/10 z-[60] fixed bottom-0 left-0 w-full shadow-[0_-20px_60px_rgba(0,0,0,1)] pb-8">
-                <div className="grid grid-cols-4 gap-2 mb-4">
+            <div className="bg-[#111] p-4 border-t border-white/10 z-[60] fixed bottom-0 left-0 w-full shadow-[0_-20px_60px_rgba(0,0,0,1)] pb-4">
+                <div className="grid grid-cols-3 gap-2 mb-4">
                     <BetButton target="D" label="DRAGON" mult="2.0X" color="bg-red-950/40 border-red-700" bets={myBets} onClick={handleTargetClick} disabled={isBettingLocked || gameState.status !== 'BETTING'} />
                     <BetButton target="Tie" label="TIE" mult="11X" color="bg-green-950/40 border-green-700" bets={myBets} onClick={handleTargetClick} disabled={isBettingLocked || gameState.status !== 'BETTING'} />
-                    <BetButton target="ST" label="SUITED" mult="50X" color="bg-emerald-950/40 border-emerald-700" bets={myBets} onClick={handleTargetClick} disabled={isBettingLocked || gameState.status !== 'BETTING'} />
                     <BetButton target="T" label="TIGER" mult="2.0X" color="bg-orange-950/40 border-orange-700" bets={myBets} onClick={handleTargetClick} disabled={isBettingLocked || gameState.status !== 'BETTING'} />
                 </div>
                 
@@ -416,7 +399,7 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
                 <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/85 backdrop-blur-md">
                     <div className="bg-[#111] w-full max-w-md rounded-t-[3.5rem] p-10 border-t-2 border-yellow-500/40 animate-in slide-in-from-bottom duration-300">
                         <div className="flex justify-between items-center mb-8">
-                             <div><h3 className="text-3xl font-black italic gold-text uppercase">Stake on {confirmTarget === 'D' ? 'Dragon' : confirmTarget === 'T' ? 'Tiger' : confirmTarget === 'Tie' ? 'Tie' : 'Suited Tie'}</h3></div>
+                             <div><h3 className="text-3xl font-black italic gold-text uppercase">Stake on {confirmTarget === 'D' ? 'Dragon' : confirmTarget === 'T' ? 'Tiger' : 'Tie'}</h3></div>
                              <button onClick={() => setConfirmDrawerOpen(false)} className="p-4 bg-slate-800 rounded-full active:scale-90"><X size={24}/></button>
                         </div>
                         <div className="flex items-center justify-between mb-8 bg-black/40 p-6 rounded-3xl border border-white/5">

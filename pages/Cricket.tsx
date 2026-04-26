@@ -36,6 +36,48 @@ const Cricket: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
   const isMounted = useRef(true);
   const resultHandledRef = useRef<string | null>(null);
 
+  function processMyResult(state: CricketState, currentBets: any[]) {
+    let totalWin = 0;
+    let totalBet = 0;
+    
+    currentBets.forEach(bet => {
+        totalBet += bet.amount;
+        if (bet.target === state.landed) {
+            const outcome = OUTCOMES.find(o => o.val === state.landed);
+            if (outcome) totalWin += bet.amount * outcome.mult;
+        }
+    });
+
+    const isWin = totalWin > 0;
+    setCrResult({
+        win: isWin,
+        amount: isWin ? totalWin : totalBet,
+        period: state.period,
+        landed: state.landed,
+        target: currentBets[0]?.target
+    });
+
+    if (isWin) {
+        updateBalance(totalWin, 'WIN', 'Cricket Win');
+    }
+    addGameHistory('Cricket Hero', totalBet, totalWin, `Period: ${state.period}`);
+  }
+
+  function handleBowlingSequence(state: CricketState) {
+    setBowling(true);
+    playSound('sports_kick');
+    
+    setTimeout(() => {
+        if (!isMounted.current) return;
+        setBowling(false);
+        setLandedResult(state.landed);
+        const myCurrentBets = allBets.filter(b => b.uid === auth.currentUser?.uid);
+        if (myCurrentBets.length > 0) {
+            processMyResult(state, myCurrentBets);
+        }
+    }, 2000);
+  }
+
   useEffect(() => {
     isMounted.current = true;
     
@@ -85,48 +127,6 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
 
 // Listen to bets for the current period
 // Redundant - now handled by shared listener in first useEffect
-
-  const handleBowlingSequence = (state: CricketState) => {
-    setBowling(true);
-    playSound('sports_kick');
-    
-    setTimeout(() => {
-        if (!isMounted.current) return;
-        setBowling(false);
-        setLandedResult(state.landed);
-        const myCurrentBets = allBets.filter(b => b.uid === auth.currentUser?.uid);
-        if (myCurrentBets.length > 0) {
-            processMyResult(state, myCurrentBets);
-        }
-    }, 2000);
-  };
-
-  const processMyResult = (state: CricketState, currentBets: any[]) => {
-    let totalWin = 0;
-    let totalBet = 0;
-    
-    currentBets.forEach(bet => {
-        totalBet += bet.amount;
-        if (bet.target === state.landed) {
-            const outcome = OUTCOMES.find(o => o.val === state.landed);
-            if (outcome) totalWin += bet.amount * outcome.mult;
-        }
-    });
-
-    const isWin = totalWin > 0;
-    setCrResult({
-        win: isWin,
-        amount: isWin ? totalWin : totalBet,
-        period: state.period,
-        landed: state.landed,
-        target: currentBets[0]?.target
-    });
-
-    if (isWin) {
-        updateBalance(totalWin, 'WIN', 'Cricket Win');
-    }
-    addGameHistory('Cricket Hero', totalBet, totalWin, `Period: ${state.period}`);
-  };
 
   const handlePlaceBet = async () => {
     if (selectedTarget === null || !auth.currentUser || !gameState) return;

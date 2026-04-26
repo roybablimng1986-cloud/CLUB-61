@@ -255,12 +255,12 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
                             className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5"
                         >
                             <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-[10px] ${bet.target === 'ANDAR' ? 'bg-red-600' : 'bg-blue-600'}`}>
-                                    {bet.target[0]}
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-[8px] border-2 border-white/20 shadow-lg ${bet.target === 'ANDAR' ? 'bg-red-600' : bet.target === 'TIE' ? 'bg-orange-600' : 'bg-blue-600'}`}>
+                                    {bet.target}
                                 </div>
                                 <div>
-                                    <div className="text-[10px] font-black uppercase">{bet.username || 'Player'}</div>
-                                    <div className="text-[8px] text-zinc-500">{new Date(bet.timestamp).toLocaleTimeString()}</div>
+                                    <div className="text-[10px] font-black uppercase text-zinc-100">{bet.username || 'Player'}</div>
+                                    <div className="text-[8px] text-zinc-500 font-bold">{new Date(bet.timestamp).toLocaleTimeString()}</div>
                                 </div>
                             </div>
                             <div className="text-sm font-black text-yellow-500">₹{bet.amount}</div>

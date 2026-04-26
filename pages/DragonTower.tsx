@@ -14,7 +14,13 @@ import {
     Coins,
     User,
     Flame,
-    Sword
+    Sword,
+    ChevronUp,
+    ShieldAlert,
+    Zap,
+    Play,
+    Pause,
+    Lock
 } from 'lucide-react';
 import { updateBalance, playSound, addGameHistory, stopAllSounds, addGameBet, auth } from '../services/supabaseService';
 import { GameResult } from '../types';
@@ -26,44 +32,28 @@ interface Props {
   onResult: (r: GameResult) => void;
 }
 
-const TOWER_LEVELS = [
-    { level: 1, mult: 1.00 },
-    { level: 2, mult: 1.50 },
-    { level: 3, mult: 2.10 },
-    { level: 4, mult: 3.20 },
-    { level: 5, mult: 5.00 },
-    { level: 6, mult: 8.50 },
-    { level: 7, mult: 15.00 },
-    { level: 8, mult: 30.00 },
-    { level: 9, mult: 60.00 },
-    { level: 10, mult: 100.00 },
-];
+const TOTAL_LEVELS = 10;
 
 const DIFFICULTY_MODES = [
-    { id: 'EASY', label: 'Easy', traps: 1, total: 3, color: 'text-green-400' },
-    { id: 'MEDIUM', label: 'Medium', traps: 2, total: 3, color: 'text-yellow-400' },
-    { id: 'HARD', label: 'Hard', traps: 3, total: 4, color: 'text-red-400' },
-];
-
-const FAKE_WINS = [
-    { name: 'Guest4523', amount: 100, mult: 6.50, win: 650 },
-    { name: 'Guest7856', amount: 200, mult: 12.30, win: 2460 },
-    { name: 'Guest1578', amount: 50, mult: 3.25, win: 162.50 },
-    { name: 'Guest2586', amount: 150, mult: 8.70, win: 1305 },
-    { name: 'Guest3698', amount: 300, mult: 15.60, win: 4680 },
+    { id: 'EASY', label: 'Easy', traps: 1, total: 3, color: 'text-green-400', icon: '🟢', riskFactor: 3/2 },
+    { id: 'MEDIUM', label: 'Medium', traps: 2, total: 3, color: 'text-yellow-400', icon: '🟡', riskFactor: 3/1 },
+    { id: 'HARD', label: 'Hard', traps: 3, total: 4, color: 'text-red-400', icon: '🔴', riskFactor: 4/1 },
 ];
 
 const DragonTower: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
-    const [betAmount, setBetAmount] = useState(100);
+    const [betAmount, setBetAmount] = useState(10);
     const [difficulty, setDifficulty] = useState(DIFFICULTY_MODES[0]);
     const [currentLevel, setCurrentLevel] = useState(0); // 0 = not started
     const [isPlaying, setIsPlaying] = useState(false);
     const [history, setHistory] = useState<number[]>([]);
     const [showHelp, setShowHelp] = useState(false);
-    const [isExploding, setIsExploding] = useState<number | null>(null);
+    const [explodedIdx, setExplodedIdx] = useState<{level: number, tile: number} | null>(null);
     const [lastMultiplier, setLastMultiplier] = useState(1.00);
     const [tab, setTab] = useState<'MANUAL' | 'AUTO'>('MANUAL');
-    const [autoCashout, setAutoCashout] = useState(10.00);
+    
+    // Auto Mode States
+    const [isAutoActive, setIsAutoActive] = useState(false);
+    const [autoTargetLevel, setAutoTargetLevel] = useState(5);
 
     const isMounted = useRef(true);
 
@@ -72,16 +62,20 @@ const DragonTower: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
         return () => { isMounted.current = false; stopAllSounds(); };
     }, []);
 
+    const getMultiplierForLevel = (lvl: number) => {
+        if (lvl <= 0) return 1.00;
+        return Math.pow(difficulty.riskFactor * 0.98, lvl); // 0.98 for house edge
+    };
+
     const startGame = async () => {
         if (isPlaying || userBalance < betAmount) return;
 
         setIsPlaying(true);
         setCurrentLevel(1);
-        setIsExploding(null);
-        updateBalance(-betAmount, 'BET', 'Dragon Tower Initial');
+        setExplodedIdx(null);
+        updateBalance(-betAmount, 'BET', 'Dragon Tower Start');
         playSound('bet_place');
 
-        // Initial bet record
         if (auth.currentUser) {
             addGameBet('dragon_tower_bets', {
                 amount: betAmount,
@@ -91,75 +85,83 @@ const DragonTower: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
         }
     };
 
-    const handleLevelClimb = () => {
-        if (!isPlaying) return;
+    const handleTilePick = async (tileIdx: number) => {
+        if (!isPlaying || explodedIdx) return;
 
         const winChance = (difficulty.total - difficulty.traps) / difficulty.total;
-        const roll = Math.random();
+        const isWin = Math.random() <= winChance;
 
-        if (roll <= winChance) {
-            // WIN
-            playSound('tower_step'); // Consistent with other games
-            if (currentLevel < TOWER_LEVELS.length) {
+        if (isWin) {
+            playSound('tower_step');
+            if (currentLevel < TOTAL_LEVELS) {
                 setCurrentLevel(prev => prev + 1);
             } else {
-                // MAX REACHED
                 cashOut();
             }
         } else {
-            // TRAP
-            handleLoss();
+            handleLoss(tileIdx);
         }
     };
 
-    const handleLoss = () => {
-        setIsExploding(currentLevel);
+    const handleLoss = (tileIdx: number) => {
+        setExplodedIdx({ level: currentLevel, tile: tileIdx });
         setIsPlaying(false);
+        setIsAutoActive(false);
         playSound('mine_bomb');
         setLastMultiplier(1.00);
         
         setTimeout(() => {
             if (isMounted.current) {
                 setCurrentLevel(0);
-                setIsExploding(null);
+                setExplodedIdx(null);
             }
         }, 2000);
 
-        addGameHistory('Dragon Tower', betAmount, 0, `Trapped at Level ${currentLevel}`);
+        addGameHistory('Dragon Tower', betAmount, 0, `Tower Collapse Level ${currentLevel}`);
     };
 
     const cashOut = () => {
-        if (!isPlaying || currentLevel === 0) return;
+        if (!isPlaying || currentLevel <= 1) return;
 
-        const multiplier = TOWER_LEVELS[currentLevel - 1].mult;
+        const multiplier = getMultiplierForLevel(currentLevel - 1);
         const winAmount = betAmount * multiplier;
 
-        updateBalance(winAmount, 'WIN', 'Dragon Tower Cashout');
+        updateBalance(winAmount, 'WIN', 'Dragon Tower Success');
         playSound('cash_out');
         setLastMultiplier(multiplier);
         setHistory(prev => [multiplier, ...prev].slice(0, 10));
         setIsPlaying(false);
         setCurrentLevel(0);
+        setIsAutoActive(false);
 
-        addGameHistory('Dragon Tower', betAmount, winAmount, `Cashed out at ${multiplier}x`);
+        addGameHistory('Dragon Tower', betAmount, winAmount, `Dragon Defeated at ${multiplier.toFixed(2)}x`);
     };
 
-    const currentMultiplier = currentLevel > 0 ? TOWER_LEVELS[currentLevel - 1].mult : 1.00;
-    const nextMultiplier = currentLevel < TOWER_LEVELS.length ? TOWER_LEVELS[currentLevel].mult : 100.00;
+    // Auto Mode Logic
+    useEffect(() => {
+        if (isAutoActive && isPlaying && currentLevel > 0) {
+            if (currentLevel > autoTargetLevel) {
+                cashOut();
+            } else {
+                const timer = setTimeout(() => {
+                    const randomTile = Math.floor(Math.random() * difficulty.total);
+                    handleTilePick(randomTile);
+                }, 1000);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [isAutoActive, isPlaying, currentLevel, autoTargetLevel, difficulty.total]);
+
+    const currentMultiplier = getMultiplierForLevel(currentLevel - 1);
+    const nextMultiplier = getMultiplierForLevel(currentLevel);
 
     return (
-        <div className="min-h-screen bg-[#0B1020] text-white flex flex-col font-sans relative overflow-hidden">
+        <div className="min-h-screen bg-[#020617] text-white flex flex-col font-sans relative overflow-hidden">
             {/* Background Atmosphere */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-[-10%] right-[-10%] w-[80%] h-[80%] bg-orange-600/10 blur-[120px] rounded-full animate-pulse" />
-                <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-600/10 blur-[100px] rounded-full" />
-                
-                {/* Cloud/Mist Effects */}
-                <motion.div 
-                    animate={{ x: [-20, 20], opacity: [0.3, 0.5] }}
-                    transition={{ duration: 10, repeat: Infinity, repeatType: 'reverse' }}
-                    className="absolute top-1/3 left-0 right-0 h-40 bg-gradient-to-r from-transparent via-slate-800/20 to-transparent blur-3xl"
-                />
+                <div className="absolute top-[-10%] right-[-10%] w-[80%] h-[80%] bg-red-600/5 blur-[120px] rounded-full animate-pulse" />
+                <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] bg-blue-600/5 blur-[100px] rounded-full" />
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')] opacity-20"></div>
             </div>
 
             <HowToPlay 
@@ -168,50 +170,50 @@ const DragonTower: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
                 title="Dragon Tower Guide"
                 rules={[
                     "Set your bet amount and difficulty level.",
-                    "Climb the tower to increase your multiplier.",
-                    "Each level contains hidden traps - avoid them to survive!",
-                    "Cash out at any time to secure your current winnings.",
-                    "Difficulty affects potential multipliers and trap density."
+                    "Climb the tower level by level.",
+                    "Each level has multiple tiles. Some are SAFE, some are TRAPS.",
+                    "Correct tiles move you UP and increase your multiplier.",
+                    "Cash out at any time to take your winnings.",
+                    "The higher the difficulty, the bigger the multiplier jump!"
                 ]}
                 payouts={[
                     { label: "Level 1", value: "1.00x" },
-                    { label: "Level 5", value: "5.00x" },
-                    { label: "Level 10 (MAX)", value: "100.00x" }
+                    { label: "Difficulty Easy", value: "1.47x per level" },
+                    { label: "Difficulty Medium", value: "2.94x per level" },
+                    { label: "Difficulty Hard", value: "3.92x per level" }
                 ]}
             />
 
             {/* Header */}
-            <div className="p-4 flex justify-between items-center bg-black/40 backdrop-blur-md border-b border-white/5 z-50">
+            <div className="p-4 flex justify-between items-center bg-black/40 backdrop-blur-xl border-b border-white/5 z-50">
                 <div className="flex items-center gap-3">
-                    <button onClick={onBack} className="p-2.5 bg-slate-800/50 rounded-2xl border border-white/10 hover:bg-slate-800 transition-all active:scale-95"><ArrowLeft size={18}/></button>
+                    <button onClick={onBack} className="p-2.5 bg-slate-800/50 rounded-2xl border border-white/10 active:scale-90"><ArrowLeft size={18}/></button>
                     <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                             <Flame size={14} className="text-orange-500 fill-orange-500 animate-pulse" />
+                             <Flame size={14} className="text-red-500 fill-red-500 animate-pulse" />
                              <h1 className="text-sm font-black italic gold-text tracking-widest uppercase">DRAGON TOWER</h1>
                         </div>
-                        <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5 ml-5">Climb for Glory</p>
+                        <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5">Legendary Ascent</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.1)]">
-                        <Wallet size={14} className="text-orange-500" />
-                        <span className="text-sm font-black font-mono text-orange-500">₹{userBalance.toFixed(2)}</span>
+                    <div className="flex items-center gap-2 bg-black/50 px-4 py-2 rounded-2xl border border-yellow-500/20 shadow-[0_0_15px_rgba(234,179,8,0.1)]">
+                        <Wallet size={14} className="text-yellow-500" />
+                        <span className="text-sm font-black font-mono text-yellow-500">₹{userBalance.toFixed(2)}</span>
                     </div>
-                    <button onClick={() => setShowHelp(true)} className="p-2.5 bg-orange-500/10 text-orange-500 rounded-2xl border border-orange-500/20 hover:bg-orange-500/20 transition-all"><HelpCircle size={18}/></button>
+                    <button onClick={() => setShowHelp(true)} className="p-2.5 bg-yellow-500/10 text-yellow-500 rounded-2xl border border-yellow-500/20 active:scale-90"><HelpCircle size={18}/></button>
                 </div>
             </div>
 
-            {/* Layout Grid */}
             <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative">
-                
                 {/* Left Panel - Control */}
-                <div className="w-full md:w-80 p-4 border-r border-white/5 bg-black/20 flex flex-col gap-4 overflow-y-auto z-20">
-                    <div className="flex bg-slate-900/50 p-1 rounded-2xl border border-white/5">
+                <div className="w-full md:w-80 p-4 border-r border-white/5 bg-black/20 flex flex-col gap-4 overflow-y-auto no-scrollbar z-20 pb-40 md:pb-4">
+                    <div className="flex bg-slate-950 p-1 rounded-2xl border border-white/5">
                         {['MANUAL', 'AUTO'].map((t) => (
                             <button 
                                 key={t}
-                                onClick={() => setTab(t as any)}
-                                className={`flex-1 py-2.5 rounded-xl text-[10px] font-black tracking-widest transition-all ${tab === t ? 'bg-orange-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}
+                                onClick={() => { setTab(t as any); setIsAutoActive(false); }}
+                                className={`flex-1 py-2.5 rounded-xl text-[10px] font-black tracking-widest transition-all ${tab === t ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500'}`}
                             >
                                 {t}
                             </button>
@@ -219,268 +221,233 @@ const DragonTower: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
                     </div>
 
                     <div className="space-y-4">
+                        {/* Difficulty */}
                         <div className="space-y-2">
-                            <label className="text-[10px] text-zinc-500 font-black uppercase tracking-widest flex justify-between items-center">
-                                Bet Amount
-                                <span className="text-zinc-400">Min 10</span>
-                            </label>
+                            <label className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Difficulty</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {DIFFICULTY_MODES.map(mode => (
+                                    <button 
+                                        key={mode.id}
+                                        disabled={isPlaying}
+                                        onClick={() => setDifficulty(mode)}
+                                        className={`py-3 rounded-xl flex flex-col items-center justify-center transition-all border ${difficulty.id === mode.id ? 'bg-indigo-600/20 border-indigo-500 text-white' : 'bg-slate-900 border-white/5 text-zinc-500'}`}
+                                    >
+                                        <span className="text-lg">{mode.icon}</span>
+                                        <span className="text-[8px] font-black uppercase mt-1">{mode.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Bet Amount */}
+                        <div className="space-y-2">
+                            <label className="text-[10px] text-zinc-500 font-black uppercase tracking-widest flex justify-between">Stake Amount<span className="text-indigo-400">Min 10</span></label>
                             <div className="relative">
                                 <input 
                                     type="number" 
                                     value={betAmount} 
-                                    onChange={(e) => setBetAmount(Number(e.target.value))}
+                                    onChange={(e) => setBetAmount(Math.max(0, Number(e.target.value)))}
                                     disabled={isPlaying}
-                                    className="w-full bg-slate-900 rounded-2xl py-3.5 px-4 font-black border border-white/5 focus:border-orange-500/50 transition-all text-sm outline-none"
+                                    className="w-full bg-slate-950 rounded-2xl py-3.5 px-4 font-black border border-white/5 focus:border-indigo-500/50 transition-all text-sm outline-none"
                                 />
-                                <Coins className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-500/50" size={16} />
+                                <Coins className="absolute right-4 top-1/2 -translate-y-1/2 text-indigo-500/30" size={16} />
                             </div>
                             <div className="grid grid-cols-4 gap-2">
-                                {[100, 500, 1000, 2000].map(amt => (
+                                {[10, 50, 100, 500].map(amt => (
                                     <button 
                                         key={amt} 
                                         onClick={() => !isPlaying && setBetAmount(amt)}
-                                        className={`py-2 px-1 rounded-xl text-[10px] font-black border transition-all ${betAmount === amt ? 'bg-orange-500/20 border-orange-500 text-orange-400' : 'bg-slate-900 border-white/5 text-zinc-500'}`}
+                                        className={`py-2 rounded-lg text-[10px] font-black border transition-all ${betAmount === amt ? 'bg-indigo-500/20 border-indigo-500 text-indigo-400' : 'bg-slate-950 border-white/5 text-zinc-500'}`}
                                     >
-                                        {amt >= 1000 ? `${amt/1000}K` : amt}
+                                        ₹{amt}
                                     </button>
                                 ))}
                             </div>
                         </div>
 
                         {tab === 'AUTO' && (
-                             <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                                <label className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Auto Cashout</label>
-                                <div className="relative">
+                             <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Target Level ({autoTargetLevel})</label>
                                     <input 
-                                        type="number" 
-                                        value={autoCashout} 
-                                        onChange={(e) => setAutoCashout(Number(e.target.value))}
-                                        className="w-full bg-slate-900 rounded-2xl py-3.5 px-4 font-black border border-white/5 text-sm outline-none"
+                                        type="range" 
+                                        min="2" 
+                                        max={TOTAL_LEVELS} 
+                                        value={autoTargetLevel} 
+                                        onChange={(e) => setAutoTargetLevel(Number(e.target.value))}
+                                        className="w-full h-1.5 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                                     />
-                                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 font-black text-xs">x</span>
                                 </div>
                              </div>
                         )}
 
                         <button 
-                            onClick={startGame}
-                            disabled={isPlaying || userBalance < betAmount}
-                            className={`w-full py-5 rounded-2xl font-black italic tracking-[0.2em] uppercase transition-all active:scale-95 text-sm shadow-xl ${isPlaying ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-900/20 border-t border-white/20'}`}
+                            onClick={tab === 'MANUAL' ? startGame : () => { setIsAutoActive(!isAutoActive); if(!isAutoActive) startGame(); }}
+                            disabled={(isPlaying && tab === 'MANUAL') || userBalance < betAmount}
+                            className={`w-full py-5 rounded-2xl font-black italic tracking-[0.2em] uppercase transition-all active:scale-95 text-sm shadow-xl flex items-center justify-center gap-3 ${isAutoActive ? 'bg-red-600 text-white' : (isPlaying && tab === 'MANUAL') ? 'bg-zinc-800 text-zinc-500' : 'bg-gradient-to-r from-indigo-600 to-blue-600 text-white border-t border-white/20'}`}
                         >
-                            {isPlaying ? 'CLIMBING...' : 'PLACE BET'}
+                            {tab === 'AUTO' ? (isAutoActive ? <Pause size={18}/> : <Play size={18}/>) : null}
+                            {tab === 'AUTO' ? (isAutoActive ? 'STOP AUTO' : 'START AUTO') : (isPlaying ? 'CLIMBING...' : 'PLACE BET')}
                         </button>
                     </div>
 
-                    {/* Quick Stats */}
-                    <div className="bg-slate-900/30 rounded-2xl p-4 border border-white/5 space-y-3 mt-4">
-                        <div className="flex justify-between items-center text-[10px] font-bold">
-                            <span className="text-zinc-500 uppercase tracking-widest">Total Bets</span>
-                            <span className="text-white font-mono">245</span>
-                        </div>
-                        <div className="flex justify-between items-center text-[10px] font-bold">
-                            <span className="text-zinc-500 uppercase tracking-widest">Total Win</span>
-                            <span className="text-emerald-400 font-mono">₹12,450.00</span>
-                        </div>
-                        <div className="flex justify-between items-center text-[10px] font-bold">
-                            <span className="text-zinc-500 uppercase tracking-widest">Players</span>
-                            <span className="text-white font-mono flex items-center gap-1"><Users size={10}/> 23</span>
-                        </div>
-                    </div>
-
-                    {/* Live Wins */}
-                    <div className="flex-1 mt-4 overflow-hidden flex flex-col">
+                    {/* History */}
+                    <div className="mt-4 flex-1 flex flex-col min-h-[200px]">
                         <h4 className="text-[10px] text-zinc-500 font-black uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <TrendingUp size={12} className="text-orange-500" />
-                            Live Wins
+                             <HistoryIcon size={12} className="text-indigo-500" />
+                             Last Climbs
                         </h4>
-                        <div className="space-y-2 overflow-y-auto no-scrollbar">
-                            {FAKE_WINS.map((win, i) => (
-                                <div key={i} className="flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5 animate-in slide-in-from-right duration-500" style={{ animationDelay: `${i * 100}ms` }}>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-lg bg-orange-600 flex items-center justify-center"><User size={12}/></div>
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] font-black">{win.name}</span>
-                                            <span className="text-[8px] text-zinc-500 font-bold">₹{win.amount}</span>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-[10px] font-black text-blue-400">{win.mult.toFixed(2)}x</div>
-                                        <div className="text-[10px] font-black text-emerald-400">₹{win.win.toFixed(0)}</div>
-                                    </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {history.map((h, i) => (
+                                <div key={i} className={`p-2 rounded-xl text-center text-[10px] font-black border ${h > 1 ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-slate-900 border-white/5 text-zinc-600'}`}>
+                                    {h.toFixed(2)}x
                                 </div>
                             ))}
                         </div>
                     </div>
                 </div>
 
-                {/* Center - Tower */}
-                <div className="flex-1 relative flex flex-col items-center p-8 bg-[#0B1020]/50 overflow-y-auto scroll-smooth">
-                    
-                    {/* Dragon Art Decoration */}
-                    <div className="absolute top-10 left-1/2 -translate-x-1/2 opacity-10 pointer-events-none select-none w-full max-w-lg">
-                        <svg viewBox="0 0 200 200" className="w-full h-auto fill-orange-500">
-                             <path d="M100,20 C120,20 140,30 150,50 C160,70 155,90 140,110 C125,130 100,150 100,180 C100,150 75,130 60,110 C45,90 40,70 50,50 C60,30 80,20 100,20 Z" />
-                        </svg>
-                    </div>
-
-                    <div className="w-full max-w-xs flex flex-col-reverse gap-3 relative z-10 pt-20">
-                        {TOWER_LEVELS.map((lvl) => {
-                            const isCurrent = currentLevel === lvl.level;
-                            const isPast = currentLevel > lvl.level;
-                            const isNext = isPlaying && currentLevel === lvl.level - 1;
-                            const isExploded = isExploding === lvl.level;
-
+                {/* Main Game Area - The Tower */}
+                <div className="flex-1 overflow-y-auto no-scrollbar bg-black/40 p-4 md:p-8 flex flex-col items-center">
+                    <div className="flex flex-col-reverse gap-4 w-full max-w-sm relative">
+                        {/* Levels */}
+                        {Array.from({ length: TOTAL_LEVELS }).map((_, i) => {
+                            const levelNum = i + 1;
+                            const isCurrent = currentLevel === levelNum;
+                            const isPast = currentLevel > levelNum;
+                            const isNext = isPlaying && currentLevel === levelNum - 1;
+                            
                             return (
-                                <motion.div 
-                                    key={lvl.level}
-                                    initial={false}
-                                    animate={{ 
-                                        scale: isCurrent ? 1.05 : 1,
-                                        opacity: isPlaying ? (isCurrent || isPast || isNext ? 1 : 0.4) : 1
-                                    }}
-                                    className={`relative group h-14 rounded-2xl border-2 flex items-center justify-center transition-all duration-300 ${
-                                        isCurrent 
-                                            ? 'bg-gradient-to-r from-orange-600 to-orange-500 border-orange-400 shadow-[0_0_30px_rgba(249,115,22,0.4)]'
-                                            : isPast
-                                            ? 'bg-zinc-800/80 border-zinc-700/50 text-zinc-500'
-                                            : isNext
-                                            ? 'bg-slate-900/50 border-orange-500/20 border-dashed cursor-pointer hover:border-orange-500/50 hover:bg-orange-500/5'
-                                            : 'bg-zinc-900 border-white/5 text-zinc-600 opacity-50'
-                                    } ${isExploded ? 'bg-red-600 border-red-500 animate-shake shadow-[0_0_40px_rgba(239,68,68,0.5)]' : ''}`}
-                                    onClick={() => isNext && handleLevelClimb()}
-                                >
-                                    <span className={`text-lg font-black italic tracking-tighter ${isCurrent ? 'text-white' : ''}`}>
-                                        {lvl.mult.toFixed(2)}x
-                                    </span>
-                                    
-                                    {isCurrent && (
-                                        <motion.div 
-                                            layoutId="char" 
-                                            className="absolute -bottom-1 w-full flex justify-center"
-                                        >
-                                            <div className="w-8 h-4 bg-orange-400 blur-md rounded-full animate-pulse" />
-                                        </motion.div>
-                                    )}
+                                <div key={levelNum} className="relative group">
+                                    <div className="absolute -left-10 md:-left-16 top-1/2 -translate-y-1/2 flex items-center gap-2 opacity-50">
+                                         <span className="text-[10px] font-black text-indigo-400/50 font-mono">L{levelNum}</span>
+                                         <div className="w-4 h-0.5 bg-indigo-500/20"></div>
+                                    </div>
 
-                                    {isExploded && (
-                                        <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-2xl">
-                                            <motion.div 
-                                                initial={{ scale: 0, opacity: 1 }}
-                                                animate={{ scale: 3, opacity: 0 }}
-                                                className="w-20 h-20 bg-red-500 rounded-full"
-                                            />
-                                            <Flame size={32} className="text-white animate-bounce" />
-                                        </div>
-                                    )}
-                                </motion.div>
+                                    <div className={`grid gap-2 items-center transition-all duration-500 ${difficulty.total === 3 ? 'grid-cols-3' : 'grid-cols-4'} ${isCurrent ? 'scale-105' : isPast ? 'opacity-30' : isNext ? 'opacity-100' : 'opacity-10 grayscale pointer-events-none'}`}>
+                                        {Array.from({ length: difficulty.total }).map((_, tileIdx) => {
+                                            const isExploded = explodedIdx?.level === levelNum && explodedIdx?.tile === tileIdx;
+                                            
+                                            return (
+                                                <button
+                                                    key={tileIdx}
+                                                    disabled={!isNext || explodedIdx !== null || isAutoActive}
+                                                    onClick={() => handleTilePick(tileIdx)}
+                                                    className={`aspect-square sm:aspect-video rounded-xl border-2 flex items-center justify-center transition-all relative overflow-hidden ${isNext ? 'bg-slate-900 border-indigo-500/30 hover:border-indigo-400 hover:bg-indigo-500/10 active:scale-95' : 'bg-zinc-950 border-white/5'} ${isExploded ? 'bg-red-600 border-red-400 shadow-[0_0_30px_rgba(220,38,38,0.5)] z-10' : ''}`}
+                                                >
+                                                    {isExploded ? (
+                                                        <Flame size={20} className="text-white animate-bounce" />
+                                                    ) : isPast ? (
+                                                        <ShieldCheck size={16} className="text-green-500/50" />
+                                                    ) : isNext ? (
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500/40 animate-pulse"></div>
+                                                    ) : (
+                                                        <Lock size={12} className="text-zinc-800" />
+                                                    )}
+
+                                                    {/* Explosion Animation Overlay */}
+                                                    <AnimatePresence>
+                                                        {isExploded && (
+                                                            <motion.div 
+                                                                initial={{ scale: 0, opacity: 1 }}
+                                                                animate={{ scale: 4, opacity: 0 }}
+                                                                className="absolute inset-0 bg-orange-500 rounded-full"
+                                                            />
+                                                        )}
+                                                    </AnimatePresence>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    
+                                    {/* Multiplier Label for the level */}
+                                    <div className="absolute -right-12 md:-right-20 top-1/2 -translate-y-1/2 text-right">
+                                        <span className={`text-[10px] font-black font-mono tracking-tighter ${isCurrent ? 'text-indigo-400 animate-pulse' : 'text-zinc-600'}`}>
+                                            {getMultiplierForLevel(levelNum).toFixed(2)}x
+                                        </span>
+                                    </div>
+                                </div>
                             );
                         })}
 
-                        {/* Player Starting Point */}
-                        <div className={`mt-4 py-8 flex flex-col items-center gap-4 transition-all ${currentLevel > 0 ? 'opacity-30' : 'opacity-100'}`}>
-                             <div className="relative">
-                                 <motion.div 
-                                    animate={{ y: [0, -10, 0] }}
-                                    transition={{ duration: 2, repeat: Infinity }}
-                                    className="relative z-20"
-                                 >
-                                    <div className="w-12 h-12 bg-gradient-to-b from-orange-400 to-orange-600 rounded-2xl border-2 border-white/20 shadow-2xl flex items-center justify-center p-2">
-                                        <Sword className="text-white" />
-                                    </div>
-                                 </motion.div>
-                                 <div className="absolute -bottom-2 translate-y-full w-full flex justify-center">
-                                      <div className="w-16 h-2 bg-black/40 blur-sm rounded-full" />
+                        {/* Ground Base */}
+                        <div className="mt-8 py-10 flex flex-col items-center">
+                             <div className={`w-16 h-4 bg-indigo-500/10 blur-xl rounded-full transition-all duration-500 ${isPlaying ? 'scale-150' : 'scale-50'}`}></div>
+                             <div className="mt-4 flex flex-col items-center">
+                                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center p-2 shadow-2xl relative">
+                                     <Sword size={20} />
+                                     {currentLevel === 0 && !isPlaying && (
+                                         <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-black animate-ping"></div>
+                                     )}
                                  </div>
+                                 <span className="text-[8px] text-zinc-600 font-black uppercase mt-2 tracking-widest">Altar of Fortune</span>
                              </div>
-                             <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Ascent Origin</span>
                         </div>
                     </div>
                 </div>
 
-                {/* Right Panel - Info */}
-                <div className="w-64 p-4 border-l border-white/5 bg-black/20 flex flex-col gap-4 hidden lg:flex z-20">
-                    <div className="space-y-4">
-                        <div className="bg-slate-900/50 p-4 rounded-2xl border border-white/5 text-center relative overflow-hidden group">
-                           <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition-opacity"><Trophy size={40}/></div>
-                           <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mb-1">Next Possible</p>
-                           <h3 className="text-2xl font-black gold-text italic tracking-tighter">{nextMultiplier.toFixed(2)}x</h3>
-                        </div>
+                {/* Right Panel - Stats Panel (Large Screens) */}
+                <div className="w-64 p-4 border-l border-white/5 bg-black/20 hidden lg:flex flex-col gap-4 z-20">
+                     <div className="bg-slate-950 p-4 rounded-2xl border border-white/5 text-center flex flex-col items-center gap-1 group">
+                         <Trophy size={32} className="text-yellow-500/20 group-hover:text-yellow-500/40 transition-all mb-2" />
+                         <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest">Next Payout</span>
+                         <h3 className="text-2xl font-black italic gold-text">₹{(betAmount * nextMultiplier).toFixed(2)}</h3>
+                     </div>
 
-                        <div className="bg-slate-900/50 p-4 rounded-2xl border border-white/5 text-center transition-all">
-                           <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mb-1">Your Bets</p>
-                           <h3 className="text-2xl font-black text-blue-400 italic font-mono tracking-tighter">
-                               {isPlaying ? 1 : 0}
-                           </h3>
-                        </div>
+                     <div className="bg-slate-950 p-4 rounded-2xl border border-white/5 space-y-4">
+                         <div className="flex justify-between items-center">
+                             <span className="text-[9px] text-zinc-500 font-black uppercase">Current Lvl</span>
+                             <span className="text-xs font-black text-white">{currentLevel} / {TOTAL_LEVELS}</span>
+                         </div>
+                         <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                             <motion.div 
+                                className="h-full bg-indigo-500"
+                                animate={{ width: `${(currentLevel / TOTAL_LEVELS) * 100}%` }}
+                             />
+                         </div>
+                     </div>
 
-                        <div className="bg-slate-900/50 p-4 rounded-2xl border border-white/5 text-center">
-                           <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mb-1">Last Result</p>
-                           <h3 className={`text-2xl font-black italic font-mono tracking-tighter ${lastMultiplier > 1 ? 'text-emerald-400' : 'text-zinc-600'}`}>
-                               {lastMultiplier.toFixed(2)}x
-                           </h3>
-                        </div>
-                    </div>
-
-                    <div className="flex-1 mt-4 overflow-hidden">
-                        <h4 className="text-[10px] text-zinc-500 font-black uppercase tracking-widest mb-4 flex items-center gap-2">
-                             <HistoryIcon size={12} className="text-blue-500" />
-                             History
-                        </h4>
-                        <div className="grid grid-cols-2 gap-2">
-                            {history.length > 0 ? history.map((h, i) => (
-                                <div key={i} className={`p-2 rounded-xl text-center text-[10px] font-black italic border ${h > 1 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-slate-900 border-white/5 text-zinc-600'}`}>
-                                    {h.toFixed(2)}x
-                                </div>
-                            )) : (
-                                <div className="col-span-2 py-8 text-center text-zinc-700 text-[10px] font-bold italic border border-dashed border-zinc-800 rounded-2xl">
-                                    Awaiting Legend...
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Security Badge */}
-                    <div className="mt-auto p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/10 flex items-center gap-3">
-                        <ShieldCheck className="text-emerald-500/50" size={20} />
+                     <div className="p-4 bg-indigo-500/5 rounded-2xl border border-indigo-500/10 flex items-center gap-3 mt-auto">
+                        <ShieldCheck className="text-indigo-500/50" size={20} />
                         <div className="flex flex-col">
-                            <span className="text-[10px] font-black text-emerald-500/50 uppercase tracking-widest">Provably Fair</span>
-                            <span className="text-[8px] text-zinc-600 font-bold uppercase leading-none mt-0.5">Verified RNG v2.1</span>
+                            <span className="text-[10px] font-black text-indigo-500/50 uppercase tracking-widest leading-none">Safe Protocols</span>
+                            <span className="text-[8px] text-zinc-700 font-bold uppercase mt-1">Certified RNG 1.0</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Bottom Panel - Actions */}
-            <div className="p-4 safe-bottom bg-[#0B1020] border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-30">
-                 <div className="max-w-4xl mx-auto flex flex-col md:flex-row gap-4">
-                    <div className="grid grid-cols-6 gap-2 flex-1 md:flex-[0.6]">
-                        {[1, 1.5, 2, 3, 5].map(m => (
-                            <button 
-                                key={m}
-                                onClick={() => !isPlaying && setBetAmount(Math.floor(betAmount * m))}
-                                className="h-12 rounded-xl bg-slate-900 border border-white/5 text-[10px] font-black italic active:scale-90 transition-all hover:bg-slate-800"
-                            >
-                                {m}x
-                            </button>
-                        ))}
+            {/* Bottom Action Bar */}
+            <div className="p-4 md:p-6 bg-[#020617] border-t border-white/10 z-[100] shadow-[0_-20px_100px_rgba(0,0,0,1)]">
+                <div className="max-w-4xl mx-auto flex flex-col md:flex-row gap-4">
+                    <div className="flex-1 flex flex-col gap-1 items-center md:items-start">
+                         <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">Staked Value</span>
+                         <div className="text-2xl font-black italic text-white font-mono">₹{(betAmount * currentMultiplier).toFixed(2)}</div>
+                    </div>
+                    
+                    <div className="flex gap-4 flex-[2]">
                         <button 
-                            onClick={() => !isPlaying && setBetAmount(userBalance)}
-                            className="h-12 rounded-xl bg-orange-500/10 border border-orange-500/30 text-[10px] font-black italic text-orange-500 active:scale-90 transition-all hover:bg-orange-500/20"
+                            onClick={cashOut}
+                            disabled={!isPlaying || currentLevel <= 1 || isAutoActive}
+                            className={`flex-1 py-4 md:py-5 rounded-2xl font-black italic tracking-[0.3em] uppercase transition-all active:scale-95 text-sm border-t-2 shadow-2xl flex items-center justify-center gap-3 ${!isPlaying || currentLevel <= 1 || isAutoActive ? 'bg-zinc-900 text-zinc-600 border-white/5 opacity-50' : 'bg-gradient-to-r from-yellow-500 to-orange-600 text-black border-white/40'}`}
                         >
-                            ALL
+                            CASH OUT
                         </button>
                     </div>
-
-                    <button 
-                        onClick={cashOut}
-                        disabled={!isPlaying || currentLevel === 0}
-                        className={`flex-1 py-5 rounded-[2.5rem] font-black italic tracking-[0.4em] uppercase transition-all active:scale-95 text-base flex flex-col items-center justify-center leading-none gap-1 border-t-2 ${!isPlaying || currentLevel === 0 ? 'bg-zinc-800 text-zinc-600 border-white/5 opacity-50' : 'bg-gradient-to-r from-orange-600 to-orange-400 text-white shadow-[0_10px_40px_rgba(249,115,22,0.3)] border-white/10'}`}
-                    >
-                        <span>CASH OUT</span>
-                        <span className="text-xs tracking-widest text-white/70 italic uppercase">₹{(betAmount * currentMultiplier).toFixed(2)}</span>
-                    </button>
-                 </div>
+                </div>
             </div>
+
+            <style>{`
+                .gold-text { background: linear-gradient(to bottom, #fde68a, #d97706, #fde68a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+                .animate-shake { animation: shake 0.2s cubic-bezier(.36,.07,.19,.97) both infinite; }
+                @keyframes shake {
+                    10%, 90% { transform: translate3d(-1px, 0, 0); }
+                    20%, 80% { transform: translate3d(2px, 0, 0); }
+                    30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+                    40%, 60% { transform: translate3d(4px, 0, 0); }
+                }
+                .no-scrollbar::-webkit-scrollbar { display: none; }
+            `}</style>
         </div>
     );
 };

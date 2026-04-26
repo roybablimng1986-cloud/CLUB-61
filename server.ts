@@ -44,7 +44,16 @@ let winGoState: any = { timeLeft: 30, period: 202511261000, history: [
     { period: "202511260997", number: 5, bigSmall: "Big", color: "Violet" }
 ], status: 'BETTING', lastResult: null, endTime: Date.now() + 30000 };
 let aviatorState: any = { phase: 'WAITING', multiplier: 1.0, timeLeft: 10, history: [1.2, 5.4, 1.0, 2.3, 15.2, 1.1], crashPoint: 0, startTime: 0, endTime: Date.now() + 10000 };
-let dtState: any = { status: 'BETTING', timeLeft: 15, period: '2024001', dragonCards: [], tigerCards: [], history: ['D', 'T', 'D', 'D', 'T', 'ST'], endTime: Date.now() + 15000 };
+let dtState: any = { 
+    status: 'BETTING', 
+    timeLeft: 15, 
+    period: '2024001', 
+    dragonCards: [], 
+    tigerCards: [], 
+    history: ['D', 'T', 'D', 'D', 'T', 'ST'], 
+    endTime: Date.now() + 15000,
+    totalBets: { D: 0, T: 0, Tie: 0, SuitedTie: 0 }
+};
 let abState: any = { status: 'BETTING', timeLeft: 20, period: '2024001', joker: null, andarCards: [], baharCards: [], winner: null, history: ['A', 'B', 'A', 'A'], endTime: Date.now() + 20000 };
 let srState: any = { status: 'BETTING', timeLeft: 20, period: '2024001', multiplier: 1.0, crashPoint: 0, history: [1.5, 10.2, 1.05], endTime: Date.now() + 20000 };
 let cgState: any = { status: 'BETTING', timeLeft: 25, period: '2024001', grid: Array(9).fill(0), history: [], endTime: Date.now() + 25000 };
@@ -172,20 +181,44 @@ const startEngines = () => {
           const game = GAMES_WITH_BETS[Math.floor(Math.random() * GAMES_WITH_BETS.length)];
           const name = FAKE_NAMES[Math.floor(Math.random() * FAKE_NAMES.length)];
           const amount = [10, 50, 100, 500, 1000, 2000, 5000][Math.floor(Math.random() * 7)];
-          const target = game.options[Math.floor(Math.random() * game.options.length)];
+          let target = game.options[Math.floor(Math.random() * game.options.length)];
           
+          // Suited Tie removed from DT
+          if (game.id === 'dragon_tiger' && target === 'ST') target = 'Tie';
+
           const newBet = {
               uid: `fake_${Math.floor(Math.random() * 100000)}`,
               username: name,
               amount,
               target,
               timestamp: Date.now(),
-              isFake: true
+              isFake: true,
+              cashout: null // For Aviator
           };
 
-          gameFakeBets[game.bets] = [newBet, ...gameFakeBets[game.bets]].slice(0, 20);
+          gameFakeBets[game.bets] = [newBet, ...gameFakeBets[game.bets]].slice(0, 30);
+          
+          // Update aggregate totals for Dragon Tiger
+          if (game.id === 'dragon_tiger') {
+              const keyMap: any = { 'D': 'D', 'T': 'T', 'Tie': 'Tie' };
+              const key = keyMap[target];
+              if (key) {
+                  dtState.totalBets[key] = (dtState.totalBets[key] || 0) + newBet.amount;
+              }
+          }
+
+          // Random fake cashouts for Aviator
+          if (game.id === 'aviator' && aviatorState.phase === 'FLYING') {
+              const delay = 1000 + Math.random() * 5000;
+              setTimeout(() => {
+                  if (aviatorState.phase === 'FLYING') {
+                      newBet.cashout = aviatorState.multiplier;
+                      triggerSync();
+                  }
+              }, delay);
+          }
       } catch (e) { console.error('Fake Bet Error:', e); }
-      setTimeout(runFakeBets, 5000);
+      setTimeout(runFakeBets, 4000);
     };
     runFakeBets();
 
@@ -197,6 +230,7 @@ const startEngines = () => {
                 if (winGoState.status === 'BETTING') {
                     winGoState.status = 'REVEALING';
                     winGoState.timeLeft = 5;
+                    winGoState.endTime = Date.now() + 5000; // Set once
                     
                     const override = useOverride('wingo');
                     let res;
@@ -220,8 +254,9 @@ const startEngines = () => {
                     winGoState.status = 'BETTING';
                     winGoState.timeLeft = 30; // Standard 30s
                     winGoState.period += 1;
+                    winGoState.endTime = Date.now() + 30000; // Set once
                 }
-                winGoState.endTime = Date.now() + (winGoState.timeLeft * 1000);
+                triggerSync();
             }
             
             // Critical part: ensure sync happens on status transitions or every 5s anyway via runGlobalSync
@@ -288,6 +323,7 @@ const startEngines = () => {
                 if (dtState.status === 'BETTING') {
                     dtState.status = 'LOCKED';
                     dtState.timeLeft = 3;
+                    dtState.endTime = Date.now() + 3000;
                 } else if (dtState.status === 'LOCKED') {
                     dtState.status = 'RESULT';
                     const suits = ['♠', '♣', '♥', '♦'];
@@ -321,14 +357,17 @@ const startEngines = () => {
                     
                     dtState.history = [res, ...dtState.history].slice(0, 20);
                     dtState.timeLeft = 10;
+                    dtState.endTime = Date.now() + 10000;
                 } else {
                     dtState.status = 'BETTING';
                     dtState.timeLeft = 20;
                     dtState.dragonCards = [];
                     dtState.tigerCards = [];
                     dtState.period = (parseInt(dtState.period) + 1).toString();
+                    dtState.totalBets = { D: 0, T: 0, Tie: 0 };
+                    dtState.endTime = Date.now() + 20000;
                 }
-                dtState.endTime = Date.now() + (dtState.timeLeft * 1000);
+                triggerSync();
             }
         } catch (e) { console.error('DT Engine Error:', e); }
         setTimeout(runDragonTiger, 1000);
@@ -342,6 +381,7 @@ const startEngines = () => {
                 if (abState.status === 'BETTING') {
                     abState.status = 'LOCKED';
                     abState.timeLeft = 3;
+                    abState.endTime = Date.now() + 3000;
                 } else if (abState.status === 'LOCKED') {
                     abState.status = 'RESULT';
                     const suits = ['♠', '♣', '♥', '♦'];
@@ -365,6 +405,7 @@ const startEngines = () => {
                         abState.history = [abState.winner === 'ANDAR' ? 'A' : 'B', ...abState.history].slice(0, 20);
                     }
                     abState.timeLeft = 10;
+                    abState.endTime = Date.now() + 10000;
                 } else {
                     abState.status = 'BETTING';
                     abState.timeLeft = 20;
@@ -373,8 +414,9 @@ const startEngines = () => {
                     abState.baharCards = [];
                     abState.winner = null;
                     abState.period = (parseInt(abState.period) + 1).toString();
+                    abState.endTime = Date.now() + 20000;
                 }
-                abState.endTime = Date.now() + (abState.timeLeft * 1000);
+                triggerSync();
             }
         } catch (e) { console.error('AB Engine Error:', e); }
         setTimeout(runAndarBahar, 1000);
@@ -399,6 +441,7 @@ const startEngines = () => {
                     if (r < 0.15) srState.crashPoint = 1.0; 
                     else if (r < 0.50) srState.crashPoint = 1.01 + Math.random() * 0.49;
                     else srState.crashPoint = 1.5 + Math.pow(Math.random(), 2.5) * 20;
+                    triggerSync();
                 }
             } else if (srState.status === 'FLYING') {
                 const elapsed = (Date.now() - (srState.startTime || Date.now())) / 1000;
@@ -407,14 +450,15 @@ const startEngines = () => {
                 if (srState.multiplier >= srState.crashPoint) {
                     srState.status = 'RESULT';
                     srState.history = [srState.multiplier, ...srState.history].slice(0, 20);
+                    triggerSync();
                     setTimeout(() => {
                         srState.status = 'BETTING';
                         srState.timeLeft = 12;
                         srState.endTime = Date.now() + 12000;
+                        triggerSync();
                     }, 4000);
                 }
             }
-            srState.endTime = Date.now() + (srState.timeLeft * 1000);
         } catch (e) { console.error('SR Engine Error:', e); }
         const nextInterval = srState.status === 'FLYING' ? 400 : 1000;
         setTimeout(runSpaceRaid, nextInterval);
@@ -428,6 +472,7 @@ const startEngines = () => {
                 if (cricketState.status === 'BETTING') {
                     cricketState.status = 'LOCKED';
                     cricketState.timeLeft = 3;
+                    cricketState.endTime = Date.now() + 3000;
                 } else if (cricketState.status === 'LOCKED') {
                     cricketState.status = 'RESULT';
                     // Weights: 1(30%), 2(25%), 4(20%), 6(15%), Wicket(8%), Tie(2%)
@@ -443,13 +488,15 @@ const startEngines = () => {
                     cricketState.landed = res;
                     cricketState.history = [res, ...cricketState.history].slice(0, 20);
                     cricketState.timeLeft = 12;
+                    cricketState.endTime = Date.now() + 12000;
                 } else {
                     cricketState.status = 'BETTING';
                     cricketState.timeLeft = 15;
                     cricketState.landed = null;
                     cricketState.period = (parseInt(cricketState.period) + 1).toString();
+                    cricketState.endTime = Date.now() + 15000;
                 }
-                cricketState.endTime = Date.now() + (cricketState.timeLeft * 1000);
+                triggerSync();
             }
         } catch (e) { console.error('Cricket Engine Error:', e); }
         setTimeout(runCricket, 1000);
@@ -463,6 +510,7 @@ const startEngines = () => {
                 if (baccaratState.status === 'BETTING') {
                     baccaratState.status = 'LOCKED';
                     baccaratState.timeLeft = 5;
+                    baccaratState.endTime = Date.now() + 5000;
                 } else if (baccaratState.status === 'LOCKED') {
                     baccaratState.status = 'RESULT';
                     const r = Math.random();
@@ -474,13 +522,14 @@ const startEngines = () => {
                     baccaratState.winner = winner;
                     baccaratState.history = [winner.charAt(0), ...baccaratState.history].slice(0, 20);
                     baccaratState.timeLeft = 15;
+                    baccaratState.endTime = Date.now() + 15000;
                 } else {
                     baccaratState.status = 'BETTING';
                     baccaratState.timeLeft = 25;
                     baccaratState.winner = null;
                     baccaratState.period = (parseInt(baccaratState.period) + 1).toString();
+                    baccaratState.endTime = Date.now() + 25000;
                 }
-                baccaratState.endTime = Date.now() + (baccaratState.timeLeft * 1000);
                 triggerSync();
             }
         } catch (e) { console.error('Baccarat Engine Error:', e); }
@@ -495,19 +544,21 @@ const startEngines = () => {
                 if (rouletteState.status === 'BETTING') {
                     rouletteState.status = 'LOCKED';
                     rouletteState.timeLeft = 5;
+                    rouletteState.endTime = Date.now() + 5000;
                 } else if (rouletteState.status === 'LOCKED') {
                     rouletteState.status = 'RESULT';
                     // RTP: Standard 37 numbers (including 0)
                     rouletteState.winningNumber = Math.floor(Math.random() * 37);
                     rouletteState.history = [rouletteState.winningNumber, ...rouletteState.history].slice(0, 20);
                     rouletteState.timeLeft = 15;
+                    rouletteState.endTime = Date.now() + 15000;
                 } else {
                     rouletteState.status = 'BETTING';
                     rouletteState.timeLeft = 30;
                     rouletteState.winningNumber = null;
                     rouletteState.period = (parseInt(rouletteState.period) + 1).toString();
+                    rouletteState.endTime = Date.now() + 30000;
                 }
-                rouletteState.endTime = Date.now() + (rouletteState.timeLeft * 1000);
                 triggerSync();
             }
         } catch (e) { console.error('Roulette Engine Error:', e); }
@@ -522,6 +573,7 @@ const startEngines = () => {
                 if (sicboState.status === 'BETTING') {
                     sicboState.status = 'LOCKED';
                     sicboState.timeLeft = 5;
+                    sicboState.endTime = Date.now() + 5000;
                 } else if (sicboState.status === 'LOCKED') {
                     sicboState.status = 'RESULT';
                     const d1 = Math.floor(Math.random() * 6) + 1;
@@ -532,13 +584,14 @@ const startEngines = () => {
                     const isTriple = d1 === d2 && d2 === d3; 
                     sicboState.history = [(isTriple ? 'T' : sum), ...sicboState.history].slice(0, 20);
                     sicboState.timeLeft = 15;
+                    sicboState.endTime = Date.now() + 15000;
                 } else {
                     sicboState.status = 'BETTING';
                     sicboState.timeLeft = 25;
                     sicboState.dice = [1, 1, 1];
                     sicboState.period = (parseInt(sicboState.period) + 1).toString();
+                    sicboState.endTime = Date.now() + 25000;
                 }
-                sicboState.endTime = Date.now() + (sicboState.timeLeft * 1000);
                 triggerSync();
             }
         } catch (e) { console.error('SicBo Engine Error:', e); }
@@ -553,9 +606,11 @@ const startEngines = () => {
                 if (sevenUpDownState.status === 'BETTING') {
                     sevenUpDownState.status = 'LOCKED';
                     sevenUpDownState.timeLeft = 5;
+                    sevenUpDownState.endTime = Date.now() + 5000;
                 } else if (sevenUpDownState.status === 'LOCKED') {
                     sevenUpDownState.status = 'RESULT';
                     sevenUpDownState.timeLeft = 5;
+                    sevenUpDownState.endTime = Date.now() + 5000;
                     
                     const override = useOverride('seven_up_down');
                     if (override === 'Down') {
@@ -575,8 +630,9 @@ const startEngines = () => {
                     sevenUpDownState.status = 'BETTING';
                     sevenUpDownState.timeLeft = 25;
                     sevenUpDownState.period = (parseInt(sevenUpDownState.period) + 1).toString();
+                    sevenUpDownState.endTime = Date.now() + 25000;
                 }
-                sevenUpDownState.endTime = Date.now() + (sevenUpDownState.timeLeft * 1000);
+                triggerSync();
             }
         } catch (e) { console.error('7UpDown Engine Error:', e); }
         setTimeout(runSevenUpDown, 1000);

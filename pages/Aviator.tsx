@@ -402,24 +402,6 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
             <button className="ml-2 p-1 text-zinc-500"><History size={16}/></button>
         </div>
 
-        {/* Betting Area */}
-        <div className="px-2 py-2 grid grid-cols-1 md:grid-cols-2 gap-2 overflow-y-auto no-scrollbar scroll-smooth order-2">
-            <BetPanel 
-                bet={bet1} 
-                setBet={setBet1} 
-                onAction={() => handleBetAction(1)} 
-                phase={globalState.phase} 
-                multiplier={localMultiplier}
-            />
-            <BetPanel 
-                bet={bet2} 
-                setBet={setBet2} 
-                onAction={() => handleBetAction(2)} 
-                phase={globalState.phase} 
-                multiplier={localMultiplier}
-            />
-        </div>
-
         {/* Game Area */}
         <div className="h-[280px] md:h-[400px] relative flex flex-col bg-[#000000] mx-2 mb-2 rounded-2xl overflow-hidden border border-white/5 order-1">
             {/* Info Overlay */}
@@ -500,6 +482,24 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
                     )}
                 </AnimatePresence>
             </div>
+        </div>
+
+        {/* Betting Area */}
+        <div className="px-2 py-2 grid grid-cols-1 md:grid-cols-2 gap-2 overflow-y-auto no-scrollbar scroll-smooth order-2">
+            <BetPanel 
+                bet={bet1} 
+                setBet={setBet1} 
+                onAction={() => handleBetAction(1)} 
+                phase={globalState.phase} 
+                multiplier={localMultiplier}
+            />
+            <BetPanel 
+                bet={bet2} 
+                setBet={setBet2} 
+                onAction={() => handleBetAction(2)} 
+                phase={globalState.phase} 
+                multiplier={localMultiplier}
+            />
         </div>
 
         {/* Live Bets Section */}

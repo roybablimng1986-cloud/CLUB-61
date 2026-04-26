@@ -205,15 +205,8 @@ const SpaceRaid: React.FC<{ onBack: () => void; userBalance: number; onResult: (
             </div>
 
             {/* Game Content */}
-            <div className="flex-1 flex flex-col items-center p-4 relative overflow-y-auto no-scrollbar pb-80">
+            <div className="flex-1 flex flex-col items-center p-4 relative overflow-y-auto no-scrollbar pb-60">
                 
-                {gameState.status === 'BETTING' && (
-                    <div className="w-full bg-zinc-900/50 p-4 rounded-2xl border border-cyan-500/10 text-[10px] text-zinc-400 leading-relaxed mb-4">
-                        <h4 className="font-black text-cyan-400 mb-1 uppercase">How to Play</h4>
-                        <p>1. Place your bet during the 10s countdown.<br/>2. Watch the Rocket fly and the multiplier grow.<br/>3. Click "EXTRACT" to take your winnings.<br/>4. If the Rocket crashes before you extract, you lose!</p>
-                    </div>
-                )}
-
                 {/* History (Top) */}
                 <div className="w-full mb-4">
                     <div className="flex gap-1 overflow-x-auto no-scrollbar py-2">
@@ -286,7 +279,10 @@ const SpaceRaid: React.FC<{ onBack: () => void; userBalance: number; onResult: (
                                             <Rocket size={14} className="text-cyan-400" />
                                         </div>
                                         <div>
-                                            <div className="text-[10px] font-black uppercase">{bet.username || 'Raider'}</div>
+                                            <div className="text-[10px] font-black uppercase flex items-center gap-2">
+                                                {bet.username || 'Raider'}
+                                                {bet.isTie && <span className="bg-orange-500/20 text-orange-400 text-[6px] px-1 rounded uppercase">TIE 50X</span>}
+                                            </div>
                                             <div className="text-[8px] text-zinc-500">{new Date(bet.timestamp).toLocaleTimeString()}</div>
                                         </div>
                                     </div>
@@ -302,39 +298,39 @@ const SpaceRaid: React.FC<{ onBack: () => void; userBalance: number; onResult: (
             </div>
 
             {/* Betting Controls */}
-            <div className="fixed bottom-0 left-0 w-full bg-[#050510] p-6 pb-12 border-t-2 border-cyan-500/30 shadow-[0_-20px_100px_rgba(0,0,0,1)] z-[60]">
+            <div className="fixed bottom-0 left-0 w-full bg-[#050510]/95 backdrop-blur-xl p-4 pb-8 border-t border-cyan-500/30 shadow-[0_-20px_100px_rgba(0,0,0,1)] z-[60]">
                 {gameState.status === 'RESULT' && currentMultiplier < gameState.crashPoint && !hasCashedOut && myBets.filter(b => !b.cashedOut && !b.isTie).length > 0 ? (
                     <button 
                         onClick={handleCashOut}
-                        className="w-full py-8 bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-400 text-black font-black text-3xl rounded-3xl shadow-[0_0_50px_rgba(234,179,8,0.4)] uppercase mb-4 animate-bounce border-t-2 border-white/40"
+                        className="w-full py-6 bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-400 text-black font-black text-2xl rounded-2xl shadow-[0_0_50px_rgba(234,179,8,0.4)] uppercase mb-4 animate-bounce border-t-2 border-white/40"
                     >
                         EXTRACT ₹{(betAmount * currentMultiplier).toFixed(2)}
                     </button>
                 ) : (
-                    <div className="flex flex-col gap-6">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="flex flex-col gap-4">
+                        <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
                             {[10, 50, 100, 200, 500, 1000, 2000, 5000].map(a => (
                                 <button 
                                     key={a} 
                                     onClick={() => setBetAmount(a)} 
-                                    className={`py-3 sm:py-4 rounded-2xl font-black text-xs sm:text-sm transition-all border-2 ${betAmount === a ? 'bg-cyan-500 text-black border-white shadow-[0_0_20px_rgba(34,211,238,0.4)] scale-105' : 'bg-zinc-900/50 text-zinc-500 border-white/5'}`}
+                                    className={`flex-shrink-0 px-6 py-2.5 rounded-xl font-black text-[10px] transition-all border ${betAmount === a ? 'bg-cyan-500 text-black border-white shadow-[0_0_15px_rgba(34,211,238,0.4)]' : 'bg-white/5 text-zinc-500 border-white/5'}`}
                                 >
                                     ₹{a >= 1000 ? (a/1000)+'K' : a}
                                 </button>
                             ))}
                         </div>
-                        <div className="flex gap-3">
+                        <div className="flex gap-2">
                             <button 
                                 onClick={() => handlePlaceBet(true)}
                                 disabled={isBettingLocked || gameState.status !== 'BETTING'}
-                                className={`flex-1 py-6 rounded-3xl font-black text-sm uppercase transition-all border-b-4 ${isBettingLocked || gameState.status !== 'BETTING' ? 'bg-zinc-800 text-zinc-600 border-zinc-950 opacity-40' : 'bg-orange-600 text-white border-orange-800 shadow-xl active:scale-95'}`}
+                                className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase transition-all border-b-2 ${isBettingLocked || gameState.status !== 'BETTING' ? 'bg-zinc-800 text-zinc-600 border-zinc-950 opacity-40' : 'bg-orange-600 text-white border-orange-800 shadow-xl active:scale-95'}`}
                             >
                                 TIE 50X
                             </button>
                             <button 
                                 onClick={() => handlePlaceBet(false)}
                                 disabled={isBettingLocked || gameState.status !== 'BETTING'}
-                                className={`flex-[2] py-6 rounded-3xl font-black text-xl uppercase tracking-widest transition-all border-b-4 ${isBettingLocked || gameState.status !== 'BETTING' ? 'bg-zinc-800 text-zinc-600 border-zinc-950 opacity-40' : 'bg-cyan-600 text-white border-cyan-800 shadow-[0_0_30px_rgba(34,211,238,0.3)] active:scale-95 animate-pulse'}`}
+                                className={`flex-[2] py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border-b-2 ${isBettingLocked || gameState.status !== 'BETTING' ? 'bg-zinc-800 text-zinc-600 border-zinc-950 opacity-40' : 'bg-cyan-600 text-white border-cyan-800 shadow-[0_0_30px_rgba(34,211,238,0.3)] active:scale-95'}`}
                             >
                                 {isBettingLocked ? 'LOCKED' : 'LAUNCH RAID'}
                             </button>

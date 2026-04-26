@@ -22,7 +22,6 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
   const [betAmount, setBetAmount] = useState(10);
   const [muted, setMuted] = useState(getMuteStatus());
   const [showRules, setShowRules] = useState(false);
-  const [plResult, setPlResult] = useState<any | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ballsRef = useRef<Ball[]>([]);
   const pulsesRef = useRef<{row: number, col: number, startTime: number}[]>([]);
@@ -106,19 +105,15 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
     const winAmount = ball.bet * multiplier;
     
     const isWin = multiplier >= 1;
-    setPlResult({
-        win: isWin,
-        amount: isWin ? winAmount : ball.bet,
-        multiplier: multiplier
-    });
 
     if (isWin) {
         updateBalance(winAmount, 'WIN', `Plinko ${multiplier}x`);
+        playSound('win');
     }
     
     const rid = Math.random().toString(36).substr(2, 5);
     setFloatingResults(prev => [...prev, { id: rid, mult: multiplier, amount: winAmount }]);
-    setTimeout(() => { setFloatingResults(prev => prev.filter(res => res.id !== rid)); }, 1000);
+    setTimeout(() => { setFloatingResults(prev => prev.filter(res => res.id !== rid)); }, 2000);
     addGameHistory('Plinko', ball.bet, winAmount, `Hit ${multiplier}x`);
   };
 
@@ -139,7 +134,6 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
 
   return (
     <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white relative overflow-hidden">
-      <PlinkoResultPopup result={plResult} onClose={() => setPlResult(null)} />
       <HowToPlay 
           isOpen={showRules} 
           onClose={() => setShowRules(false)} 
@@ -158,11 +152,17 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
           ]}
       />
       {floatingResults.map(res => (
-          <div key={res.id} className="fixed top-[40%] left-1/2 -translate-x-1/2 z-[100] w-full px-10 pointer-events-none animate-in fade-in zoom-in duration-300">
-               <div className={`py-4 px-8 rounded-full border-4 shadow-2xl flex items-center justify-center gap-6 backdrop-blur-xl ${res.mult >= 1 ? 'bg-green-600/90 border-green-400' : 'bg-red-600/90 border-red-400'}`}>
-                   <span className="font-black italic text-3xl">{res.mult}x</span>
-                   <div className="w-[2px] h-10 bg-white/20"></div>
-                   <span className="font-black text-4xl">₹{res.amount.toFixed(2)}</span>
+          <div key={res.id} className="fixed top-[40%] left-1/2 -translate-x-1/2 z-[100] w-full px-10 pointer-events-none animate-in fade-in zoom-in slide-in-from-bottom-10 duration-500">
+               <div className={`py-6 px-10 rounded-[2.5rem] border-4 shadow-[0_0_50px_rgba(0,0,0,0.5)] flex items-center justify-center gap-8 backdrop-blur-2xl ${res.mult >= 1 ? 'bg-green-600/90 border-green-400' : 'bg-red-600/90 border-red-400'}`}>
+                   <div className="flex flex-col items-center">
+                       <span className="text-[10px] font-black uppercase opacity-60">Multiplier</span>
+                       <span className="font-black italic text-4xl">{res.mult}x</span>
+                   </div>
+                   <div className="w-[2px] h-12 bg-white/20"></div>
+                   <div className="flex flex-col items-center">
+                       <span className="text-[10px] font-black uppercase opacity-60">Win Amount</span>
+                       <span className="font-black text-5xl">₹{res.amount.toFixed(2)}</span>
+                   </div>
                </div>
           </div>
       ))}
@@ -185,31 +185,16 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
       <div className="flex-1 flex flex-col items-center justify-center p-4 relative">
         <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="max-w-full rounded-[2.5rem] bg-[#111827]/60 border border-white/10 shadow-2xl" />
       </div>
-      <div className="bg-[#111827] border-t border-white/5 p-6 pb-12 z-50">
+      <div className="bg-[#111827] border-t border-white/5 p-6 pb-12 z-50 focus-within:ring-0">
         <div className="flex justify-between items-end mb-6">
-            <div className="text-2xl font-black italic">₹{betAmount}</div>
-            <button onClick={() => setMuted(toggleMute())} className="p-3 bg-slate-800 rounded-2xl">{muted ? <VolumeX size={22}/> : <Volume2 size={22}/>}</button>
+            <div className="text-2xl font-black italic gold-text">STAKE: ₹{betAmount}</div>
+            <button onClick={() => setMuted(toggleMute())} className="p-3 bg-zinc-800 rounded-2xl active:scale-95 transition-all border border-white/5">{muted ? <VolumeX size={22}/> : <Volume2 size={22}/>}</button>
         </div>
         <div className="grid grid-cols-4 gap-3 mb-8">
-            {[10, 50, 100, 500].map(amt => <button key={amt} onClick={() => setBetAmount(amt)} className={`py-4 rounded-2xl font-black text-xs border transition-all ${betAmount === amt ? 'bg-yellow-500 text-slate-950 border-white' : 'bg-slate-800/40 border-white/5 text-slate-400'}`}>₹{amt}</button>)}
+            {[10, 50, 100, 500].map(amt => <button key={amt} onClick={() => setBetAmount(amt)} className={`py-4 rounded-2xl font-black text-xs border transition-all ${betAmount === amt ? 'bg-yellow-500 text-slate-950 border-white shadow-[0_0_20px_rgba(234,179,8,0.4)] scale-105' : 'bg-zinc-800/40 border-white/5 text-slate-400 hover:text-white'}`}>₹{amt}</button>)}
         </div>
-        <button onClick={dropBall} className="w-full py-6 rounded-[2rem] bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-600 text-slate-950 font-black uppercase tracking-[0.4em] shadow-2xl active:scale-95 flex items-center justify-center gap-4 text-lg border-t-2 border-white/20"><PlayCircle size={28}/> DROP BALL</button>
+        <button onClick={dropBall} className="w-full py-6 rounded-[2.5rem] bg-gradient-to-r from-yellow-400 via-orange-500 to-yellow-600 text-slate-950 font-black uppercase tracking-[0.4em] shadow-2xl active:scale-95 flex items-center justify-center gap-4 text-lg border-t-2 border-white/20"><PlayCircle size={28}/> DROP BALL</button>
       </div>
-      {showRules && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/90">
-              <div className="bg-slate-900 border-2 border-white/10 w-full max-w-sm p-10 rounded-[3.5rem] shadow-2xl">
-                   <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-4">
-                       <h2 className="text-2xl font-black text-blue-500 italic uppercase">RULES</h2>
-                       <button onClick={() => setShowRules(false)} className="p-2 bg-slate-800 rounded-full"><X size={20}/></button>
-                   </div>
-                   <div className="space-y-4 text-sm text-slate-300 leading-relaxed">
-                       <p>1. Set your stake and drop the ball.</p>
-                       <p>2. The multiplier slot the ball lands in determines your win.</p>
-                       <p>3. High multipliers are on the edges.</p>
-                   </div>
-              </div>
-          </div>
-      )}
     </div>
   );
 };
