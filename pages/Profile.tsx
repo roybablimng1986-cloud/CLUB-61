@@ -133,7 +133,18 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
                   <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 pb-10">
                       {showHistoryModal === 'GAME' ? (
                           historyData.length > 0 ? historyData.map((item, i) => (
-                              <div key={i} className="bg-black/20 p-4 rounded-2xl border border-white/5 flex justify-between items-center"><div><div className="text-xs font-black text-white uppercase tracking-tighter">{item.game}</div><div className="text-[9px] text-slate-500 font-bold mt-0.5">{item.date}</div></div><div className="text-right"><div className={`text-sm font-black ${item.win > 0 ? 'text-green-500' : 'text-red-500'}`}>{item.win > 0 ? `+₹${item.win.toFixed(2)}` : `-₹${item.amount.toFixed(2)}`}</div></div></div>
+                              <div key={i} className="bg-black/20 p-4 rounded-2xl border border-white/5 flex justify-between items-center">
+                                  <div>
+                                      <div className="text-xs font-black text-white uppercase tracking-tighter">{item.game}</div>
+                                      <div className="text-[9px] text-slate-500 font-bold mt-0.5">{item.date}</div>
+                                      <div className="text-[8px] text-blue-400 font-medium mt-1">{item.details}</div>
+                                  </div>
+                                  <div className="text-right">
+                                      <div className={`text-sm font-black ${item.win > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                          {item.win > 0 ? `+₹${item.win.toFixed(2)}` : `-₹${item.amount.toFixed(2)}`}
+                                      </div>
+                                  </div>
+                              </div>
                           )) : <div className="text-center py-20 text-slate-600 font-black uppercase text-xs italic tracking-widest">No Logs</div>
                       ) : (
                           txData.length > 0 ? txData.map((tx, i) => (

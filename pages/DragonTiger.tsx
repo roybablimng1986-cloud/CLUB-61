@@ -217,7 +217,7 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
     if (!gameState) return <div className="min-h-screen bg-black flex items-center justify-center font-black gold-text">Syncing Arena...</div>;
 
     return (
-        <div className="bg-[#0a0f1d] min-h-screen flex flex-col font-sans text-white select-none overflow-hidden relative">
+        <div className="bg-[#0a0f1d] fixed inset-0 flex flex-col font-sans text-white select-none overflow-hidden">
             <DragonTigerResultPopup result={dtResult} onClose={() => setDtResult(null)} />
             <HowToPlay 
                 isOpen={showHelp} 
@@ -235,7 +235,7 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
                 ]}
             />
             {/* Header */}
-            <div className="p-4 flex justify-between items-center bg-[#111827] border-b border-yellow-500/20 z-50">
+            <div className="p-4 flex justify-between items-center bg-[#111827] border-b border-yellow-500/20 z-50 shrink-0">
                 <div className="flex items-center gap-3">
                     <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl active:scale-90"><ArrowLeft size={20}/></button>
                     <div className="flex flex-col">
@@ -253,34 +253,33 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
             </div>
 
             {/* Game Area */}
-            <div className="flex-1 casino-gradient flex flex-col items-center py-4 gap-4 relative overflow-y-auto no-scrollbar pb-96">
+            <div className="flex-1 flex flex-col items-center py-4 gap-4 relative overflow-hidden">
                 
                 {/* History (Top) */}
-                <div className="w-full px-4">
+                <div className="w-full px-4 shrink-0">
                     <div className="flex gap-1 overflow-x-auto no-scrollbar py-2 bg-black/20 rounded-full px-3 border border-white/5">
                         {gameState.history.map((h, i) => (
                             <span key={i} className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-black text-[10px] shadow-lg border border-white/10 ${h==='D'?'bg-red-600':h==='T'?'bg-orange-600':'bg-green-600'}`}>{h}</span>
                         ))}
                     </div>
-                              {/* Layout Optimization */}
-                <div className="w-full max-w-sm px-4 mt-2">
-                    <div className="bg-slate-900/60 rounded-[2.5rem] p-6 border-4 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
+                </div>
+
+                {/* Stage Layout */}
+                <div className="w-full max-w-sm px-4 shrink-0">
+                    <div className="bg-slate-900/60 rounded-[2.5rem] p-6 border-4 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden h-[180px] flex flex-col justify-center">
                         <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
                         
-                        <div className="flex justify-between items-center mb-6">
+                        <div className="flex justify-between items-center relative z-10">
                             <Card cards={gameState.dragonCards || []} show={showDragon} label="Dragon" />
                             
                             <div className="flex flex-col items-center">
                                 <div className={`w-14 h-14 rounded-full border-2 flex flex-col items-center justify-center font-black shadow-2xl bg-black/60 ${gameState.status === 'BETTING' ? (isBettingLocked ? 'border-orange-500 text-orange-500' : 'border-green-500 text-green-500') : 'border-red-600 text-red-600 animate-pulse'}`}>
                                     <span className="text-xl font-mono leading-none">{timeLeft}</span>
                                 </div>
+                                <span className="text-[8px] font-black text-white/40 uppercase tracking-[0.2em] mt-2">{gameState.status}</span>
                             </div>
 
                             <Card cards={gameState.tigerCards || []} show={showTiger} label="Tiger" />
-                        </div>
-
-                        <div className="text-center">
-                            <span className="text-[8px] font-black text-white/40 uppercase tracking-[0.2em]">{gameState.status}</span>
                         </div>
                     </div>
                 </div>
@@ -325,7 +324,7 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
                             <span className="text-sm font-black text-white italic font-mono">₹{(gameState?.totalBets?.Tie || 0).toLocaleString()}</span>
                         </div>
                     </button>
-                </div>            </div>
+                </div>
 
                 {/* Live Bets Section */}
                 <div className="w-full mt-4 flex-1 flex flex-col min-h-[300px]">
@@ -414,8 +413,8 @@ const DragonTiger: React.FC<Props> = ({ onBack, userBalance, username, onResult 
                 .gold-text { background: linear-gradient(to bottom, #fde68a, #d97706, #fde68a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
                 .card-container {
                     perspective: 1000px;
-                    width: 100px;
-                    height: 140px;
+                    width: 70px;
+                    height: 100px;
                 }
                 .card-inner {
                     width: 100%;

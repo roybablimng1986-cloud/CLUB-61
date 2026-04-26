@@ -41,6 +41,7 @@ import SlotMachine from './pages/SlotMachine';
 import AndarBahar from './pages/AndarBahar';
 import SevenUpDown from './pages/SevenUpDown';
 import SpaceRaid from './pages/SpaceRaid';
+import JhandiMunda from './pages/JhandiMunda';
 import GiftCode from './pages/GiftCode';
 import GameResultPopup from './components/GameResultPopup';
 import { View, UserProfile, GameResult } from './types';
@@ -165,7 +166,8 @@ export default function App() {
       case 'GAME_ANDAR_BAHAR': return <AndarBahar onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_7UP_DOWN': return <SevenUpDown onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
     case 'GAME_SPACE_RAID': return <SpaceRaid onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-    case 'GIFT_CODE': return <GiftCode onBack={() => setCurrentView('HOME')} userBalance={user.balance} />;
+      case 'GAME_JHANDI_MUNDA': return <JhandiMunda onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GIFT_CODE': return <GiftCode onBack={() => setCurrentView('HOME')} userBalance={user.balance} />;
       case 'LEADERBOARD': return <Leaderboard onBack={() => setCurrentView('HOME')} />;
       case 'CHAT': return <LiveChat onBack={() => setCurrentView('HOME')} />;
       case 'ACCOUNT': return <Profile user={user} setView={setCurrentView} />;

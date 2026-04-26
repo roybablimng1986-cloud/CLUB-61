@@ -571,6 +571,14 @@ const winGoSubscribers: Function[] = [];
 
 // Leadership logic removed
 
+export const getLeaderboard = (cb: (data: UserProfile[]) => void) => {
+    const usersColRef = collection(db, 'users');
+    const q = query(usersColRef, orderBy('balance', 'desc'), limit(20));
+    return onSnapshot(q, s => {
+        cb(s.docs.map(d => ({ ...d.data(), uid: d.id })) as UserProfile[]);
+    }, (err) => handleFirebaseError(err, OperationType.LIST, 'users'));
+};
+
 export const startGlobalEngines = () => {
   console.log('Engines are now handled by the server.');
 };
@@ -852,14 +860,6 @@ export const joinTelegramReward = async () => {
         await updateBalance(5, 'BONUS', 'Telegram Reward'); 
         return { success: true }; 
     } catch (e) { handleFirebaseError(e, OperationType.UPDATE, `users/${currentUser.uid}`); return { success: false }; }
-};
-
-export const getLeaderboard = (cb: (data: UserProfile[]) => void) => {
-    const usersColRef = collection(db, 'users');
-    const q = query(usersColRef, orderBy('balance', 'desc'), limit(20));
-    return onSnapshot(q, s => {
-        cb(s.docs.map(d => ({ ...d.data(), uid: d.id })) as UserProfile[]);
-    }, (err) => handleFirebaseError(err, OperationType.LIST, 'users'));
 };
 
 export const subscribeToChat = (cb: (msgs: ChatMessage[]) => void) => {

@@ -38,6 +38,7 @@ const GAMES = [
     { id: 'GAME_KENO', title: "Keno Elite", desc: "LOTTO", image: "https://images.unsplash.com/photo-1518623489648-a173ef7824f3?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-emerald-600/20", category: "Lottery" },
     { id: 'GAME_DICE', title: "Dice Duel", desc: "ROLL", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-purple-600/20", category: "Originals" },
     { id: 'GAME_HILO', title: "Hi-Lo Elite", desc: "CARDS", image: "https://images.unsplash.com/photo-1511193311914-0346f16efe90?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-indigo-600/20", category: "Originals" },
+    { id: 'GAME_JHANDI_MUNDA', title: "Jhandi Munda", desc: "STREET", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-orange-600/20", category: "Casino" },
 ];
 
 const Home: React.FC<HomeProps> = ({ setView }) => {

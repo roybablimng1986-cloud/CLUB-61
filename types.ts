@@ -136,12 +136,11 @@ export interface DragonTigerState {
     period: string;
     dragonCards: { rank: number; suit: string }[];
     tigerCards: { rank: number; suit: string }[];
-    history: ('D' | 'T' | 'Tie' | 'ST')[];
+    history: ('D' | 'T' | 'Tie')[];
     totalBets: {
         D: number;
         T: number;
         Tie: number;
-        SuitedTie: number;
     };
 }
 

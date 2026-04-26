@@ -521,8 +521,8 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
                             <div className="flex items-center gap-4">
                                 <span className="text-[10px] font-black text-white">₹{b.amount.toFixed(2)}</span>
                                 <div className="w-12 text-right">
-                                    {b.cashoutAt ? (
-                                        <span className="text-[10px] font-black text-green-500">{b.cashoutAt.toFixed(2)}x</span>
+                                    {b.cashout ? (
+                                        <span className="text-[10px] font-black text-green-500">{b.cashout.toFixed(2)}x</span>
                                     ) : (
                                         <span className="text-[10px] font-black text-zinc-600">-</span>
                                     )}

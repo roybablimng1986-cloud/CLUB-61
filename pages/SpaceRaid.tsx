@@ -22,12 +22,18 @@ const SpaceRaid: React.FC<{ onBack: () => void; userBalance: number; onResult: (
     const [hasCashedOut, setHasCashedOut] = useState(false);
     const [srResult, setSrResult] = useState<any | null>(null);
     const [showHelp, setShowHelp] = useState(false);
+    const [floating, setFloating] = useState<{ text: string; color: string; id: number } | null>(null);
     
     const timeLeft = useStabilizedTimer(gameState?.status === 'BETTING' ? gameState.endTime : undefined);
     
     const isMounted = useRef(true);
     const resultHandledRef = useRef<string | null>(null);
     const frameRef = useRef<number>(0);
+
+    const triggerFloating = (text: string, color: string) => {
+        setFloating({ text, color, id: Date.now() });
+        setTimeout(() => setFloating(null), 3000);
+    };
 
     function startRaidAnimation(crashPoint: number) {
         let start = Date.now();
@@ -42,16 +48,19 @@ const SpaceRaid: React.FC<{ onBack: () => void; userBalance: number; onResult: (
 
                 const myCurrentBets = allBets.filter(b => b.uid === auth.currentUser?.uid);
                 let tieWin = 0;
-                let tieBet = 0;
                 
                 myCurrentBets.forEach(b => {
                     if (b.isTie) {
-                        tieBet += b.amount;
                         if (crashPoint <= 1.05) tieWin += b.amount * 50;
                     }
                 });
 
-                if (tieWin > 0) updateBalance(tieWin, 'WIN', 'Space Raid Tie Win');
+                if (tieWin > 0) {
+                    updateBalance(tieWin, 'WIN', 'Space Raid Tie Win');
+                    triggerFloating(`+₹${tieWin.toFixed(2)}`, 'text-yellow-400');
+                } else if (myCurrentBets.some(b => !b.cashedOut)) {
+                    triggerFloating(`LOST`, 'text-red-500');
+                }
 
                 if (!hasCashedOut && myCurrentBets.some(b => !b.isTie && !b.cashedOut)) {
                     // Normal bet lost
@@ -117,6 +126,7 @@ const SpaceRaid: React.FC<{ onBack: () => void; userBalance: number; onResult: (
         });
 
         updateBalance(totalWin, 'WIN', 'Space Raid Cashout');
+        triggerFloating(`+₹${totalWin.toFixed(2)}`, 'text-yellow-400');
         setSrResult({
             win: true,
             amount: totalWin,
@@ -170,6 +180,11 @@ const SpaceRaid: React.FC<{ onBack: () => void; userBalance: number; onResult: (
     return (
         <div className="bg-[#00001a] min-h-screen flex flex-col font-sans text-white overflow-hidden relative select-none">
             <SpaceRaidResultPopup result={srResult} onClose={() => setSrResult(null)} />
+            {floating && (
+                <div key={floating.id} className={`fixed top-1/2 left-1/2 -translate-x-1/2 z-[300] font-black text-6xl italic pointer-events-none animate-float-up ${floating.color}`} style={{ textShadow: '0 0 30px rgba(0,0,0,0.8)' }}>
+                    {floating.text}
+                </div>
+            )}
             <HowToPlay 
                 isOpen={showHelp} 
                 onClose={() => setShowHelp(false)} 
@@ -205,14 +220,14 @@ const SpaceRaid: React.FC<{ onBack: () => void; userBalance: number; onResult: (
             </div>
 
             {/* Game Content */}
-            <div className="flex-1 flex flex-col items-center p-4 relative overflow-y-auto no-scrollbar pb-60">
+            <div className="flex-1 flex flex-col items-center p-4 relative overflow-hidden">
                 
                 {/* History (Top) */}
-                <div className="w-full mb-4">
-                    <div className="flex gap-1 overflow-x-auto no-scrollbar py-2">
-                        {gameState.history.map((h, i) => (
-                            <span key={i} className={`flex-shrink-0 px-3 py-1 rounded-full font-black text-[10px] shadow-lg border border-white/5 ${h >= 2 ? 'bg-cyan-600' : 'bg-zinc-800'}`}>
-                                {h.toFixed(2)}x
+                <div className="w-full max-w-sm mb-4 shrink-0">
+                    <div className="flex gap-1 overflow-x-auto no-scrollbar py-2 justify-center bg-black/20 rounded-full border border-white/5 px-2">
+                        {gameState.history.slice(0, 8).map((h, i) => (
+                            <span key={i} className={`flex-shrink-0 w-10 h-6 flex items-center justify-center rounded-full font-black text-[8px] shadow-lg border border-white/5 ${h >= 2 ? 'bg-cyan-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>
+                                {h.toFixed(1)}x
                             </span>
                         ))}
                     </div>
@@ -288,7 +303,7 @@ const SpaceRaid: React.FC<{ onBack: () => void; userBalance: number; onResult: (
                                     </div>
                                     <div className="text-right">
                                         <div className="text-sm font-black text-cyan-400">₹{bet.amount}</div>
-                                        {bet.cashedOut && <div className="text-[8px] text-green-500 font-black uppercase">Cashed Out</div>}
+                                        <div className="text-[7px] text-zinc-500 font-bold uppercase">{bet.isTie ? 'Tie Raid' : 'Normal Raid'}</div>
                                     </div>
                                 </motion.div>
                             ))}
@@ -344,6 +359,15 @@ const SpaceRaid: React.FC<{ onBack: () => void; userBalance: number; onResult: (
                     </div>
                 )}
             </div>
+            <style>{`
+                @keyframes float-up {
+                    0% { transform: translate(-50%, 0); opacity: 0; scale: 0.5; }
+                    15% { opacity: 1; scale: 1.2; }
+                    85% { opacity: 1; scale: 1.2; }
+                    100% { transform: translate(-50%, -200px); opacity: 0; scale: 1.5; }
+                }
+                .animate-float-up { animation: float-up 3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; }
+            `}</style>
         </div>
     );
 };
