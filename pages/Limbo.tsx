@@ -82,7 +82,7 @@ const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
     
     setLbResult({
         win: isWin,
-        amount: isWin ? winAmt : betAmount,
+        amount: isWin ? winAmt : 0,
         multiplier: outcome,
         target: target
     });

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Plus, Minus, Info, HelpCircle, Check } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Info, HelpCircle, Check, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { updateBalance, playSound, addGameHistory, stopAllSounds, subscribeToSevenUpDown, subscribeToSevenUpDownBets, getClockOffset, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
@@ -18,152 +18,177 @@ import { useStabilizedTimer } from '../hooks/useTimer';
 import HowToPlay from '../components/HowToPlay';
 
 const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
-  const [gameState, setGameState] = useState<any>(null);
-  const [bet, setBet] = useState(100);
-  const [target, setTarget] = useState<'DOWN' | 'SEVEN' | 'UP' | null>(null);
+  const [gameState, setGameState] = useState<any>({
+    status: 'BETTING',
+    period: new Date().getTime().toString().slice(-6),
+    endTime: Date.now() + 30000,
+    dice: [1, 1],
+    history: [2, 7, 5, 12, 10]
+  });
+  const [betAmount, setBetAmount] = useState(100);
+  const [selectedTarget, setSelectedTarget] = useState<'DOWN' | 'SEVEN' | 'UP' | null>(null);
   const [isRolling, setIsRolling] = useState(false);
   const [dice, setDice] = useState([1, 1]);
   const [history, setHistory] = useState<number[]>([]);
   const [suResult, setSuResult] = useState<any | null>(null);
-  const timeLeft = useStabilizedTimer(gameState?.endTime);
+  
+  const timeLeft = useStabilizedTimer(gameState.endTime);
   const [isLocked, setIsLocked] = useState(false);
   const [activeTab, setActiveTab] = useState<'ALL' | 'MY'>('ALL');
   const [allBets, setAllBets] = useState<any[]>([]);
-  const allBetsRef = useRef<any[]>([]);
-  useEffect(() => { allBetsRef.current = allBets; }, [allBets]);
-
   const [myBets, setMyBets] = useState<any[]>([]);
-  const [currentRoundId, setCurrentRoundId] = useState<string>('0');
-  const [phase, setPhase] = useState<'BETTING' | 'LOCKOUT' | 'ROLLING' | 'RESULT'>('BETTING');
+  const [currentRoundId, setCurrentRoundId] = useState<string>(gameState.period);
+  const [phase, setPhase] = useState<'BETTING' | 'RESULT' | 'ROLLING'>('BETTING');
   const [showHelp, setShowHelp] = useState(false);
+  const [isBetting, setIsBetting] = useState(false);
   
   const isMounted = useRef(true);
-  const lastPhaseRef = useRef<string>('');
-  const hasBetThisRound = useRef(false);
-  const hasProcessedResult = useRef(false);
+
+  // Initial Logic
+  useEffect(() => {
+    setHistory(gameState.history);
+    const mainInterval = setInterval(() => {
+        if (gameState.status === 'BETTING') {
+            if (Date.now() >= gameState.endTime) {
+                setGameState(prev => ({ ...prev, status: 'ROLLING' }));
+                handleRollSequence();
+            } else if (timeLeft <= 3) {
+                setIsLocked(true);
+            }
+            if (timeLeft <= 5 && timeLeft > 0) playSound('wingo_tick');
+        }
+    }, 1000);
+    return () => clearInterval(mainInterval);
+  }, [gameState.status, gameState.endTime, timeLeft]);
+
+  async function handleRollSequence() {
+    setIsRolling(true);
+    playSound('wheel_spin');
+    
+    // Pre-calculate the result
+    const finalD1 = Math.floor(Math.random() * 6) + 1;
+    const finalD2 = Math.floor(Math.random() * 6) + 1;
+    const sum = finalD1 + finalD2;
+    const outcome = sum < 7 ? 'DOWN' : sum > 7 ? 'UP' : 'SEVEN';
+
+    // Dice randomization animation
+    let rollCount = 0;
+    const rollInterval = setInterval(() => {
+        setDice([Math.floor(Math.random() * 6) + 1, Math.floor(Math.random() * 6) + 1]);
+        rollCount++;
+        if (rollCount >= 20) {
+            clearInterval(rollInterval);
+            setDice([finalD1, finalD2]);
+        }
+    }, 150);
+
+    await new Promise(r => setTimeout(r, 4000));
+    if (!isMounted.current) return;
+
+    setDice([finalD1, finalD2]);
+    setIsRolling(false);
+    setPhase('RESULT');
+    playSound('dt_card');
+
+    processResult(sum, outcome, [finalD1, finalD2]);
+
+    await new Promise(r => setTimeout(r, 6000));
+    if (isMounted.current) {
+        const nextPeriod = (parseInt(gameState.period) + 1).toString();
+        setGameState(prev => ({
+            status: 'BETTING',
+            period: nextPeriod,
+            endTime: Date.now() + 30000,
+            dice: [finalD1, finalD2],
+            history: [sum, ...prev.history].slice(0, 20)
+        }));
+        setHistory(prev => [sum, ...prev].slice(0, 20));
+        setCurrentRoundId(nextPeriod);
+        setPhase('BETTING');
+        setIsLocked(false);
+        setMyBets([]);
+        setAllBets([]);
+        setSuResult(null);
+    }
+  }
+
+  function processResult(sum: number, outcome: string, finalDice: number[]) {
+    let totalWin = 0;
+    let totalBet = 0;
+    
+    myBets.forEach(bet => {
+        totalBet += bet.amount;
+        if (bet.target === outcome) {
+            const mult = outcome === 'SEVEN' ? 3 : 2;
+            totalWin += bet.amount * mult;
+        }
+    });
+
+    if (totalWin > 0) {
+        updateBalance(totalWin, 'WIN', '7 Up Down Win');
+    }
+
+    if (totalBet > 0) {
+        setSuResult({
+            win: totalWin > 0,
+            amount: totalWin,
+            period: gameState.period,
+            dice: finalDice,
+            sum: sum,
+            target: myBets.map(b => b.target).join(', ')
+        });
+        addGameHistory('7 Up Down', totalBet, totalWin, `Landed ${sum} | Period: ${gameState.period}`);
+    }
+  }
 
   useEffect(() => {
     isMounted.current = true;
-    
-    const unsub = subscribeToSevenUpDown((state) => {
-        if (!isMounted.current || !state) return;
-        setGameState(state);
-        setPhase(state.status);
-        // timeLeft will be updated by the local timer interval using state.endTime
-        setIsLocked(state.status !== 'BETTING');
-        setDice(state.dice);
-        setHistory(state.history || []);
-        setCurrentRoundId(state.period);
-
-        if (state.status === 'BETTING' && lastPhaseRef.current !== 'BETTING') {
-            hasBetThisRound.current = false;
-            hasProcessedResult.current = false;
-            setSuResult(null);
-            setTarget(null);
-            setIsRolling(false);
-        }
-
-        if (state.status === 'RESULT' && lastPhaseRef.current !== 'RESULT') {
-            setIsRolling(false);
-            processResult(state);
-        }
-
-        if (state.status === 'LOCKED' && lastPhaseRef.current === 'BETTING') {
-            setIsRolling(true);
-            playSound('wheel_spin');
-        }
-
-        lastPhaseRef.current = state.status;
-    });
-
-    const unsubBets = subscribeToSevenUpDownBets((bets) => {
-      setAllBets(bets);
-      if (auth.currentUser) {
-        setMyBets(bets.filter((b: any) => b.uid === auth.currentUser?.uid));
-      }
-    });
-
-    return () => {
-      isMounted.current = false;
-      stopAllSounds();
-      unsub();
-      unsubBets();
-    };
+    return () => { isMounted.current = false; stopAllSounds(); };
   }, []);
 
-  useEffect(() => {
-    if (gameState?.status === 'BETTING') {
-        setIsLocked(timeLeft <= 5);
-        if (timeLeft <= 5 && timeLeft > 0) playSound('wingo_tick');
-    }
-  }, [timeLeft, gameState?.status]);
-
-  const processResult = async (state: any) => {
-    if (hasProcessedResult.current) return;
-    hasProcessedResult.current = true;
-
-    const sum = state.sum;
-    const outcome = sum < 7 ? 'DOWN' : sum > 7 ? 'UP' : 'SEVEN';
-    
-    const myCurrentBets = allBetsRef.current.filter(b => b.uid === auth.currentUser?.uid);
-    if (myCurrentBets.length > 0) {
-        let totalWin = 0;
-        let totalBet = 0;
-        let wonAtLeastOne = false;
-
-        myCurrentBets.forEach(bet => {
-            totalBet += bet.amount;
-            const isWin = bet.target === outcome;
-            if (isWin) {
-                wonAtLeastOne = true;
-                const mult = outcome === 'SEVEN' ? 3 : 2;
-                totalWin += bet.amount * mult;
-            }
-        });
-
-        setSuResult({
-            win: wonAtLeastOne,
-            amount: wonAtLeastOne ? totalWin : totalBet,
-            period: state.period,
-            dice: state.dice,
-            sum: sum,
-            target: myCurrentBets.map(b => b.target).join(', ')
-        });
-
-        if (totalWin > 0) {
-            updateBalance(totalWin, 'WIN', '7 Up Down Win');
-        }
-        addGameHistory('7 Up Down', totalBet, totalWin, `Landed ${sum}`);
-    }
-  };
-
-    const placeBetOnTarget = async (selectedTarget: 'DOWN' | 'SEVEN' | 'UP') => {
-        if (isLocked || bet > userBalance || phase !== 'BETTING') return;
+    const handleConfirmBet = async () => {
+        if (!selectedTarget || isLocked || betAmount > userBalance || phase !== 'BETTING' || isBetting) return;
         
-        updateBalance(-bet, 'BET', `7 Up Down: ${selectedTarget}`);
-        playSound('bet_place');
-
-        if (auth.currentUser) {
-            try {
-                await addGameBet('seven_up_down_bets', {
-                    amount: bet,
-                    target: selectedTarget,
-                    period: currentRoundId,
-                });
-            } catch (e) {}
+        setIsBetting(true);
+        try {
+            const betData = {
+                amount: betAmount,
+                target: selectedTarget,
+                period: gameState.period,
+                uid: auth.currentUser?.uid,
+                username: 'You',
+                id: Date.now()
+            };
+            setMyBets(prev => [...prev, betData]);
+            setAllBets(prev => [betData, ...prev]);
+            await updateBalance(-betAmount, 'BET', `7 Up Down: ${selectedTarget}`);
+            playSound('bet_place');
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsBetting(false);
         }
+    };
+
+    const handleCancelLastBet = async () => {
+        if (myBets.length === 0 || isLocked || phase !== 'BETTING') return;
+        const lastBet = myBets[myBets.length - 1];
+        setMyBets(prev => prev.slice(0, -1));
+        setAllBets(prev => prev.filter(b => b.id !== lastBet.id));
+        await updateBalance(lastBet.amount, 'WIN', 'Bet Cancelled');
+        playSound('click');
     };
 
     const adjustBet = (amt: number) => {
     if (isLocked) return;
-    setBet(prev => Math.max(10, prev + amt));
+    setBetAmount(prev => Math.max(10, prev + amt));
     playSound('click');
   };
 
   const handleManualBetChange = (val: string) => {
     if (isLocked) return;
     const num = parseInt(val.replace(/[^0-9]/g, '')) || 0;
-    setBet(num);
+    setBetAmount(num);
   };
 
   return (
@@ -192,36 +217,25 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
         
         {/* Header */}
         <div className="p-4 flex justify-between items-center relative z-10 shrink-0">
-            <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/10">
-                <img src="https://cdn-icons-png.flaticon.com/512/2489/2489756.png" className="w-4 h-4" alt="coins" referrerPolicy="no-referrer" />
-                <span className="text-xs font-bold">{userBalance.toLocaleString()}</span>
-            </div>
-            <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/10">
-                <img src="https://cdn-icons-png.flaticon.com/512/616/616490.png" className="w-4 h-4" alt="gems" referrerPolicy="no-referrer" />
-                <span className="text-xs font-bold">110</span>
-            </div>
-        </div>
-
-        {/* Ribbon Title */}
-        <div className="flex justify-center -mt-2 relative z-10 shrink-0">
-            <button onClick={() => setShowHelp(true)} className="relative">
-                <div className="bg-[#e21b22] px-12 py-2 rounded-sm shadow-2xl border-y-2 border-yellow-500/50">
-                    <h1 className="text-2xl font-black text-white italic tracking-tighter drop-shadow-lg">7 Up Down</h1>
-                </div>
-                <div className="absolute -left-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center border-2 border-[#4a0404] shadow-lg">
-                    <HelpCircle size={16} className="text-[#4a0404]" />
-                </div>
+            <button onClick={onBack} className="w-10 h-10 bg-black/40 rounded-full flex items-center justify-center border border-white/10 active:scale-90 shadow-lg">
+                <ArrowLeft size={20} />
             </button>
+            <div className="flex gap-4">
+                <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-white/10">
+                    <img src="https://cdn-icons-png.flaticon.com/512/2489/2489756.png" className="w-4 h-4" alt="coins" referrerPolicy="no-referrer" />
+                    <span className="text-xs font-black">{userBalance.toLocaleString()}</span>
+                </div>
+            </div>
         </div>
 
         {/* Game Content */}
-        <div className="flex-1 flex flex-col items-center justify-start p-4 pt-2 relative z-10 overflow-hidden">
+        <div className="flex-1 flex flex-col items-center justify-start p-4 pt-0 relative z-10 overflow-hidden">
             
-            {/* History (Top) */}
-            <div className="w-full flex justify-center mb-4 shrink-0">
-                <div className="flex gap-1 bg-black/40 p-2 rounded-lg border border-white/5 relative z-10">
+            {/* History (Scrollable) */}
+            <div className="w-full mb-4 shrink-0 overflow-x-auto no-scrollbar">
+                <div className="flex gap-2 justify-start px-2 min-w-max flex-row-reverse">
                     {history.map((h, i) => (
-                        <div key={`${i}-${h}`} className={`w-7 h-7 flex items-center justify-center text-[10px] font-black border rounded shadow-inner ${h < 7 ? 'bg-blue-500/20 border-blue-500/40 text-blue-400' : h > 7 ? 'bg-red-500/20 border-red-500/40 text-red-400' : 'bg-yellow-500/20 border-yellow-500/40 text-yellow-400'}`}>
+                        <div key={`${i}-${h}`} className={`w-8 h-8 flex-shrink-0 flex items-center justify-center text-[10px] font-black border-2 rounded-lg shadow-lg ${h < 7 ? 'bg-blue-600/20 border-blue-500/40 text-blue-400' : h > 7 ? 'bg-red-600/20 border-red-500/40 text-red-400' : 'bg-yellow-600/20 border-yellow-500/40 text-yellow-400'}`}>
                             {h}
                         </div>
                     ))}
@@ -230,159 +244,176 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
 
             {/* Timer Display */}
             <div className="mb-4 flex flex-col items-center shrink-0">
-                <div className={`text-4xl font-black italic tracking-tighter ${(phase === 'BETTING' && (timeLeft || 0) <= 5) ? 'text-red-500 animate-pulse' : 'text-yellow-500'}`}>
+                <div className={`text-4xl font-black italic tracking-tighter ${(phase === 'BETTING' && (timeLeft || 0) <= 5) ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
                     00:{(timeLeft || 0).toString().padStart(2, '0')}
                 </div>
-                <div className="text-[10px] uppercase font-bold tracking-[0.2em] text-white/40">
-                    {phase === 'BETTING' ? 'Place Your Bets' : phase === 'LOCKOUT' ? 'Betting Closed' : phase === 'ROLLING' ? 'Rolling...' : 'Result'}
+                <div className="text-[10px] uppercase font-black tracking-[0.2em] text-white/40">
+                    {phase === 'BETTING' ? 'Betting Open' : 'Waiting for Result'}
                 </div>
             </div>
 
-            {/* Dice Table (Main Area) */}
-            <div className="relative w-48 h-48 md:w-56 md:h-56 rounded-full bg-[#800000] border-[10px] border-[#4a2c2c] shadow-[inset_0_0_40px_rgba(0,0,0,0.8),0_15px_30px_rgba(0,0,0,0.6)] flex items-center justify-center overflow-hidden mb-4 shrink-0">
-                <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'url("https://www.transparenttextures.com/patterns/felt.png")' }}></div>
-                
-                {/* Laser Scanning Effect during calculation */}
-                {isRolling && (
-                    <motion.div 
-                        initial={{ top: '-10%' }}
-                        animate={{ top: '110%' }}
-                        transition={{ duration: 0.5, repeat: Infinity, ease: "linear" }}
-                        className="absolute left-0 right-0 h-1 bg-yellow-400/40 shadow-[0_0_15px_rgba(250,204,21,0.8)] z-20"
-                    />
-                )}
-
+            {/* Dice Table */}
+            <div className="relative w-44 h-44 md:w-52 md:h-52 rounded-full bg-[#800000] border-[8px] border-[#4a2c2c] shadow-[inset_0_0_40px_rgba(0,0,0,0.8),0_15px_30px_rgba(0,0,0,0.6)] flex items-center justify-center overflow-hidden mb-6 shrink-0 group">
+                <div className="absolute inset-0 opacity-10 bg-black/40" />
                 <div className="flex gap-4 relative z-10">
                     <motion.div 
                         animate={isRolling ? { 
                             rotate: [0, 90, 180, 270, 360], 
-                            x: [0, 10, -10, 5, 0],
-                            y: [0, -5, 5, -2, 0],
-                            scale: [1, 1.1, 0.9, 1]
+                            x: [0, 15, -15, 10, 0],
+                            y: [0, -10, 10, -5, 0],
                         } : {}}
-                        transition={isRolling ? { repeat: Infinity, duration: 0.4 } : {}}
+                        transition={isRolling ? { repeat: Infinity, duration: 0.3 } : {}}
                     >
-                        <DiceIcon value={dice[0]} size={40} />
+                        <DiceIcon value={dice[0]} size={45} />
                     </motion.div>
                     <motion.div 
                         animate={isRolling ? { 
                             rotate: [0, -90, -180, -270, -360], 
-                            x: [0, -10, 10, -5, 0],
-                            y: [0, 5, -5, 2, 0],
-                            scale: [1, 0.9, 1.1, 1]
+                            x: [0, -15, 15, -10, 0],
+                            y: [0, 10, -10, 5, 0],
                         } : {}}
-                        transition={isRolling ? { repeat: Infinity, duration: 0.4 } : {}}
+                        transition={isRolling ? { repeat: Infinity, duration: 0.3 } : {}}
                     >
-                        <DiceIcon value={dice[1]} size={40} />
+                        <DiceIcon value={dice[1]} size={45} />
                     </motion.div>
                 </div>
             </div>
 
-            {/* Betting Options */}
-            <div className={`grid grid-cols-3 gap-4 w-full max-w-sm mb-6 transition-all shrink-0 ${isLocked ? 'opacity-50 grayscale' : ''}`}>
-                <BetOption 
-                    label="2 - 6" 
-                    targetStr="DOWN"
-                    mult="2.0X" 
-                    active={target === 'DOWN'} 
-                    onClick={() => placeBetOnTarget('DOWN')} 
-                    bets={myBets.filter(b => b.target === 'DOWN')}
-                />
-                <BetOption 
-                    label="7" 
-                    targetStr="LUCKY"
-                    mult="3.0X" 
-                    active={target === 'SEVEN'} 
-                    onClick={() => placeBetOnTarget('SEVEN')} 
-                    bets={myBets.filter(b => b.target === 'SEVEN')}
-                />
-                <BetOption 
-                    label="8 - 12" 
-                    targetStr="UP"
-                    mult="2.0X" 
-                    active={target === 'UP'} 
-                    onClick={() => placeBetOnTarget('UP')} 
-                    bets={myBets.filter(b => b.target === 'UP')}
-                />
-            </div>
-
-            {/* Bet Amount Selector (Chips Style) */}
-            <div className={`flex flex-col items-center gap-4 w-full max-w-sm mb-2 transition-all shrink-0 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
-                <div className="flex gap-2 overflow-x-auto no-scrollbar py-1 w-full justify-center">
-                    {[10, 50, 100, 500, 1000, 5000].map(amt => (
-                        <button 
-                            key={amt}
-                            onClick={() => setBet(amt)}
-                            className={`flex-shrink-0 w-12 h-12 rounded-full border-4 font-black text-[10px] transition-all flex items-center justify-center shadow-lg active:scale-90 ${bet === amt ? 'bg-yellow-500 text-black border-white scale-110 shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-black/80 text-yellow-500 border-yellow-500/30'}`}
-                        >
-                            {amt >= 1000 ? (amt/1000)+'K' : amt}
-                        </button>
-                    ))}
+            {/* Betting Targets */}
+            <div className={`grid grid-cols-3 gap-2 w-full max-w-sm mb-4 transition-all shrink-0 ${isLocked ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
+                <div className="relative">
+                    <button 
+                        onClick={() => setSelectedTarget('DOWN')}
+                        className={`w-full flex flex-col items-center justify-center py-4 rounded-2xl border-b-4 transition-all ${selectedTarget === 'DOWN' ? 'bg-blue-600 border-blue-800 scale-105 shadow-xl text-white' : 'bg-black/40 border-black/60 text-white/60 hover:bg-black/60'}`}
+                    >
+                        <span className="text-[10px] font-black uppercase mb-1">Down</span>
+                        <span className="text-xl font-black italic">2 - 6</span>
+                        <span className="text-[10px] font-bold opacity-60">Payout 2x</span>
+                    </button>
+                    {allBets.filter(b => b.target === 'DOWN').length > 0 && (
+                        <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg">
+                            ₹{allBets.filter(b => b.target === 'DOWN').reduce((acc, curr) => acc + curr.amount, 0)}
+                        </div>
+                    )}
+                </div>
+                <div className="relative">
+                    <button 
+                        onClick={() => setSelectedTarget('SEVEN')}
+                        className={`w-full flex flex-col items-center justify-center py-4 rounded-2xl border-b-4 transition-all ${selectedTarget === 'SEVEN' ? 'bg-yellow-600 border-yellow-800 scale-105 shadow-xl text-white' : 'bg-black/40 border-black/60 text-white/60 hover:bg-black/60'}`}
+                    >
+                        <span className="text-[10px] font-black uppercase mb-1">Lucky</span>
+                        <span className="text-xl font-black italic">7</span>
+                        <span className="text-[10px] font-bold opacity-60">Payout 3x</span>
+                    </button>
+                    {allBets.filter(b => b.target === 'SEVEN').length > 0 && (
+                        <div className="absolute -top-2 -right-2 bg-yellow-500 text-black text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg">
+                            ₹{allBets.filter(b => b.target === 'SEVEN').reduce((acc, curr) => acc + curr.amount, 0)}
+                        </div>
+                    )}
+                </div>
+                <div className="relative">
+                    <button 
+                        onClick={() => setSelectedTarget('UP')}
+                        className={`w-full flex flex-col items-center justify-center py-4 rounded-2xl border-b-4 transition-all ${selectedTarget === 'UP' ? 'bg-red-600 border-red-800 scale-105 shadow-xl text-white' : 'bg-black/40 border-black/60 text-white/60 hover:bg-black/60'}`}
+                    >
+                        <span className="text-[10px] font-black uppercase mb-1">Up</span>
+                        <span className="text-xl font-black italic">8 - 12</span>
+                        <span className="text-[10px] font-bold opacity-60">Payout 2x</span>
+                    </button>
+                    {allBets.filter(b => b.target === 'UP').length > 0 && (
+                        <div className="absolute -top-2 -right-2 bg-red-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg">
+                            ₹{allBets.filter(b => b.target === 'UP').reduce((acc, curr) => acc + curr.amount, 0)}
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* Live Bets Section */}
-            <div className="w-full max-w-md mt-6 bg-black/40 rounded-t-3xl border-t border-x border-white/10 flex flex-col flex-1 min-h-0">
-                <div className="flex border-b border-white/10 shrink-0">
-                    <button 
-                        onClick={() => setActiveTab('ALL')}
-                        className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'ALL' ? 'text-yellow-500 border-b-2 border-yellow-500 bg-yellow-500/5' : 'text-white/40'}`}
-                    >
-                        All Bets
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('MY')}
-                        className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'MY' ? 'text-yellow-500 border-b-2 border-yellow-500 bg-yellow-500/5' : 'text-white/40'}`}
-                    >
-                        My Bets
-                    </button>
-                </div>
-                
-                <div className="flex-1 p-2 overflow-y-auto">
-                    <div className="grid grid-cols-4 text-[8px] font-bold text-white/30 uppercase tracking-widest mb-2 px-2">
-                        <div>User</div>
-                        <div className="text-center">Bet</div>
-                        <div className="text-center">Target</div>
-                        <div className="text-right">Time</div>
+            {/* Bet Controls and Button Area */}
+            <div className="bg-[#1a0101] w-full p-4 border-t border-white/10 mt-auto shrink-0 space-y-4">
+                <div className={`w-full max-w-sm mx-auto space-y-4 ${isLocked ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
+                    <div className="flex gap-2 overflow-x-auto no-scrollbar px-2 py-1">
+                        {[10, 50, 100, 500, 1000, 5000].map(amt => (
+                            <button 
+                                key={amt}
+                                onClick={() => { setBetAmount(amt); playSound('click'); }}
+                                className={`flex-shrink-0 w-11 h-11 rounded-full border-2 font-black text-[10px] transition-all flex items-center justify-center shadow-lg active:scale-90 ${betAmount === amt ? 'bg-yellow-500 text-black border-white' : 'bg-black/60 text-yellow-500 border-yellow-500/20'}`}
+                            >
+                                {amt >= 1000 ? (amt/1000)+'K' : amt}
+                            </button>
+                        ))}
                     </div>
-                    
-                    <div className="space-y-1">
-                        {(activeTab === 'ALL' ? allBets : myBets).map((b, idx) => {
-                            const uniqueKey = b.id || `bet-${b.uid || 'anon'}-${b.timestamp || idx}-${idx}`;
-                            return (
-                                <div key={uniqueKey} className="grid grid-cols-4 items-center bg-white/5 rounded-lg p-2 border border-white/5 hover:bg-white/10 transition-all">
-                                    <div className="text-[10px] font-bold truncate">{b.uid === auth.currentUser?.uid ? 'You' : b.username}</div>
-                                <div className="flex items-center justify-center gap-1">
-                                    <img src="https://cdn-icons-png.flaticon.com/512/2489/2489756.png" className="w-2.5 h-2.5" alt="coin" referrerPolicy="no-referrer" />
-                                    <span className="text-[10px] font-black text-yellow-500">{b.amount.toLocaleString()}</span>
-                                </div>
-                                <div className="text-center">
-                                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-full ${b.target === 'DOWN' ? 'bg-blue-500/20 text-blue-400' : b.target === 'UP' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                                        {b.target}
-                                    </span>
-                                </div>
-                                <div className="text-right text-[8px] font-mono text-white/40">
-                                    {activeTab === 'MY' && b.status && b.status !== 'PENDING' ? (
-                                        <span className={b.status === 'WIN' ? 'text-green-500' : 'text-red-500'}>
-                                            {b.status === 'WIN' ? `+${b.winAmount}` : 'LOST'}
-                                        </span>
-                                    ) : new Date(b.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </div>
-                            </div>
-                        );
-                    })}
-                        {(activeTab === 'MY' && myBets.length === 0) && (
-                            <div className="text-center py-8 text-white/20 text-xs italic">No bets placed yet</div>
+
+                    <div className="flex gap-4">
+                        <button 
+                            onClick={handleConfirmBet}
+                            disabled={!selectedTarget || isBetting}
+                            className={`flex-1 py-5 rounded-2xl font-black text-xl uppercase tracking-widest shadow-2xl transition-all active:scale-95 disabled:opacity-50 disabled:grayscale ${selectedTarget ? 'bg-gradient-to-r from-yellow-400 to-yellow-600 text-black' : 'bg-white/10 text-white/40'}`}
+                        >
+                            {isBetting ? '...' : `BET ₹${betAmount}`}
+                        </button>
+                        {myBets.length > 0 && !isLocked && phase === 'BETTING' && (
+                            <button 
+                                onClick={handleCancelLastBet}
+                                className="px-6 bg-red-600/20 border border-red-500/30 rounded-2xl text-[10px] font-black uppercase text-red-500 active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                <RotateCcw size={16} /> RETURN
+                            </button>
                         )}
                     </div>
                 </div>
             </div>
-        </div>
 
-        {/* Footer Back Button */}
-        <button onClick={onBack} className="absolute bottom-4 left-4 w-8 h-8 bg-yellow-600 rounded-full flex items-center justify-center border-2 border-[#4a0404] shadow-lg z-20">
-            <ArrowLeft size={16} className="text-[#4a0404]" />
-        </button>
+            {/* Bets List */}
+            <div className="w-full max-w-md bg-black/40 rounded-t-3xl border-t border-x border-white/5 flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div className="flex border-b border-white/5 shrink-0">
+                    <button 
+                        onClick={() => setActiveTab('ALL')}
+                        className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'ALL' ? 'text-yellow-500 border-b-2 border-yellow-500 bg-white/5' : 'text-white/40'}`}
+                    >
+                        Live Bets ({allBets.length})
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('MY')}
+                        className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'MY' ? 'text-yellow-500 border-b-2 border-yellow-500 bg-white/5' : 'text-white/40'}`}
+                    >
+                        My Round Activity ({myBets.length})
+                    </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto no-scrollbar p-3 space-y-1">
+                    {(activeTab === 'ALL' ? allBets : myBets).map((b, idx) => (
+                        <motion.div 
+                            key={b.id || `bet-${idx}`}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[10px] font-black text-white shadow-lg">
+                                    {b.uid === auth.currentUser?.uid ? 'YOU' : (b.username?.charAt(0) || 'U')}
+                                </div>
+                                <div>
+                                    <div className="text-[10px] font-black text-white/90">{b.uid === auth.currentUser?.uid ? 'You' : b.username}</div>
+                                    <div className={`text-[8px] font-bold ${b.target === 'DOWN' ? 'text-blue-400' : b.target === 'UP' ? 'text-red-400' : 'text-yellow-400'}`}>
+                                        Target: {b.target}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <img src="https://cdn-icons-png.flaticon.com/512/2489/2489756.png" className="w-3 h-3" alt="coins" referrerPolicy="no-referrer" />
+                                <span className="text-[12px] font-black text-yellow-500">₹{b.amount.toLocaleString()}</span>
+                            </div>
+                        </motion.div>
+                    ))}
+                    {(activeTab === 'MY' && myBets.length === 0) && (
+                        <div className="h-full flex flex-col items-center justify-center opacity-20 py-10">
+                            <Plus size={32} />
+                            <p className="text-[10px] uppercase font-black tracking-widest mt-2">No Bets Placed</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
 
         {/* Result Overlay */}
         <AnimatePresence>

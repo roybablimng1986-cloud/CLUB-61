@@ -6,16 +6,23 @@ import { GameResult, RouletteBet, RouletteState } from '../types';
 import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimestamp, where } from 'firebase/firestore';
 
 import RouletteResultPopup from '../components/RouletteResultPopup';
+import { useStabilizedTimer } from '../hooks/useTimer';
 
 const WHEEL_ORDER = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
 const REDS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
 
 const Roulette: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
-  const [gameState, setGameState] = useState<RouletteState | null>(null);
+  const [gameState, setGameState] = useState<RouletteState>({
+    status: 'BETTING',
+    period: new Date().getTime().toString().slice(-6),
+    endTime: Date.now() + 30000,
+    history: [32, 15, 19, 4, 0, 21, 2],
+    timeLeft: 30,
+    winningNumber: null
+  });
+
   const [myBets, setMyBets] = useState<any[]>([]);
   const [allBets, setAllBets] = useState<any[]>([]);
-  const allBetsRef = useRef<any[]>([]);
-  useEffect(() => { allBetsRef.current = allBets; }, [allBets]);
 
   const [activeTab, setActiveTab] = useState<'ALL' | 'MY'>('ALL');
   const [isBettingLocked, setIsBettingLocked] = useState(false);
@@ -29,89 +36,69 @@ const Roulette: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
   const [rlResult, setRlResult] = useState<any | null>(null);
   const [isSpinning, setIsSpinning] = useState(false);
 
-  const [timeLeft, setTimeLeft] = useState(0);
+  const timeLeft = useStabilizedTimer(gameState.endTime);
   
   const isMounted = useRef(true);
-  const resultHandledRef = useRef<string | null>(null);
 
+  // Initial Engine
   useEffect(() => {
-    isMounted.current = true;
-    
-    const unsubState = subscribeToRoulette((state) => {
-        if (!isMounted.current) return;
-        setGameState(state);
-
-        if (state.status === 'BETTING') {
-            setLastResult(null);
-            resultHandledRef.current = null;
-        } else {
-            setIsBettingLocked(true);
-        }
-
-        if (state.status === 'RESULT' && resultHandledRef.current !== state.period) {
-            resultHandledRef.current = state.period;
-            handleSpinSequence(state);
-        }
-    });
-
-    const unsubBets = subscribeToRouletteBets((bets) => {
-        setAllBets(bets);
-        if (auth.currentUser) {
-            setMyBets(bets.filter((b: any) => b.uid === auth.currentUser?.uid));
-        }
-    });
-
-    return () => { isMounted.current = false; unsubState(); unsubBets(); stopAllSounds(); };
-}, []);
-
-useEffect(() => {
-    const timer = setInterval(() => {
-        if (gameState?.endTime) {
-            const remaining = Math.max(0, Math.floor((gameState.endTime - (Date.now() + getClockOffset())) / 1000));
-            setTimeLeft(remaining);
-            if (gameState.status === 'BETTING') {
-                setIsBettingLocked(remaining <= 5);
-                if (remaining <= 5 && remaining > 0) playSound('wingo_tick');
+    const interval = setInterval(() => {
+        if (gameState.status === 'BETTING') {
+            if (Date.now() >= gameState.endTime) {
+                setGameState(prev => ({ ...prev, status: 'RESULT' }));
+                handleSpinSequence(gameState);
+            } else if (timeLeft <= 5) {
+                setIsBettingLocked(true);
+                if (timeLeft > 0) playSound('wingo_tick');
             }
         }
     }, 1000);
-    return () => clearInterval(timer);
-}, [gameState?.endTime, gameState?.status]);
-
-if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center font-black gold-text text-xl italic uppercase tracking-widest">Entering Arena...</div>;
-
-// Listen to bets for the current period
-// Redundant - now handled by shared listener in first useEffect
+    return () => clearInterval(interval);
+  }, [gameState.status, gameState.endTime, timeLeft]);
 
   const handleSpinSequence = (state: RouletteState) => {
     setIsSpinning(true);
     playSound('wheel_spin');
-    const result = state.winningNumber!;
-    const resultIdx = WHEEL_ORDER.indexOf(result);
+    
+    // Local Result
+    const num = WHEEL_ORDER[Math.floor(Math.random() * WHEEL_ORDER.length)];
+    
+    const resultIdx = WHEEL_ORDER.indexOf(num);
     const segmentAngle = 360 / WHEEL_ORDER.length;
     
-    // Higher degree for more rotations
     const extraRots = 360 * 15; 
     const offset = resultIdx * segmentAngle;
     const finalRotation = extraRots + (360 - offset);
     
     setWheelRotation(prev => prev + finalRotation);
     
-    setTimeout(() => {
+    setTimeout(async () => {
         if (!isMounted.current) return;
-        setLastResult(result);
+        setLastResult(num);
         setIsSpinning(false);
-        const myCurrentBets = allBetsRef.current.filter(b => b.uid === auth.currentUser?.uid);
-        if (myCurrentBets.length > 0) {
-            processMyResult(state, myCurrentBets);
+        processMyResult(state, myBets, num);
+
+        await new Promise(r => setTimeout(r, 5000));
+        if (isMounted.current) {
+            setGameState(prev => ({
+                status: 'BETTING',
+                period: (parseInt(prev.period) + 1).toString(),
+                endTime: Date.now() + 30000,
+                history: [num, ...prev.history].slice(0, 20),
+                timeLeft: 30,
+                winningNumber: null
+            }));
+            setMyBets([]);
+            setAllBets([]);
+            setIsBettingLocked(false);
+            setLastResult(null);
         }
-    }, 4500); // match animation duration slightly less
+    }, 4500);
   };
 
-  const processMyResult = (state: RouletteState, currentBets: any[]) => {
+  const processMyResult = (state: RouletteState, currentBets: any[], num: number) => {
     let totalWin = 0;
     let totalBet = 0;
-    const num = state.winningNumber!;
     const isRed = REDS.includes(num);
     const isEven = num !== 0 && num % 2 === 0;
 
@@ -136,20 +123,21 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
     if (isWin) {
         updateBalance(totalWin, 'WIN', 'Roulette Win');
         triggerFloating(`+₹${totalWin.toFixed(2)}`, 'text-yellow-400');
-    } else {
+    } else if (totalBet > 0) {
         triggerFloating(`-₹${totalBet.toFixed(2)}`, 'text-red-500');
     }
 
-    setRlResult({
-        win: isWin,
-        amount: isWin ? totalWin : totalBet,
-        period: state.period,
-        winningNumber: num,
-        isRed: isRed,
-        target: currentBets.map(b => `${b.type}: ${b.value}`).join(', ')
-    });
-
-    addGameHistory('Mafia Roulette', totalBet, totalWin, `Period: ${state.period}`);
+    if (totalBet > 0) {
+        setRlResult({
+            win: isWin,
+            amount: isWin ? totalWin : 0,
+            period: state.period,
+            winningNumber: num,
+            isRed: isRed,
+            target: currentBets.map(b => `${b.type}: ${b.value}`).join(', ')
+        });
+        addGameHistory('Mafia Roulette', totalBet, totalWin, `Period: ${state.period}`);
+    }
   };
 
   const triggerFloating = (text: string, color: string) => {
@@ -157,31 +145,41 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
       setTimeout(() => setFloating(null), 3000);
   };
 
-  const openBetConfirm = (type: RouletteBet['type'], value: string | number) => {
-    if (gameState?.status !== 'BETTING' || isBettingLocked) return;
-    setConfirmDrawer({ open: true, type, value });
-    playSound('click');
-  };
-
-  const handlePlaceBet = async () => {
-    if (!confirmDrawer || !auth.currentUser || !gameState) return;
-    if (userBalance < selectedChip) { alert("Insufficient Balance"); return; }
+  const handlePlaceBet = async (type: RouletteBet['type'], value: string | number) => {
+    if (gameState?.status !== 'BETTING' || isBettingLocked || !auth.currentUser) return;
+    if (userBalance < selectedChip) { 
+        triggerFloating("Low Balance", "text-red-500");
+        return; 
+    }
 
     try {
         const betData = {
-            type: confirmDrawer.type,
-            value: confirmDrawer.value,
+            type,
+            value,
             amount: selectedChip,
             period: gameState.period,
+            uid: auth.currentUser.uid,
+            username: 'You',
+            timestamp: Date.now(),
+            id: Date.now()
         };
 
-        await addGameBet('roulette_bets', betData);
-        await updateBalance(-selectedChip, 'BET', `Roulette: ${confirmDrawer.value}`);
+        setMyBets(prev => [...prev, betData]);
+        setAllBets(prev => [betData, ...prev]);
+        await updateBalance(-selectedChip, 'BET', `Roulette: ${value}`);
         playSound('bet_place');
-        setConfirmDrawer(null);
     } catch (e) {
         console.error("Bet error:", e);
     }
+  };
+
+  const handleCancelLastBet = async () => {
+    if (myBets.length === 0 || isBettingLocked || gameState?.status !== 'BETTING') return;
+    const lastBet = myBets[myBets.length - 1];
+    setMyBets(prev => prev.slice(0, -1));
+    setAllBets(prev => prev.filter(b => b.id !== lastBet.id));
+    await updateBalance(lastBet.amount, 'WIN', 'Bet Cancelled');
+    playSound('click');
   };
 
   if (!gameState) return <div className="min-h-screen bg-black flex items-center justify-center font-black gold-text">Entering Casino...</div>;
@@ -269,11 +267,25 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
           <div className="w-full px-4 max-w-lg space-y-3">
 
              <div className="flex gap-2 h-20">
-                <button onClick={() => openBetConfirm('NUMBER', 0)} disabled={isBettingLocked || gameState.status !== 'BETTING'} className="flex-[0.5] bg-green-600 rounded-2xl flex items-center justify-center font-black border-2 border-white/20 active:scale-95 text-2xl shadow-2xl disabled:opacity-30">0</button>
-                <div className="flex-[2] grid grid-cols-2 gap-2">
-                    <OutsideBet label="RED" color="bg-red-600" onClick={() => openBetConfirm('COLOR', 'RED')} status={gameState.status} isLocked={isBettingLocked} />
-                    <OutsideBet label="BLACK" color="bg-zinc-950" onClick={() => openBetConfirm('COLOR', 'BLACK')} status={gameState.status} isLocked={isBettingLocked} />
-                </div>
+                <button onClick={() => handlePlaceBet('NUMBER', 0)} disabled={isBettingLocked || gameState.status !== 'BETTING'} className="flex-[0.5] bg-green-600 rounded-2xl flex items-center justify-center font-black border-2 border-white/20 active:scale-95 text-2xl shadow-2xl disabled:opacity-30">0</button>
+                    <div className="grid grid-cols-2 gap-2">
+                        <OutsideBet 
+                            label="RED" 
+                            color="bg-red-600" 
+                            onClick={() => handlePlaceBet('COLOR', 'RED')} 
+                            status={gameState.status} 
+                            isLocked={isBettingLocked} 
+                            betAmount={allBets.filter(b => b.type === 'COLOR' && b.value === 'RED').reduce((acc, curr) => acc + curr.amount, 0)}
+                        />
+                        <OutsideBet 
+                            label="BLACK" 
+                            color="bg-zinc-950" 
+                            onClick={() => handlePlaceBet('COLOR', 'BLACK')} 
+                            status={gameState.status} 
+                            isLocked={isBettingLocked} 
+                            betAmount={allBets.filter(b => b.type === 'COLOR' && b.value === 'BLACK').reduce((acc, curr) => acc + curr.amount, 0)}
+                        />
+                    </div>
              </div>
 
              <div className="bg-zinc-950/80 p-2 sm:p-3 rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 shadow-2xl space-y-1 sm:space-y-2">
@@ -281,9 +293,15 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
                     <div key={rIdx} className="grid grid-cols-6 gap-1 sm:gap-2">
                         {row.map(n => {
                             const color = REDS.includes(n) ? 'bg-red-600' : 'bg-zinc-900';
+                            const betOnThis = allBets.filter(b => b.type === 'NUMBER' && b.value === n).reduce((acc, curr) => acc + curr.amount, 0);
                             return (
-                                <button key={n} onClick={() => openBetConfirm('NUMBER', n)} disabled={isBettingLocked || gameState.status !== 'BETTING'} className={`${color} h-10 sm:h-12 rounded-lg sm:rounded-xl flex flex-col items-center justify-center font-black text-sm sm:text-lg relative active:scale-95 border border-white/10 shadow-xl disabled:opacity-30`}>
+                                <button key={n} onClick={() => handlePlaceBet('NUMBER', n)} disabled={isBettingLocked || gameState.status !== 'BETTING'} className={`${color} h-10 sm:h-12 rounded-lg sm:rounded-xl flex flex-col items-center justify-center font-black text-sm sm:text-lg relative active:scale-95 border border-white/10 shadow-xl disabled:opacity-30`}>
                                     {n}
+                                    {betOnThis > 0 && (
+                                        <div className="absolute -top-1 -right-1 bg-yellow-500 text-black text-[7px] font-black px-1 rounded-full shadow-lg z-10 animate-bounce">
+                                            ₹{betOnThis >= 1000 ? (betOnThis/1000).toFixed(1)+'K' : betOnThis}
+                                        </div>
+                                    )}
                                 </button>
                             );
                         })}
@@ -293,12 +311,12 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
 
              <div className="grid grid-cols-2 gap-2">
                 <div className="grid grid-cols-2 gap-2">
-                    <OutsideBet label="1-18" onClick={() => openBetConfirm('RANGE', '1-18')} status={gameState.status} isLocked={isBettingLocked} />
-                    <OutsideBet label="EVEN" onClick={() => openBetConfirm('ODD_EVEN', 'EVEN')} status={gameState.status} isLocked={isBettingLocked} />
+                    <OutsideBet label="1-18" onClick={() => handlePlaceBet('RANGE', '1-18')} status={gameState.status} isLocked={isBettingLocked} betAmount={allBets.filter(b => b.type === 'RANGE' && b.value === '1-18').reduce((acc, curr) => acc + curr.amount, 0)} />
+                    <OutsideBet label="EVEN" onClick={() => handlePlaceBet('ODD_EVEN', 'EVEN')} status={gameState.status} isLocked={isBettingLocked} betAmount={allBets.filter(b => b.type === 'ODD_EVEN' && b.value === 'EVEN').reduce((acc, curr) => acc + curr.amount, 0)} />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                    <OutsideBet label="ODD" onClick={() => openBetConfirm('ODD_EVEN', 'ODD')} status={gameState.status} isLocked={isBettingLocked} />
-                    <OutsideBet label="19-36" onClick={() => openBetConfirm('RANGE', '19-36')} status={gameState.status} isLocked={isBettingLocked} />
+                    <OutsideBet label="ODD" onClick={() => handlePlaceBet('ODD_EVEN', 'ODD')} status={gameState.status} isLocked={isBettingLocked} betAmount={allBets.filter(b => b.type === 'ODD_EVEN' && b.value === 'ODD').reduce((acc, curr) => acc + curr.amount, 0)} />
+                    <OutsideBet label="19-36" onClick={() => handlePlaceBet('RANGE', '19-36')} status={gameState.status} isLocked={isBettingLocked} betAmount={allBets.filter(b => b.type === 'RANGE' && b.value === '19-36').reduce((acc, curr) => acc + curr.amount, 0)} />
                 </div>
              </div>
           </div>
@@ -312,9 +330,9 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
                 
                 <div className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar">
                     <AnimatePresence mode="popLayout">
-                        {(activeTab === 'ALL' ? allBets : myBets).map((bet) => (
+                        {(activeTab === 'ALL' ? allBets : myBets).map((bet, idx) => (
                             <motion.div 
-                                key={bet.id || bet.uid}
+                                key={bet.id || `rl-bet-${idx}-${bet.uid}`}
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: 20 }}
@@ -341,23 +359,30 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
       </div>
 
       {/* Footer Controls */}
-      <div className="fixed bottom-0 left-0 w-full bg-zinc-950/95 backdrop-blur-2xl border-t border-white/10 p-6 pb-10 z-[120] shadow-[0_-30px_80px_rgba(0,0,0,1)]">
+      <div className="fixed bottom-0 left-0 w-full bg-zinc-950/95 backdrop-blur-2xl border-t border-white/10 p-6 pb-12 z-[120] shadow-[0_-30px_80px_rgba(0,0,0,1)]">
           <div className="flex gap-3 overflow-x-auto no-scrollbar mb-6 py-2">
                 {[10, 50, 100, 500, 1000, 5000].map(amt => (
                     <button key={amt} onClick={() => setSelectedChip(amt)} className={`flex-shrink-0 w-16 h-16 rounded-full border-4 flex items-center justify-center text-sm font-black transition-all duration-300 ${selectedChip === amt ? 'bg-yellow-500 border-white text-black scale-110 shadow-[0_0_30px_rgba(234,179,8,0.5)]' : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-white'}`}>₹{amt >= 1000 ? `${amt/1000}k` : amt}</button>
                 ))}
           </div>
-          <div className="flex justify-between items-center px-6 py-4 rounded-3xl bg-black/50 border border-white/5">
-             <div className="flex items-center gap-2">
-                <History size={16} className="text-yellow-500/60"/>
-                <div className="flex gap-1 overflow-x-auto no-scrollbar max-w-[150px]">
-                    {gameState.history.map((h, i) => <span key={i} className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-black ${h===0?'bg-green-600':REDS.includes(h)?'bg-red-600':'bg-zinc-800'}`}>{h}</span>)}
-                </div>
-             </div>
-             <div className="flex flex-col text-right">
-                <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Active Period</span>
-                <span className="text-sm font-black text-yellow-500 font-mono italic">#{gameState.period}</span>
-             </div>
+          
+          <div className="flex items-center gap-4">
+              {myBets.length > 0 && !isBettingLocked && gameState.status === 'BETTING' && (
+                  <button onClick={handleCancelLastBet} className="w-16 h-16 rounded-full bg-red-600/20 border border-red-500/30 text-red-500 flex items-center justify-center active:scale-90 transition-all shadow-xl">
+                      <span className="text-3xl font-black italic">↺</span>
+                  </button>
+              )}
+              <div className="flex-1 px-6 py-4 rounded-3xl bg-black/50 border border-white/5 flex justify-between items-center">
+                 <div className="flex items-center gap-2">
+                    <History size={16} className="text-yellow-500/60"/>
+                    <div className="flex gap-1 overflow-x-auto no-scrollbar max-w-[120px]">
+                        {gameState.history.map((h, i) => <span key={i} className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[7px] font-black ${h===0?'bg-green-600':REDS.includes(h)?'bg-red-600':'bg-zinc-800'}`}>{h}</span>)}
+                    </div>
+                 </div>
+                 <div className="flex flex-col text-right">
+                    <span className="text-[8px] text-zinc-500 uppercase font-black tracking-widest">#{gameState.period}</span>
+                 </div>
+              </div>
           </div>
       </div>
 
@@ -375,7 +400,12 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
                        <div className="flex flex-col"><span className="text-[14px] text-slate-500 uppercase font-black">Bet Amount</span><span className="text-5xl font-black">₹{selectedChip}</span></div>
                        <div className="w-20 h-20 rounded-full bg-yellow-500 flex items-center justify-center text-black font-black text-2xl shadow-2xl ring-4 ring-yellow-400/20">₹{selectedChip >= 1000 ? `${selectedChip/1000}k` : selectedChip}</div>
                   </div>
-                  <button onClick={handlePlaceBet} className="w-full py-8 rounded-[3rem] bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600 text-black font-black uppercase tracking-[0.5em] text-3xl shadow-[0_20px_60px_rgba(234,179,8,0.4)] active:scale-95 transition-all border-t-2 border-white/30">CONFIRM STAKE</button>
+                  <button 
+                      onClick={() => confirmDrawer && handlePlaceBet(confirmDrawer.type, confirmDrawer.value)}
+                      className="w-full py-8 rounded-[3rem] bg-gradient-to-r from-yellow-400 via-yellow-500 to-yellow-600 text-black font-black uppercase tracking-[0.5em] text-3xl shadow-[0_20px_60px_rgba(234,179,8,0.4)] active:scale-95 transition-all border-t-2 border-white/30"
+                  >
+                      CONFIRM STAKE
+                  </button>
               </div>
           </div>
       )}
@@ -421,8 +451,13 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
   );
 };
 
-const OutsideBet = ({ label, color = 'bg-zinc-900', onClick, status, isLocked }: any) => (
+const OutsideBet = ({ label, color = 'bg-zinc-900', onClick, status, isLocked, betAmount }: any) => (
     <button onClick={onClick} disabled={status !== 'BETTING' || isLocked} className={`h-20 ${color} rounded-3xl border-2 border-white/10 font-black text-xs uppercase flex flex-col items-center justify-center relative active:scale-95 transition-all disabled:opacity-30 shadow-2xl`}>
+        {betAmount > 0 && (
+            <div className="absolute -top-1 -right-1 bg-yellow-500 text-black text-[7px] font-black px-1.5 py-0.5 rounded-full shadow-lg z-10 animate-bounce">
+                ₹{betAmount >= 1000 ? (betAmount/1000).toFixed(1)+'K' : betAmount}
+            </div>
+        )}
         <span className="tracking-widest italic">{label}</span>
         {isLocked && <div className="absolute inset-0 bg-black/20 flex items-center justify-center"><Check size={16} className="text-white/20" /></div>}
     </button>

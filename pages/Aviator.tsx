@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, HelpCircle, Plus, Menu, History, Minus, Wallet, Info } from 'lucide-react';
+import { ChevronLeft, HelpCircle, Plus, Menu, History, Minus, Wallet, Info, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { updateBalance, playSound, addGameHistory, stopAllSounds, toggleMute, getMuteStatus, subscribeToAviator, subscribeToAviatorBets, db, auth, addGameBet, getClockOffset } from '../services/supabaseService';
 import { collection, addDoc } from 'firebase/firestore';
@@ -11,109 +11,110 @@ import HowToPlay from '../components/HowToPlay';
 import { useStabilizedTimer } from '../hooks/useTimer';
 
 const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
-  const [globalState, setGlobalState] = useState<AviatorState | null>(null);
+  const [globalState, setGlobalState] = useState<AviatorState>({
+    phase: 'WAITING',
+    multiplier: 1.0,
+    history: [1.2, 5.4, 1.0, 2.3, 15.2, 1.1],
+    endTime: Date.now() + 8000,
+    timeLeft: 8,
+    crashPoint: 2.0
+  });
   const [localMultiplier, setLocalMultiplier] = useState(1.0);
   const localMultiplierRef = useRef(1.0);
-  const localTimeLeft = useStabilizedTimer(globalState?.phase === 'WAITING' ? globalState.endTime : undefined);
+  const localTimeLeft = useStabilizedTimer(globalState.phase === 'WAITING' ? globalState.endTime : undefined);
   const [aviatorResult, setAviatorResult] = useState<any | null>(null);
   const [showHelp, setShowHelp] = useState(false);
 
+  const [bet1, setBet1] = useState({ amount: 10, active: false, isAuto: false, autoValue: 2.0, queued: false });
+  const [bet2, setBet2] = useState({ amount: 10, active: false, isAuto: false, autoValue: 2.0, queued: false });
+  const bet1Ref = useRef(bet1);
+  const bet2Ref = useRef(bet2);
+  useEffect(() => { bet1Ref.current = bet1; bet2Ref.current = bet2; }, [bet1, bet2]);
+
+  const [allBets, setAllBets] = useState<any[]>([]);
+  const isMounted = useRef(true);
+  const startTimeRef = useRef<number | null>(null);
+  const crashPointRef = useRef<number>(2.0);
+
+  // Local Game Engine
   useEffect(() => {
-    if (!globalState) return;
-    
-    if (globalState.phase === 'FLYING' && globalState.startTime) {
-        const interval = setInterval(() => {
-            const elapsed = (Date.now() + getClockOffset() - globalState.startTime!) / 1000;
+    const mainInterval = setInterval(() => {
+        const now = Date.now();
+        if (globalState.phase === 'WAITING') {
+            if (now >= globalState.endTime) {
+                // START FLYING
+                const r = Math.random();
+                let crashPoint = 1.0;
+                if (r > 0.05) crashPoint = 1 + Math.pow(Math.random(), 2) * 15;
+                if (r > 0.95) crashPoint = 1 + Math.random() * 50;
+
+                crashPointRef.current = crashPoint;
+                startTimeRef.current = now;
+                setGlobalState(prev => ({ ...prev, phase: 'FLYING', startTime: now, crashPoint: crashPoint }));
+                
+                // Queued bets become active
+                if (bet1Ref.current.queued) setBet1(prev => ({ ...prev, queued: false, active: true }));
+                if (bet2Ref.current.queued) setBet2(prev => ({ ...prev, queued: false, active: true }));
+                playSound('plane_engine');
+            }
+        } else if (globalState.phase === 'FLYING') {
+            const elapsed = (now - (startTimeRef.current || now)) / 1000;
             const mult = Math.pow(1.1, elapsed);
             setLocalMultiplier(mult);
             localMultiplierRef.current = mult;
 
-            // Auto Cashout Check
-            const b1 = bet1Ref.current;
-            const b2 = bet2Ref.current;
-            if (b1.active && b1.isAuto && mult >= b1.autoValue) {
-                handleBetAction(1);
+            if (mult >= crashPointRef.current) {
+                // CRASH
+                playSound('plane_crash');
+                setGlobalState(prev => ({
+                    ...prev,
+                    phase: 'CRASHED',
+                    multiplier: mult,
+                    history: [mult, ...prev.history].slice(0, 20),
+                    endTime: now + 4000,
+                    timeLeft: 0
+                }));
+                setLocalMultiplier(mult);
+                
+                if (bet1Ref.current.active) {
+                    setBet1(prev => ({ ...prev, active: false }));
+                    setAviatorResult({ win: false, amount: 0, multiplier: mult, game: 'Aviator' });
+                }
+                if (bet2Ref.current.active) {
+                    setBet2(prev => ({ ...prev, active: false }));
+                    setAviatorResult({ win: false, amount: 0, multiplier: mult, game: 'Aviator' });
+                }
+            } else {
+                // Auto Cashout Check
+                if (bet1Ref.current.active && bet1Ref.current.isAuto && mult >= bet1Ref.current.autoValue) handleBetAction(1);
+                if (bet2Ref.current.active && bet2Ref.current.isAuto && mult >= bet2Ref.current.autoValue) handleBetAction(2);
             }
-            if (b2.active && b2.isAuto && mult >= b2.autoValue) {
-                handleBetAction(2);
+        } else if (globalState.phase === 'CRASHED') {
+            if (now >= globalState.endTime) {
+                setGlobalState(prev => ({
+                    ...prev,
+                    phase: 'WAITING',
+                    multiplier: 1.0,
+                    endTime: now + 8000,
+                    timeLeft: 8
+                }));
+                setLocalMultiplier(1.0);
+                startTimeRef.current = null;
             }
-        }, 50);
-        return () => clearInterval(interval);
-    } else {
-        setLocalMultiplier(globalState.multiplier);
-        localMultiplierRef.current = globalState.multiplier;
-    }
-  }, [globalState?.phase, globalState?.startTime, globalState?.multiplier]);
+        }
+    }, 50);
 
-  const [bet1, setBet1] = useState({ amount: 10, active: false, isAuto: false, autoValue: 2.0, queued: false });
-  const [bet2, setBet2] = useState({ amount: 10, active: false, isAuto: false, autoValue: 2.0, queued: false });
+    return () => clearInterval(mainInterval);
+  }, [globalState.phase, globalState.endTime]);
+
   const [muted, setMuted] = useState(getMuteStatus());
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef(0);
-  const isMounted = useRef(true);
-  const lastPhaseRef = useRef<string>('WAITING');
   const flickerRef = useRef(0);
 
-  // Mock Round ID and Ping
+  // Round ID and Ping
   const [roundId] = useState(() => Math.floor(19735700 + Math.random() * 1000));
   const [ping] = useState(() => Math.floor(30 + Math.random() * 400));
-  const [allBets, setAllBets] = useState<any[]>([]);
-
-  const bet1Ref = useRef(bet1);
-  const bet2Ref = useRef(bet2);
-
-  useEffect(() => {
-    bet1Ref.current = bet1;
-    bet2Ref.current = bet2;
-  }, [bet1, bet2]);
-
-  useEffect(() => {
-    isMounted.current = true;
-    const unsub = subscribeToAviator((state) => {
-        if (!isMounted.current) return;
-        
-        const b1 = bet1Ref.current;
-        const b2 = bet2Ref.current;
-
-        if (state.phase === 'WAITING' && (lastPhaseRef.current === 'CRASHED' || lastPhaseRef.current === 'FLYING')) {
-            // Activate queued bets
-            if (b1.queued) setBet1(prev => ({ ...prev, queued: false, active: true }));
-            if (b2.queued) setBet2(prev => ({ ...prev, queued: false, active: true }));
-        }
-
-        if (state.phase === 'CRASHED' && lastPhaseRef.current === 'FLYING') {
-            playSound('plane_crash');
-            
-            // Handle Bet 1
-            if (b1.active) {
-                setBet1(prev => ({ ...prev, active: false }));
-                setAviatorResult({ win: false, amount: b1.amount, multiplier: state.multiplier, game: 'Aviator' });
-            }
-            // Handle Bet 2
-            if (b2.active) {
-                setBet2(prev => ({ ...prev, active: false }));
-                setAviatorResult({ win: false, amount: b2.amount, multiplier: state.multiplier, game: 'Aviator' });
-            }
-        }
-
-        if (state.phase === 'FLYING' && lastPhaseRef.current === 'WAITING') {
-            playSound('plane_engine');
-        }
-
-        if (state.phase === 'FLYING') {
-            // Auto Cashout Check handled in multiplier interval
-        }
-
-        lastPhaseRef.current = state.phase;
-        setGlobalState(state);
-    });
-
-    const unsubBets = subscribeToAviatorBets((data) => {
-        if (isMounted.current) setAllBets(data);
-    });
-
-    return () => { isMounted.current = false; unsub(); unsubBets(); stopAllSounds(); cancelAnimationFrame(animRef.current); };
-  }, []);
 
   const handleBetAction = async (betNum: 1 | 2) => {
       if (!globalState) return;
@@ -230,50 +231,50 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
           ctx.stroke();
 
           if (phase === 'FLYING' || phase === 'CRASHED') {
-              // Adjust progress to lift earlier
-              const progress = Math.min(1, (mult - 1) / 10);
-              const endX = startX + (cvs.width - startX - padding * 2) * progress;
+              // Smooth diagonal progress towards the top-right corner
+              const progress = Math.min(1, (mult - 1) / 30); // Reach top-right around 30x
               
-              // Lift immediately and more steeply as requested
-              const maxLift = startY - padding * 4.5;
-              const liftProgress = Math.min(1, progress * 1.8); 
-              const baseCurveY = maxLift * (0.4 + 0.6 * Math.pow(liftProgress, 0.4));
+              const endX = startX + (cvs.width - startX - padding * 3) * progress;
+              const liftLimit = startY - padding * 4;
+              const liftProgress = Math.min(1, (mult - 1) / 30);
+              const baseLift = (startY - liftLimit) * Math.pow(liftProgress, 0.6);
               
-              const jitter = phase === 'FLYING' ? Math.sin(Date.now() / 100) * 4 : 0;
-              const endY = startY - baseCurveY + jitter;
+              const cruiseOscillation = phase === 'FLYING' ? Math.sin(Date.now() / 800) * 8 : 0;
+              const jitter = phase === 'FLYING' ? Math.sin(Date.now() / 40) * 1 : 0;
+              
+              const finalY = Math.max(padding * 2, startY - baseLift + cruiseOscillation + jitter);
               
               // Curve Gradient Area
               ctx.beginPath();
               ctx.moveTo(startX, startY);
-              // Steeper control point for more direct upward movement
-              ctx.quadraticCurveTo(startX + (endX - startX) * 0.1, startY - baseCurveY * 0.2, endX, endY);
+              ctx.quadraticCurveTo(startX + (endX - startX) * 0.2, startY, endX, finalY);
               ctx.lineTo(endX, startY);
               ctx.closePath();
-              const gradient = ctx.createLinearGradient(0, endY, 0, startY);
-              gradient.addColorStop(0, 'rgba(255, 0, 0, 0.6)');
-              gradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+              const gradient = ctx.createLinearGradient(0, finalY, 0, startY);
+              gradient.addColorStop(0, 'rgba(226, 27, 34, 0.4)');
+              gradient.addColorStop(1, 'rgba(226, 27, 34, 0)');
               ctx.fillStyle = gradient;
               ctx.fill();
 
               // Curve Line
               ctx.beginPath();
-              ctx.lineWidth = 6;
+              ctx.lineWidth = 4;
               ctx.lineCap = 'round';
-              ctx.strokeStyle = '#ff0000';
+              ctx.strokeStyle = '#e21b22';
               ctx.shadowBlur = 15;
-              ctx.shadowColor = 'rgba(255, 0, 0, 0.5)';
+              ctx.shadowColor = 'rgba(226, 27, 34, 0.6)';
               ctx.moveTo(startX, startY);
-              ctx.quadraticCurveTo(startX + (endX - startX) * 0.4, startY, endX, endY);
+              ctx.quadraticCurveTo(startX + (endX - startX) * 0.5, startY, endX, finalY);
               ctx.stroke();
               ctx.shadowBlur = 0;
 
-              // Draw Plane (Detailed Red Silhouette)
+              // Draw Plane
               if (phase === 'FLYING') {
-                  ctx.save();
-                  ctx.translate(endX, endY);
-                  // More dynamic rotation based on climb
-                  const angle = -Math.atan2(baseCurveY, endX - startX) * 0.8;
-                  ctx.rotate(angle);
+                ctx.save();
+                ctx.translate(endX, finalY);
+                const slope = - ( (startY - finalY) / (endX - startX) ) || 0;
+                const oscillationAngle = Math.cos(Date.now() / 1000) * 0.04;
+                ctx.rotate(Math.atan(slope) + oscillationAngle);
                   
                   ctx.fillStyle = '#ff0000';
                   ctx.shadowBlur = 15;
@@ -344,10 +345,10 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
   }, [globalState]);
 
   const getHistoryColor = (val: number) => {
-      if (val < 1.2) return 'text-blue-400 bg-blue-400/10';
-      if (val < 2.0) return 'text-blue-300 bg-blue-300/10';
-      if (val < 10.0) return 'text-purple-400 bg-purple-400/10';
-      return 'text-pink-500 bg-pink-500/10';
+      if (val < 2.0) return 'text-blue-400 bg-blue-500/10 border-blue-500/20';
+      if (val < 10.0) return 'text-purple-400 bg-purple-500/10 border-purple-500/20 shadow-[0_0_10px_rgba(168,85,247,0.2)]';
+      if (val < 50.0) return 'text-pink-400 bg-pink-500/10 border-pink-500/20 shadow-[0_0_15px_rgba(236,72,153,0.3)]';
+      return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/40 font-black shadow-[0_0_20px_rgba(234,179,8,0.4)]';
   };
 
   if (!globalState) return <div className="min-h-screen bg-[#141516] flex items-center justify-center text-red-600 font-black animate-pulse">Syncing...</div>;
@@ -460,13 +461,13 @@ const Aviator: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
                                 <div className="bg-[#2c2d2e] px-4 py-2 rounded-xl flex flex-col items-center border border-white/5 w-64">
                                     <div className="flex items-center justify-between w-full mb-2">
                                         <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Next Round In</span>
-                                        <span className="text-sm font-black text-red-500 font-mono">{Math.max(0, localTimeLeft).toFixed(1)}s</span>
+                                        <span className="text-sm font-black text-red-500 font-mono">{(localTimeLeft || 0).toString().padStart(2, '0')}s</span>
                                     </div>
                                     <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
                                         <motion.div 
                                             initial={{ width: '100%' }}
-                                            animate={{ width: `${(localTimeLeft / 5) * 100}%` }}
-                                            transition={{ duration: 0.1, ease: 'linear' }}
+                                            animate={{ width: `${Math.min(100, ((localTimeLeft || 0) / 8) * 100)}%` }}
+                                            transition={{ duration: 0.5, ease: 'linear' }}
                                             className="h-full bg-red-600 shadow-[0_0_10px_rgba(226,27,34,0.5)]"
                                         />
                                     </div>
@@ -628,8 +629,8 @@ const BetPanel: React.FC<{
                                 : 'bg-gradient-to-br from-[#28a745] to-[#218838] border-[#145523] hover:brightness-110'
                     }`}
                 >
-                    <span className="text-xl font-black uppercase tracking-tighter group-hover:scale-110 transition-transform">
-                        {bet.active && phase === 'FLYING' ? 'CASH OUT' : (bet.active || bet.queued) ? 'CANCEL' : 'BET'}
+                    <span className="text-xl font-black uppercase tracking-tighter group-hover:scale-110 transition-transform flex items-center gap-2">
+                        {bet.active && phase === 'FLYING' ? 'CASH OUT' : (bet.active || bet.queued) ? <><RotateCcw size={20}/> CANCEL</> : 'BET'}
                     </span>
                     <span className="text-xs font-black opacity-80 font-mono">
                         {bet.active && phase === 'FLYING' ? `₹${(bet.amount * multiplier).toFixed(2)}` : `₹${bet.amount}`}

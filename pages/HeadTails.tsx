@@ -80,7 +80,7 @@ const HeadTails: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
       const winAmt = isWin ? betAmount * 1.98 : 0;
       setHtResult({
           win: isWin,
-          amount: isWin ? winAmt : betAmount,
+          amount: isWin ? winAmt : 0,
           outcome: outcome,
           target: playerChoice
       });

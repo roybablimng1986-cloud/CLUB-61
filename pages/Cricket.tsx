@@ -8,6 +8,7 @@ import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, serverTimes
 
 import CricketResultPopup from '../components/CricketResultPopup';
 import HowToPlay from '../components/HowToPlay';
+import { useStabilizedTimer } from '../hooks/useTimer';
 
 const OUTCOMES = [
     { label: '1 Run', val: 1, mult: 2.1, color: 'bg-blue-600' },
@@ -19,7 +20,14 @@ const OUTCOMES = [
 ];
 
 const Cricket: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
-  const [gameState, setGameState] = useState<CricketState | null>(null);
+  const [gameState, setGameState] = useState<CricketState>({
+    status: 'BETTING',
+    period: new Date().getTime().toString().slice(-6),
+    endTime: Date.now() + 25000,
+    history: [1, 2, 4, 1, 0, 6, 1],
+    landed: 1,
+    timeLeft: 25
+  });
   const [betAmount, setBetAmount] = useState(10);
   const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
   const [myBets, setMyBets] = useState<any[]>([]);
@@ -31,105 +39,96 @@ const Cricket: React.FC<{ onBack: () => void; userBalance: number; onResult: (r:
   const [crResult, setCrResult] = useState<any | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   
-  const [timeLeft, setTimeLeft] = useState(0);
+  const timeLeft = useStabilizedTimer(gameState.endTime);
   
   const isMounted = useRef(true);
-  const resultHandledRef = useRef<string | null>(null);
 
-  function processMyResult(state: CricketState, currentBets: any[]) {
+  // Initial Logic
+  useEffect(() => {
+    const mainInterval = setInterval(() => {
+        if (gameState.status === 'BETTING') {
+            if (Date.now() >= gameState.endTime) {
+                setGameState(prev => ({ ...prev, status: 'RESULT' }));
+                handleBowlingSequence();
+            } else if (timeLeft <= 5) {
+                setIsBettingLocked(true);
+                if (timeLeft > 0) playSound('wingo_tick');
+            }
+        }
+    }, 1000);
+    return () => clearInterval(mainInterval);
+  }, [gameState.status, gameState.endTime, timeLeft]);
+
+  async function handleBowlingSequence() {
+    setBowling(true);
+    playSound('sports_kick');
+    
+    await new Promise(r => setTimeout(r, 4000));
+    if (!isMounted.current) return;
+
+    // Local result
+    const landed = OUTCOMES[Math.floor(Math.random() * OUTCOMES.length)].val;
+    setBowling(false);
+    setLandedResult(landed);
+    
+    processMyResult(landed);
+
+    await new Promise(r => setTimeout(r, 6000));
+    if (isMounted.current) {
+        const nextPeriod = (parseInt(gameState.period) + 1).toString();
+        setGameState(prev => ({
+            status: 'BETTING',
+            period: nextPeriod,
+            endTime: Date.now() + 25000,
+            history: [landed, ...prev.history].slice(0, 20),
+            landed: landed,
+            timeLeft: 25
+        }));
+        setLandedResult(null);
+        setMyBets([]);
+        setAllBets([]);
+        setIsBettingLocked(false);
+        setCrResult(null);
+        setSelectedTarget(null);
+    }
+  }
+
+  function processMyResult(landed: number) {
     let totalWin = 0;
     let totalBet = 0;
     
-    currentBets.forEach(bet => {
+    myBets.forEach(bet => {
         totalBet += bet.amount;
-        if (bet.target === state.landed) {
-            const outcome = OUTCOMES.find(o => o.val === state.landed);
+        if (bet.target === landed) {
+            const outcome = OUTCOMES.find(o => o.val === landed);
             if (outcome) totalWin += bet.amount * outcome.mult;
         }
     });
 
     const isWin = totalWin > 0;
-    setCrResult({
-        win: isWin,
-        amount: isWin ? totalWin : totalBet,
-        period: state.period,
-        landed: state.landed,
-        target: currentBets[0]?.target
-    });
-
     if (isWin) {
         updateBalance(totalWin, 'WIN', 'Cricket Win');
     }
-    addGameHistory('Cricket Hero', totalBet, totalWin, `Period: ${state.period}`);
-  }
 
-  function handleBowlingSequence(state: CricketState) {
-    setBowling(true);
-    playSound('sports_kick');
-    
-    setTimeout(() => {
-        if (!isMounted.current) return;
-        setBowling(false);
-        setLandedResult(state.landed);
-        const myCurrentBets = allBets.filter(b => b.uid === auth.currentUser?.uid);
-        if (myCurrentBets.length > 0) {
-            processMyResult(state, myCurrentBets);
-        }
-    }, 2000);
+    if (totalBet > 0) {
+        setCrResult({
+            win: isWin,
+            amount: totalWin,
+            period: gameState.period,
+            landed: landed,
+            target: myBets[0]?.target
+        });
+        addGameHistory('Cricket Hero', totalBet, totalWin, `Period: ${gameState.period}`);
+    }
   }
 
   useEffect(() => {
     isMounted.current = true;
-    
-    const unsubState = subscribeToCricket((state) => {
-        if (!isMounted.current) return;
-        setGameState(state);
-
-        if (state.status === 'BETTING') {
-            setBowling(false);
-            setLandedResult(null);
-            resultHandledRef.current = null;
-        } else {
-            setIsBettingLocked(true);
-        }
-
-        if (state.status === 'RESULT' && resultHandledRef.current !== state.period) {
-            resultHandledRef.current = state.period;
-            handleBowlingSequence(state);
-        }
-    });
-
-    const unsubBets = subscribeToCricketBets((bets) => {
-        setAllBets(bets);
-        if (auth.currentUser) {
-            setMyBets(bets.filter((b: any) => b.uid === auth.currentUser?.uid));
-        }
-    });
-
-    return () => { isMounted.current = false; unsubState(); unsubBets(); stopAllSounds(); };
-}, []);
-
-useEffect(() => {
-    const timer = setInterval(() => {
-        if (gameState?.endTime) {
-            const remaining = Math.max(0, Math.floor((gameState.endTime - (Date.now() + getClockOffset())) / 1000));
-            setTimeLeft(remaining);
-            if (gameState.status === 'BETTING') {
-                setIsBettingLocked(remaining <= 5);
-                if (remaining <= 5 && remaining > 0) playSound('wingo_tick');
-            }
-        }
-    }, 1000);
-    return () => clearInterval(timer);
-}, [gameState?.endTime, gameState?.status]);
-
-if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-center justify-center font-black gold-text text-xl italic uppercase tracking-widest">Entering Arena...</div>;
-
-// Listen to bets for the current period
-// Redundant - now handled by shared listener in first useEffect
+    return () => { isMounted.current = false; stopAllSounds(); };
+  }, []);
 
   const handlePlaceBet = async () => {
-    if (selectedTarget === null || !auth.currentUser || !gameState) return;
+    if (selectedTarget === null || gameState.status !== 'BETTING' || isBettingLocked) return;
     if (userBalance < betAmount) { alert("Insufficient Balance!"); return; }
 
     try {
@@ -137,9 +136,14 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
             target: selectedTarget,
             amount: betAmount,
             period: gameState.period,
+            uid: auth.currentUser?.uid,
+            username: 'You',
+            id: Date.now(),
+            timestamp: Date.now()
         };
 
-        await addGameBet('cricket_bets', betData);
+        setMyBets(prev => [...prev, betData]);
+        setAllBets(prev => [betData, ...prev]);
         await updateBalance(-betAmount, 'BET', `Cricket on ${selectedTarget === 0 ? 'Wicket' : selectedTarget + ' Runs'}`);
         playSound('bet_place');
     } catch (e) {
@@ -252,9 +256,9 @@ if (!gameState) return <div className="min-h-screen bg-[#0a0f1d] flex items-cent
                 
                 <div className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar">
                     <AnimatePresence mode="popLayout">
-                        {(activeTab === 'ALL' ? allBets : myBets).map((bet) => (
+                        {(activeTab === 'ALL' ? allBets : myBets).map((bet, idx) => (
                             <motion.div 
-                                key={bet.id || bet.uid}
+                                key={bet.id || `cri-bet-${idx}-${bet.uid}`}
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: 20 }}

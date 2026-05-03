@@ -15,22 +15,18 @@ const GAMES = [
     { id: 'GAME_WINGO', title: "Win Go", desc: "30S DRAW", image: "https://images.unsplash.com/photo-1606167668584-78701c57f13d?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-red-900/40", category: "Lottery" },
     { id: 'GAME_AVIATOR', title: "Aviator", desc: "CRASH", image: "https://images.unsplash.com/photo-1569154941061-e231b4725ef1?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-red-600/20", category: "Casino" },
     { id: 'GAME_MINES', title: "Mines", desc: "GRID", image: "https://images.unsplash.com/photo-1614028674026-a65e31bfd27c?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-indigo-600/20", category: "Originals" },
+    { id: 'GAME_CHICKEN_ROAD', title: "Dog Road", desc: "TRAFFIC", image: "https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-yellow-600/20", category: "Originals" },
     { id: 'GAME_7UP_DOWN', title: "7 Up Down", desc: "DICE", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-emerald-600/20", category: "Originals" },
-    { id: 'GAME_SPACE_RAID', title: "Space Raid", desc: "BOOST", image: "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-cyan-600/20", category: "Originals" },
-    { id: 'GAME_BURST', title: "Cyber Burst", desc: "EXPAND", image: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-cyan-600/20", category: "Originals" },
     { id: 'GAME_DRAGON_TIGER', title: "Dragon Tiger", desc: "CARDS", image: "https://images.unsplash.com/photo-1511193311914-0346f16efe90?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-orange-600/20", category: "Casino" },
     { id: 'GAME_ROULETTE', title: "Roulette", desc: "WHEEL", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-green-600/20", category: "Casino" },
-    { id: 'GAME_SICBO', title: "Sic Bo", desc: "DICE", image: "https://images.unsplash.com/photo-1511193311914-0346f16efe90?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-purple-600/20", category: "Casino" },
-    { id: 'GAME_BACCARAT', title: "Baccarat", desc: "ELITE", image: "https://images.unsplash.com/photo-1511193311914-0346f16efe90?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-emerald-600/20", category: "Casino" },
     { id: 'GAME_VORTEX', title: "Vortex Spin", desc: "ELITE", image: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-blue-900/40", category: "Originals" },
     { id: 'GAME_LUCKY_WHEEL', title: "Lucky Wheel", desc: "JACKPOT", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-purple-600/20", category: "Originals" },
     { id: 'GAME_CRICKET', title: "Cricket Hero", desc: "RUNS", image: "https://images.unsplash.com/photo-1531415074968-036ba1b575da?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-blue-500/20", category: "Originals" },
     { id: 'GAME_TOWER', title: "Tower Climb", desc: "LEVELS", image: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-slate-500/20", category: "Originals" },
-    { id: 'GAME_SLOT_MACHINE', title: "Royal Slots", desc: "SPIN", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-yellow-600/20", category: "Slots" },
     { id: 'GAME_ANDAR_BAHAR', title: "Andar Bahar", desc: "DRAW", image: "https://images.unsplash.com/photo-1511193311914-0346f16efe90?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-red-500/20", category: "Casino" },
+    { id: 'GAME_CRAZY_WHEEL', title: "Crazy Wheel", desc: "EPIC WIN", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-purple-600/20", category: "Casino" },
     { id: 'GAME_PLINKO', title: "Plinko", desc: "DROPS", image: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-pink-600/20", category: "Originals" },
     { id: 'GAME_LIMBO', title: "Limbo", desc: "FLY", image: "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-cyan-600/20", category: "Originals" },
-    { id: 'GAME_DRAGON_TOWER', title: "D. Tower", desc: "CLIMB", image: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-slate-700/40", category: "Originals" },
     { id: 'GAME_FRUIT_SLOT', title: "Fruit Slot", desc: "SPIN", image: "https://images.unsplash.com/photo-1519098901909-b1553a1190af?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-rose-500/20", category: "Slots" },
     { id: 'GAME_EGYPT_SLOT', title: "Egypt Slot", desc: "GOLD", image: "https://images.unsplash.com/photo-1503174971373-b1f69850bded?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-yellow-900/40", category: "Slots" },
     { id: 'GAME_VAULT', title: "Vault Breaker", desc: "CRACK", image: "https://images.unsplash.com/photo-1563986768609-322da13575f3?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-blue-900/40", category: "Originals" },
@@ -38,7 +34,10 @@ const GAMES = [
     { id: 'GAME_KENO', title: "Keno Elite", desc: "LOTTO", image: "https://images.unsplash.com/photo-1518623489648-a173ef7824f3?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-emerald-600/20", category: "Lottery" },
     { id: 'GAME_DICE', title: "Dice Duel", desc: "ROLL", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-purple-600/20", category: "Originals" },
     { id: 'GAME_HILO', title: "Hi-Lo Elite", desc: "CARDS", image: "https://images.unsplash.com/photo-1511193311914-0346f16efe90?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-indigo-600/20", category: "Originals" },
-    { id: 'GAME_JHANDI_MUNDA', title: "Jhandi Munda", desc: "STREET", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-orange-600/20", category: "Casino" },
+    { id: 'GAME_PUMP', title: "Pump Up", desc: "INFLATE", image: "https://images.unsplash.com/photo-1533230393619-3f8e58383e5f?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-red-600/20", category: "Originals" },
+    { id: 'GAME_MOLES', title: "Rat Hunter", desc: "MOLES", image: "https://images.unsplash.com/photo-1563968743333-24a18274720e?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-yellow-600/20", category: "Originals" },
+    { id: 'GAME_JACKPOT_SPIN', title: "Jackpot Spin", desc: "SUPER WIN", image: "https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-yellow-600/20", category: "Slots" },
+    { id: 'GAME_SCRATCH_CARD', title: "Scratch card", desc: "INSTANT", image: "https://images.unsplash.com/photo-1518623489648-a173ef7824f3?q=80&w=400&h=400&auto=format&fit=crop", color: "bg-emerald-600/20", category: "Lottery" },
 ];
 
 const Home: React.FC<HomeProps> = ({ setView }) => {
@@ -95,7 +94,7 @@ const Home: React.FC<HomeProps> = ({ setView }) => {
                     <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">Live Leaderboard Active</span>
                 </div>
                 <h2 className="text-4xl font-black text-white italic tracking-tighter uppercase drop-shadow-lg gold-text">MAFIA ROYALE</h2>
-                <p className="text-[9px] font-black text-blue-100 mt-1 uppercase tracking-widest bg-black/40 px-3 py-1 rounded-full">EVERY SINGLE ELITE GAME IS NOW LIVE</p>
+                <p className="text-[9px] font-black text-blue-100 mt-1 uppercase tracking-widest bg-black/40 px-3 py-1 rounded-full">EXPERIENCE THE ELITE MULTIPLAYER VIBE AT YOUR OWN PACE</p>
             </div>
         </div>
       </div>
@@ -135,8 +134,7 @@ const Home: React.FC<HomeProps> = ({ setView }) => {
                         </div>
                         <h4 className="font-black text-white text-lg uppercase tracking-tighter italic leading-tight group-hover:text-yellow-400 transition-colors">{game.title}</h4>
                         <div className="flex items-center gap-1 mt-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                            <span className="text-[7px] font-bold text-white uppercase tracking-widest">Live</span>
+                            <span className="text-[7px] font-bold text-white uppercase tracking-widest opacity-40">Elite</span>
                         </div>
                     </div>
                     

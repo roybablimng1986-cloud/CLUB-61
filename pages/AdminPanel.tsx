@@ -64,7 +64,6 @@ const AdminPanel: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         { id: 'GAME_MINES', name: 'Mines' }, 
         { id: 'GAME_7UP_DOWN', name: '7 Up Down' },
         { id: 'GAME_JHANDI_MUNDA', name: 'Jhandi Munda' },
-        { id: 'GAME_SPACE_RAID', name: 'Space Raid' },
         { id: 'GAME_BURST', name: 'Cyber Burst' },
         { id: 'GAME_DRAGON_TIGER', name: 'Dragon Tiger' },
         { id: 'GAME_ROULETTE', name: 'Roulette' },

@@ -32,49 +32,67 @@ const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
   const roll = async () => {
     if (isRolling || !target || userBalance < bet) return;
     
-    // Record bet in Firestore
-    if (auth.currentUser) {
-        try {
-            await addGameBet('dice_duel_bets', {
-                amount: bet,
-                target: target
-            });
-        } catch (e) {}
-    }
-
+    // Record bet
+    const betId = Date.now();
+    const betData = { amount: bet, target, id: betId };
+    
+    setAllBets(prev => [...prev, betData]);
+    setMyBets(prev => [...prev, betData]);
+    
     updateBalance(-bet, 'BET', 'Dice Duel');
     setDdResult(null);
     setIsRolling(true);
     playSound('bet_place');
 
+    const finalD1 = Math.floor(Math.random() * 6) + 1;
+    const finalD2 = Math.floor(Math.random() * 6) + 1;
+
     let count = 0;
     const interval = setInterval(() => {
+        if (!isMounted.current) {
+            clearInterval(interval);
+            return;
+        }
         setDice([Math.floor(Math.random() * 6) + 1, Math.floor(Math.random() * 6) + 1]);
         count++;
-        if (count > 15) {
+        if (count > 25) {
             clearInterval(interval);
-            if (isMounted.current) finalize();
+            setDice([finalD1, finalD2]); // Explicitly set final dice before finalizing
+            setTimeout(() => {
+                if (isMounted.current) finalize(finalD1, finalD2);
+            }, 300);
         }
     }, 80);
   };
 
-  const finalize = () => {
-    const d1 = Math.floor(Math.random() * 6) + 1;
-    const d2 = Math.floor(Math.random() * 6) + 1;
+  const [allBets, setAllBets] = useState<any[]>([]);
+  const [myBets, setMyBets] = useState<any[]>([]);
+
+  const handleCancelLastBet = async () => {
+      if (myBets.length === 0 || isRolling) return;
+      const lastBet = myBets[myBets.length - 1];
+      setMyBets(prev => prev.slice(0, -1));
+      setAllBets(prev => prev.filter(b => b.id !== lastBet.id));
+      await updateBalance(lastBet.amount, 'WIN', 'Bet Cancelled');
+      playSound('click');
+  };
+
+  const finalize = (d1: number, d2: number) => {
     const sum = d1 + d2;
     setDice([d1, d2]);
     setIsRolling(false);
+    playSound('dt_card');
 
-    // User requested "tie system", same numbers = tie
-    const isActuallyTie = d1 === d2;
-    const outcome = isActuallyTie ? 'TIE' : (sum > 7 ? 'BIG' : 'SMALL');
+    // Fix Dice Duel outcome: Small (2-6), Big (8-12), Tie (7)
+    const isActuallyTie = sum === 7;
+    const outcome = isActuallyTie ? 'TIE' : (sum >= 8 ? 'BIG' : 'SMALL');
     const isWin = target === outcome;
-    const mult = outcome === 'TIE' ? 6 : 1.95;
+    const mult = outcome === 'TIE' ? 5 : 1.95;
     const winAmt = isWin ? bet * mult : 0;
 
     setDdResult({
         win: isWin,
-        amount: isWin ? winAmt : bet,
+        amount: winAmt, // Fixed: show 0 on loss
         dice: [d1, d2],
         sum: sum,
         target: target
@@ -108,7 +126,7 @@ const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
             ]}
             payouts={[
                 { label: "Small / Big", value: "1.95x" },
-                { label: "Tie (Same Dice)", value: "6x" }
+                { label: "Tie (Sum 7)", value: "5x" }
             ]}
         />
         {floating && (
@@ -139,27 +157,48 @@ const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
             </div>
             
             <div className="grid grid-cols-3 gap-3 w-full max-w-sm mb-8">
-                <button 
-                  onClick={() => !isRolling && setTarget('SMALL')} 
-                  className={`py-6 rounded-3xl font-black text-xl border-b-[8px] transition-all active:scale-95 ${target === 'SMALL' ? 'bg-blue-600 border-blue-800 scale-105 shadow-[0_0_20px_rgba(37,99,235,0.4)]' : 'bg-slate-800 border-slate-900 opacity-60'}`}
-                >
-                    SMALL
-                    <p className="text-[10px] font-bold opacity-60 mt-1 uppercase tracking-widest">(2-6)</p>
-                </button>
-                <button 
-                  onClick={() => !isRolling && setTarget('TIE' as any)} 
-                  className={`py-6 rounded-3xl font-black text-xl border-b-[8px] transition-all active:scale-95 ${target === 'TIE' as any ? 'bg-green-600 border-green-800 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.4)]' : 'bg-slate-800 border-slate-900 opacity-60'}`}
-                >
-                    TIE
-                    <p className="text-[10px] font-bold opacity-60 mt-1 uppercase tracking-widest">(7)</p>
-                </button>
-                <button 
-                  onClick={() => !isRolling && setTarget('BIG')} 
-                  className={`py-6 rounded-3xl font-black text-xl border-b-[8px] transition-all active:scale-95 ${target === 'BIG' ? 'bg-orange-600 border-orange-800 scale-105 shadow-[0_0_20px_rgba(234,88,12,0.4)]' : 'bg-slate-800 border-slate-900 opacity-60'}`}
-                >
-                    BIG
-                    <p className="text-[10px] font-bold opacity-60 mt-1 uppercase tracking-widest">(8-12)</p>
-                </button>
+                <div className="relative">
+                    <button 
+                    onClick={() => !isRolling && setTarget('SMALL')} 
+                    className={`w-full py-6 rounded-3xl font-black text-xl border-b-[8px] transition-all active:scale-95 ${target === 'SMALL' ? 'bg-blue-600 border-blue-800 scale-105 shadow-[0_0_20px_rgba(37,99,235,0.4)]' : 'bg-slate-800 border-slate-900 opacity-60'}`}
+                    >
+                        SMALL
+                        <p className="text-[10px] font-bold opacity-60 mt-1 uppercase tracking-widest">(2-6)</p>
+                    </button>
+                    {allBets.filter(b => b.target === 'SMALL').length > 0 && (
+                        <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full">
+                            ₹{allBets.filter(b => b.target === 'SMALL').reduce((acc, curr) => acc + curr.amount, 0)}
+                        </div>
+                    )}
+                </div>
+                <div className="relative">
+                    <button 
+                    onClick={() => !isRolling && setTarget('TIE' as any)} 
+                    className={`w-full py-6 rounded-3xl font-black text-xl border-b-[8px] transition-all active:scale-95 ${target === 'TIE' as any ? 'bg-green-600 border-green-800 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.4)]' : 'bg-slate-800 border-slate-900 opacity-60'}`}
+                    >
+                        TIE
+                        <p className="text-[10px] font-bold opacity-60 mt-1 uppercase tracking-widest">(7)</p>
+                    </button>
+                    {allBets.filter(b => b.target === 'TIE').length > 0 && (
+                        <div className="absolute -top-2 -right-2 bg-green-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full">
+                            ₹{allBets.filter(b => b.target === 'TIE').reduce((acc, curr) => acc + curr.amount, 0)}
+                        </div>
+                    )}
+                </div>
+                <div className="relative">
+                    <button 
+                    onClick={() => !isRolling && setTarget('BIG')} 
+                    className={`w-full py-6 rounded-3xl font-black text-xl border-b-[8px] transition-all active:scale-95 ${target === 'BIG' ? 'bg-orange-600 border-orange-800 scale-105 shadow-[0_0_20px_rgba(234,88,12,0.4)]' : 'bg-slate-800 border-slate-900 opacity-60'}`}
+                    >
+                        BIG
+                        <p className="text-[10px] font-bold opacity-60 mt-1 uppercase tracking-widest">(8-12)</p>
+                    </button>
+                    {allBets.filter(b => b.target === 'BIG').length > 0 && (
+                        <div className="absolute -top-2 -right-2 bg-orange-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full">
+                            ₹{allBets.filter(b => b.target === 'BIG').reduce((acc, curr) => acc + curr.amount, 0)}
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="flex gap-2 overflow-x-auto no-scrollbar py-4 w-full justify-center">
@@ -175,13 +214,23 @@ const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
                     <button key={a} onClick={() => !isRolling && setBet(a)} className={`flex-shrink-0 px-6 py-3 rounded-2xl font-black text-sm border transition-all ${bet === a ? 'bg-yellow-500 text-black border-white shadow-lg' : 'bg-zinc-900 text-zinc-500 border-white/5'}`}>₹{a >= 1000 ? (a/1000)+'K' : a}</button>
                 ))}
             </div>
-            <button 
-                onClick={roll} 
-                disabled={!target || isRolling} 
-                className={`w-full py-6 rounded-[2.5rem] font-black text-2xl uppercase tracking-[0.4em] shadow-2xl active:scale-95 transition-all border-t-2 border-white/10 ${!target || isRolling ? 'bg-zinc-800 text-zinc-600' : 'bg-gradient-to-r from-red-600 to-orange-600 text-white'}`}
-            >
-                {isRolling ? 'ROLLING...' : 'ROLL DICE'}
-            </button>
+            <div className="flex gap-4">
+                <button 
+                    onClick={roll} 
+                    disabled={!target || isRolling} 
+                    className={`flex-1 py-6 rounded-[2.5rem] font-black text-2xl uppercase tracking-[0.4em] shadow-2xl active:scale-95 transition-all border-t-2 border-white/10 ${!target || isRolling ? 'bg-zinc-800 text-zinc-600' : 'bg-gradient-to-r from-red-600 to-orange-600 text-white'}`}
+                >
+                    {isRolling ? 'ROLLING...' : 'ROLL'}
+                </button>
+                {!isRolling && myBets.length > 0 && (
+                    <button 
+                        onClick={handleCancelLastBet}
+                        className="px-6 bg-red-600/20 border border-red-500/30 rounded-[2.5rem] text-[10px] font-black uppercase text-red-500 active:scale-95"
+                    >
+                        CANCEL
+                    </button>
+                )}
+            </div>
         </div>
 
         {showRules && (
@@ -192,11 +241,12 @@ const DiceDuel: React.FC<{ onBack: () => void; userBalance: number; onResult: (r
                          <button onClick={() => setShowRules(false)} className="p-2 bg-slate-800 rounded-full"><X/></button>
                      </div>
                      <div className="space-y-4 text-sm text-slate-300 leading-relaxed font-medium">
-                         <p>1. Choose either <span className="text-blue-500 font-bold">SMALL</span> or <span className="text-orange-500 font-bold">BIG</span>.</p>
+                         <p>1. Choose either <span className="text-blue-500 font-bold">SMALL</span> (2-6), <span className="text-orange-500 font-bold">BIG</span> (8-12) or <span className="text-green-500 font-bold">TIE</span> (7).</p>
                          <p>2. Two dice are rolled and their sum is calculated.</p>
                          <p>3. <span className="text-blue-500 font-bold">SMALL</span> wins if the sum is between 2 and 6.</p>
-                         <p>4. <span className="text-orange-500 font-bold">BIG</span> wins if the sum is between 7 and 12.</p>
-                         <p>5. A successful prediction pays <span className="text-green-500 font-bold">1.95x</span> your stake.</p>
+                         <p>4. <span className="text-orange-500 font-bold">BIG</span> wins if the sum is between 8 and 12.</p>
+                         <p>5. <span className="text-green-500 font-bold">TIE</span> wins if the sum is exactly 7.</p>
+                         <p>6. Small/Big pays <span className="text-green-500 font-bold">1.95x</span>. Tie pays <span className="text-green-500 font-bold">5x</span>.</p>
                      </div>
                 </div>
             </div>

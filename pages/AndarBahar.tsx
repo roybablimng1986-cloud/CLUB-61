@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, History, Volume2, VolumeX, Timer, X, Play, Users, Check, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Wallet, History, Volume2, VolumeX, Timer, X, Play, Users, Check, HelpCircle, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, subscribeToAndarBahar, subscribeToAndarBaharBets, getClockOffset, addGameBet } from '../services/supabaseService';
 import { GameResult, AndarBaharState } from '../types';
@@ -17,14 +17,39 @@ interface Props {
 
 import { useStabilizedTimer } from '../hooks/useTimer';
 
+const SUITS = ['♠', '♥', '♣', '♦'];
+const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+
+const createDeck = () => {
+    let deck: { rank: string; suit: string }[] = [];
+    for (const suit of SUITS) {
+        for (const rank of RANKS) {
+            deck.push({ rank, suit });
+        }
+    }
+    for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    return deck;
+};
+
 const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
-  const [gameState, setGameState] = useState<AndarBaharState | null>(null);
+  const [gameState, setGameState] = useState<AndarBaharState>({
+    status: 'BETTING',
+    period: new Date().getTime().toString().slice(-6),
+    endTime: Date.now() + 25000,
+    history: ['A', 'B', 'A', 'A'],
+    joker: null,
+    andarCards: [],
+    baharCards: [],
+    winner: null,
+    timeLeft: 25
+  });
   const [betAmount, setBetAmount] = useState(10);
-  const [selectedSide, setSelectedSide] = useState<'ANDAR' | 'BAHAR' | null>(null);
+  const [selectedSide, setSelectedSide] = useState<'ANDAR' | 'BAHAR' | 'TIE' | null>(null);
   const [myBets, setMyBets] = useState<any[]>([]);
   const [allBets, setAllBets] = useState<any[]>([]);
-  const allBetsRef = useRef<any[]>([]);
-  useEffect(() => { allBetsRef.current = allBets; }, [allBets]);
 
   const [activeTab, setActiveTab] = useState<'ALL' | 'MY'>('ALL');
   const [isBettingLocked, setIsBettingLocked] = useState(false);
@@ -32,32 +57,117 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const [abResult, setAbResult] = useState<any | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   
-  const timeLeft = useStabilizedTimer(gameState?.endTime);
+  const timeLeft = useStabilizedTimer(gameState.endTime);
   
   const isMounted = useRef(true);
-  const resultHandledRef = useRef<string | null>(null);
 
-  async function handleRevealingSequence(state: AndarBaharState) {
-    await new Promise(r => setTimeout(r, 1000));
-    if (!isMounted.current) return;
-    setShowCards(true);
-    playSound('dt_card');
+  // Initial Logic
+  useEffect(() => {
+    const mainInterval = setInterval(() => {
+        if (gameState.status === 'BETTING') {
+            if (Date.now() >= gameState.endTime) {
+                setGameState(prev => ({ ...prev, status: 'RESULT' }));
+                handleRevealingSequence();
+            } else if (timeLeft <= 3) {
+                setIsBettingLocked(true);
+            }
+            if (timeLeft <= 5 && timeLeft > 0) playSound('wingo_tick');
+        }
+    }, 1000);
+    return () => clearInterval(mainInterval);
+  }, [gameState.status, gameState.endTime, timeLeft]);
+
+    const [visibleAndar, setVisibleAndar] = useState<any[]>([]);
+    const [visibleBahar, setVisibleBahar] = useState<any[]>([]);
     
-    await new Promise(r => setTimeout(r, 2000));
-    if (isMounted.current) {
-        const myCurrentBets = allBetsRef.current.filter(b => b.uid === auth.currentUser?.uid);
-        if (myCurrentBets.length > 0) {
-            processMyResult(state, myCurrentBets);
+    async function handleRevealingSequence() {
+        if (!isMounted.current) return;
+        
+        // Local Deal Logic
+        const deck = createDeck();
+        const joker = deck.pop()!;
+        let andar: any[] = [];
+        let bahar: any[] = [];
+        let winner: 'ANDAR' | 'BAHAR' | 'TIE' | null = null;
+    
+        // Simulate dealing
+        let turn: 'ANDAR' | 'BAHAR' = 'ANDAR';
+        while (!winner && deck.length > 0) {
+            const card = deck.pop()!;
+            if (turn === 'ANDAR') {
+                andar.push(card);
+                if (card.rank === joker.rank) {
+                    winner = andar.length === 1 ? 'TIE' : 'ANDAR';
+                }
+                turn = 'BAHAR';
+            } else {
+                bahar.push(card);
+                if (card.rank === joker.rank) {
+                    winner = 'BAHAR';
+                }
+                turn = 'ANDAR';
+            }
+            if (andar.length + bahar.length > 40) break; // safety
+        }
+        if (!winner) winner = 'ANDAR'; // fallback
+    
+        setGameState(prev => ({ ...prev, joker, winner }));
+    
+        // Animated dealing simulation - one by one
+        setShowCards(true);
+        const maxToShow = Math.max(andar.length, bahar.length);
+        
+        for (let i = 0; i < maxToShow; i++) {
+            if (!isMounted.current) return;
+            
+            if (andar[i]) {
+                setVisibleAndar(prev => [...prev, andar[i]]);
+                playSound('dt_card');
+                await new Promise(r => setTimeout(r, 600));
+                if (andar[i].rank === joker.rank) break; 
+            }
+            
+            if (bahar[i]) {
+                setVisibleBahar(prev => [...prev, bahar[i]]);
+                playSound('dt_card');
+                await new Promise(r => setTimeout(r, 600));
+                if (bahar[i].rank === joker.rank) break;
+            }
+        }
+        
+        if (isMounted.current) {
+            processMyResult(winner, joker, andar, bahar);
+            
+            await new Promise(r => setTimeout(r, 5000));
+            if (isMounted.current) {
+                setGameState(prev => ({
+                    status: 'BETTING',
+                    period: (parseInt(prev.period) + 1).toString(),
+                    endTime: Date.now() + 25000,
+                    history: [winner!.charAt(0) as 'A' | 'B' | 'T', ...prev.history].slice(0, 20),
+                    joker: null,
+                    andarCards: [],
+                    baharCards: [],
+                    winner: null,
+                    timeLeft: 25
+                }));
+                setShowCards(false);
+                setVisibleAndar([]);
+                setVisibleBahar([]);
+                setMyBets([]);
+                setAllBets([]);
+                setIsBettingLocked(false);
+                setAbResult(null);
+                setSelectedSide(null);
+            }
         }
     }
-  }
 
-  function processMyResult(state: AndarBaharState, currentBets: any[]) {
-    const winner = state.winner;
+  function processMyResult(winner: 'ANDAR' | 'BAHAR' | 'TIE', joker: any, andar: any[], bahar: any[]) {
     let totalWin = 0;
     let totalBet = 0;
     
-    currentBets.forEach(bet => {
+    myBets.forEach(bet => {
         totalBet += bet.amount;
         if (bet.target === winner) {
             const mult = winner === 'TIE' ? 15 : 1.95;
@@ -68,61 +178,28 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     const isWin = totalWin > 0;
     if (isWin) updateBalance(totalWin, 'WIN', 'Andar Bahar Win');
     
-    setAbResult({
-        win: isWin,
-        amount: isWin ? totalWin : totalBet,
-        period: state.period,
-        winner: winner || '',
-        joker: state.joker,
-        andarCards: state.andarCards,
-        baharCards: state.baharCards,
-        target: currentBets.map(b => b.target).join(', ')
-    });
-
-    addGameHistory('Andar Bahar', totalBet, totalWin, `Period: ${state.period}`);
+    if (totalBet > 0) {
+        setAbResult({
+            win: isWin,
+            amount: isWin ? totalWin : 0,
+            period: gameState.period,
+            winner: winner,
+            joker: joker,
+            andarCards: andar,
+            baharCards: bahar,
+            target: myBets.map(b => b.target).join(', ')
+        });
+        addGameHistory('Andar Bahar', totalBet, totalWin, `Period: ${gameState.period}`);
+    }
   }
 
   useEffect(() => {
     isMounted.current = true;
-    
-    const unsubState = subscribeToAndarBahar((state) => {
-        if (!isMounted.current) return;
-        setGameState(state);
-
-        if (state.status === 'BETTING') {
-            setShowCards(false);
-            resultHandledRef.current = null;
-        } else {
-            setIsBettingLocked(true);
-        }
-
-        if (state.status === 'RESULT' && resultHandledRef.current !== state.period) {
-            resultHandledRef.current = state.period;
-            handleRevealingSequence(state);
-        }
-    });
-
-    const unsubBets = subscribeToAndarBaharBets((bets) => {
-        setAllBets(bets);
-        if (auth.currentUser) {
-            setMyBets(bets.filter((b: any) => b.uid === auth.currentUser?.uid));
-        }
-    });
-
-    return () => { isMounted.current = false; unsubState(); unsubBets(); stopAllSounds(); };
+    return () => { isMounted.current = false; stopAllSounds(); };
   }, []);
 
-  useEffect(() => {
-    if (gameState?.status === 'BETTING') {
-        setIsBettingLocked(timeLeft <= 3);
-        if (timeLeft <= 5 && timeLeft > 0) playSound('wingo_tick');
-    }
-  }, [timeLeft, gameState?.status]);
-
-  if (!gameState) return <div className="min-h-screen bg-black flex items-center justify-center font-black gold-text">Syncing Arena...</div>;
-
   const handlePlaceBet = async () => {
-    if (!selectedSide || !auth.currentUser || !gameState) return;
+    if (!selectedSide || !auth.currentUser || gameState.status !== 'BETTING' || isBettingLocked) return;
     if (userBalance < betAmount) { alert("Insufficient Balance!"); return; }
 
     try {
@@ -130,14 +207,28 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
             target: selectedSide,
             amount: betAmount,
             period: gameState.period,
+            uid: auth.currentUser.uid,
+            username: 'You',
+            timestamp: Date.now(),
+            id: Date.now()
         };
 
-        await addGameBet('andar_bahar_bets', betData);
+        setMyBets(prev => [...prev, betData]);
+        setAllBets(prev => [betData, ...prev]);
         await updateBalance(-betAmount, 'BET', `Andar Bahar on ${selectedSide}`);
         playSound('bet_place');
     } catch (e) {
         console.error("Bet error:", e);
     }
+  };
+
+  const handleCancelLastBet = async () => {
+    if (myBets.length === 0 || gameState.status !== 'BETTING' || isBettingLocked) return;
+    const lastBet = myBets[myBets.length - 1];
+    setMyBets(prev => prev.slice(0, -1));
+    setAllBets(prev => prev.filter(b => b.id !== lastBet.id));
+    await updateBalance(lastBet.amount, 'WIN', 'Bet Cancelled');
+    playSound('click');
   };
 
   const FullCard: React.FC<{ card: any }> = ({ card }) => (
@@ -224,13 +315,13 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
                     <div className="flex flex-col items-center bg-black/20 rounded-2xl p-3 border border-white/5">
                         <span className="text-[9px] font-black uppercase text-red-400 tracking-widest mb-3">ANDAR</span>
                         <div className="flex flex-wrap justify-center gap-1">
-                            {showCards && gameState.andarCards.map((c, i) => <FullCard key={i} card={c} />)}
+                            {showCards && visibleAndar.slice(-3).map((c, i) => <FullCard key={i} card={c} />)}
                         </div>
                     </div>
                     <div className="flex flex-col items-center bg-black/20 rounded-2xl p-3 border border-white/5">
                         <span className="text-[9px] font-black uppercase text-blue-400 tracking-widest mb-3">BAHAR</span>
                         <div className="flex flex-wrap justify-center gap-1">
-                            {showCards && gameState.baharCards.map((c, i) => <FullCard key={i} card={c} />)}
+                            {showCards && visibleBahar.slice(-3).map((c, i) => <FullCard key={i} card={c} />)}
                         </div>
                     </div>
                 </div>
@@ -246,9 +337,9 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
             
             <div className="flex-1 overflow-y-auto p-4 space-y-2 no-scrollbar">
                 <AnimatePresence mode="popLayout">
-                    {(activeTab === 'ALL' ? allBets : myBets).map((bet) => (
+                    {(activeTab === 'ALL' ? allBets : myBets).map((bet, idx) => (
                         <motion.div 
-                            key={bet.id || bet.uid}
+                            key={bet.id || `ab-bet-${idx}-${bet.uid}`}
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: 20 }}
@@ -279,6 +370,11 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
                 disabled={isBettingLocked || gameState.status !== 'BETTING'}
                 className={`flex-1 h-20 rounded-2xl border-b-4 flex flex-col items-center justify-center transition-all relative overflow-hidden ${selectedSide === 'ANDAR' ? 'bg-red-600 border-red-800 scale-105 shadow-xl' : 'bg-slate-800 border-slate-900 opacity-60'}`}
             >
+                {allBets.some(b => b.target === 'ANDAR') && (
+                    <div className="absolute top-1 right-2 bg-yellow-500 text-black text-[7px] font-black px-1.5 py-0.5 rounded-full animate-bounce">
+                        ₹{allBets.filter(b => b.target === 'ANDAR').reduce((acc, curr) => acc + curr.amount, 0)}
+                    </div>
+                )}
                 <span className="font-black italic text-sm">ANDAR</span>
                 <span className="text-[8px] font-bold opacity-60">1.95X</span>
                 {isBettingLocked && <div className="absolute inset-0 bg-black/20 flex items-center justify-center"><Check size={20} className="text-white/20" /></div>}
@@ -288,6 +384,11 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
                 disabled={isBettingLocked || gameState.status !== 'BETTING'}
                 className={`w-20 h-20 rounded-2xl border-b-4 flex flex-col items-center justify-center transition-all relative overflow-hidden ${selectedSide === 'TIE' as any ? 'bg-orange-600 border-orange-800 scale-105 shadow-xl' : 'bg-slate-800 border-slate-900 opacity-60'}`}
             >
+                {allBets.some(b => b.target === 'TIE') && (
+                    <div className="absolute top-1 right-2 bg-yellow-500 text-black text-[7px] font-black px-1.5 py-0.5 rounded-full animate-bounce">
+                        ₹{allBets.filter(b => b.target === 'TIE').reduce((acc, curr) => acc + curr.amount, 0)}
+                    </div>
+                )}
                 <span className="font-black italic text-sm">TIE</span>
                 <span className="text-[8px] font-bold opacity-60">15X</span>
                 {isBettingLocked && <div className="absolute inset-0 bg-black/20 flex items-center justify-center"><Check size={20} className="text-white/20" /></div>}
@@ -297,6 +398,11 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
                 disabled={isBettingLocked || gameState.status !== 'BETTING'}
                 className={`flex-1 h-20 rounded-2xl border-b-4 flex flex-col items-center justify-center transition-all relative overflow-hidden ${selectedSide === 'BAHAR' ? 'bg-blue-600 border-blue-800 scale-105 shadow-xl' : 'bg-slate-800 border-slate-900 opacity-60'}`}
             >
+                {allBets.some(b => b.target === 'BAHAR') && (
+                    <div className="absolute top-1 right-2 bg-yellow-500 text-black text-[7px] font-black px-1.5 py-0.5 rounded-full animate-bounce">
+                        ₹{allBets.filter(b => b.target === 'BAHAR').reduce((acc, curr) => acc + curr.amount, 0)}
+                    </div>
+                )}
                 <span className="font-black italic text-sm">BAHAR</span>
                 <span className="text-[8px] font-bold opacity-60">1.95X</span>
                 {isBettingLocked && <div className="absolute inset-0 bg-black/20 flex items-center justify-center"><Check size={20} className="text-white/20" /></div>}
@@ -317,9 +423,13 @@ const AndarBahar: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
                     </button>
                 ))}
             </div>
-            {selectedSide && gameState.status === 'BETTING' && !isBettingLocked && (
+            {selectedSide && gameState.status === 'BETTING' && !isBettingLocked ? (
                 <button onClick={handlePlaceBet} className="bg-yellow-500 text-black px-6 py-3 rounded-xl font-black text-xs uppercase animate-in slide-in-from-right">Place Bet</button>
-            )}
+            ) : myBets.length > 0 && gameState.status === 'BETTING' && !isBettingLocked ? (
+                <button onClick={handleCancelLastBet} className="bg-red-600/20 border border-red-500/30 px-6 py-3 rounded-xl font-black text-[10px] uppercase text-red-500 active:scale-95 flex items-center gap-2">
+                    <RotateCcw size={14} /> RETURN
+                </button>
+            ) : null}
         </div>
       </div>
       <style>{`.gold-text { background: linear-gradient(to bottom, #fde68a, #d97706, #fde68a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }`}</style>

@@ -1,21 +1,21 @@
 
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { ShieldAlert } from 'lucide-react';
 import NavBar from './components/NavBar';
 import Home from './pages/Home';
 import WinGo from './pages/WinGo';
 import Aviator from './pages/Aviator';
+import CrazyWheel from './pages/CrazyWheel';
 import Mines from './pages/Mines';
+import DogRoad from './pages/DogRoad';
 import DragonTiger from './pages/DragonTiger';
 import Roulette from './pages/Roulette';
-import SicBo from './pages/SicBo';
-import Baccarat from './pages/Baccarat';
 import VaultBreaker from './pages/VaultBreaker';
 import HeadTails from './pages/HeadTails';
 import Limbo from './pages/Limbo';
 import Plinko from './pages/Plinko';
 import HiLo from './pages/HiLo';
-import DragonTower from './pages/DragonTower';
 import Keno from './pages/Keno';
 import DiceDuel from './pages/DiceDuel';
 import FruitSlot from './pages/FruitSlot';
@@ -33,16 +33,16 @@ import GameStatistics from './pages/GameStatistics';
 import BindingRewards from './pages/BindingRewards';
 import Auth from './pages/Auth';
 import Leaderboard from './pages/Leaderboard';
-import CyberBurst from './pages/CyberBurst';
 import LiveChat from './pages/LiveChat';
 import Vortex from './pages/Vortex';
 import LuckyWheel from './pages/LuckyWheel';
-import SlotMachine from './pages/SlotMachine';
 import AndarBahar from './pages/AndarBahar';
 import SevenUpDown from './pages/SevenUpDown';
-import SpaceRaid from './pages/SpaceRaid';
-import JhandiMunda from './pages/JhandiMunda';
 import GiftCode from './pages/GiftCode';
+import Pump from './pages/Pump';
+import Moles from './pages/Moles';
+import JackpotSpin from './pages/Spin';
+import ScratchCard from './pages/Scratch';
 import GameResultPopup from './components/GameResultPopup';
 import { View, UserProfile, GameResult } from './types';
 import { subscribeToBalance, stopAllSounds, adminCreateGiftCode, db } from './services/supabaseService';
@@ -143,10 +143,9 @@ export default function App() {
       case 'GAME_WINGO': return <WinGo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} setView={setCurrentView} />;
       case 'GAME_AVIATOR': return <Aviator onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_MINES': return <Mines onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_CHICKEN_ROAD': return <DogRoad onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_DRAGON_TIGER': return <DragonTiger onBack={() => setCurrentView('HOME')} userBalance={user.balance} username={user.username} onResult={setGameResult} />;
       case 'GAME_ROULETTE': return <Roulette onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_SICBO': return <SicBo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_BACCARAT': return <Baccarat onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_VAULT': return <VaultBreaker onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_FRUIT_SLOT': return <FruitSlot onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_EGYPT_SLOT': return <EgyptSlot onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
@@ -154,19 +153,19 @@ export default function App() {
       case 'GAME_PLINKO': return <Plinko onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_LIMBO': return <Limbo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_HILO': return <HiLo onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_DRAGON_TOWER': return <DragonTower onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_KENO': return <Keno onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_HEAD_TAILS': return <HeadTails onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_BURST': return <CyberBurst onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_VORTEX': return <Vortex onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_LUCKY_WHEEL': return <LuckyWheel onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_CRICKET': return <Cricket onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_TOWER': return <Tower onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_SLOT_MACHINE': return <SlotMachine onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_ANDAR_BAHAR': return <AndarBahar onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_CRAZY_WHEEL': return <CrazyWheel onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GAME_7UP_DOWN': return <SevenUpDown onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-    case 'GAME_SPACE_RAID': return <SpaceRaid onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
-      case 'GAME_JHANDI_MUNDA': return <JhandiMunda onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_PUMP': return <Pump onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_MOLES': return <Moles onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_JACKPOT_SPIN': return <JackpotSpin onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
+      case 'GAME_SCRATCH_CARD': return <ScratchCard onBack={() => setCurrentView('HOME')} userBalance={user.balance} onResult={setGameResult} />;
       case 'GIFT_CODE': return <GiftCode onBack={() => setCurrentView('HOME')} userBalance={user.balance} />;
       case 'LEADERBOARD': return <Leaderboard onBack={() => setCurrentView('HOME')} />;
       case 'CHAT': return <LiveChat onBack={() => setCurrentView('HOME')} />;
@@ -186,8 +185,21 @@ export default function App() {
   const showNavBar = ['HOME', 'REFERRAL', 'PROMOTION', 'WALLET', 'ACCOUNT'].includes(currentView);
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-[#0a0f1d] shadow-2xl relative overflow-hidden font-sans border-x border-white/5">
-      {renderContent()}
+    <div className="max-w-md mx-auto min-h-screen bg-[#0a0f1d] shadow-2xl relative overflow-hidden font-sans border-x border-white/5 flex flex-col">
+      <div className="flex-1 relative overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentView}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 overflow-y-auto no-scrollbar"
+          >
+            {renderContent()}
+          </motion.div>
+        </AnimatePresence>
+      </div>
       <GameResultPopup result={gameResult} onClose={() => setGameResult(null)} />
       {showNavBar && <NavBar currentView={currentView as View} setView={setCurrentView} />}
     </div>

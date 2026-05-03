@@ -1,5 +1,5 @@
 
-export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_BURST' | 'GAME_VORTEX' | 'GAME_LUCKY_WHEEL' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS' | 'REWARDS_HUB' | 'GAME_DRAGON_TIGER' | 'GAME_ROULETTE' | 'GAME_SICBO' | 'GAME_BACCARAT' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'GAME_HEAD_TAILS' | 'GAME_LIMBO' | 'GAME_PLINKO' | 'GAME_HILO' | 'GAME_DRAGON_TOWER' | 'GAME_KENO' | 'GAME_DICE' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_MOTO_RACING' | 'LEADERBOARD' | 'CHAT' | 'GAME_CRICKET' | 'GAME_TOWER' | 'GAME_SLOT_MACHINE' | 'GAME_ANDAR_BAHAR' | 'GAME_7UP_DOWN' | 'GAME_JHANDI_MUNDA' | 'GAME_SPACE_RAID' | 'GIFT_CODE' | 'GAME_CHICKEN_ROAD';
+export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_VORTEX' | 'GAME_LUCKY_WHEEL' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS' | 'REWARDS_HUB' | 'GAME_DRAGON_TIGER' | 'GAME_ROULETTE' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'GAME_HEAD_TAILS' | 'GAME_LIMBO' | 'GAME_PLINKO' | 'GAME_HILO' | 'GAME_KENO' | 'GAME_DICE' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_MOTO_RACING' | 'LEADERBOARD' | 'CHAT' | 'GAME_CRICKET' | 'GAME_TOWER' | 'GAME_SLOT_MACHINE' | 'GAME_ANDAR_BAHAR' | 'GAME_CRAZY_WHEEL' | 'GAME_7UP_DOWN' | 'GIFT_CODE' | 'GAME_CHICKEN_ROAD' | 'GAME_PUMP' | 'GAME_MOLES' | 'GAME_JACKPOT_SPIN' | 'GAME_SCRATCH_CARD' | 'GAME_CYBER_VOYAGE';
 
 export interface UserProfile {
   uid: string;
@@ -57,12 +57,10 @@ export interface WinGoHistory {
 }
 
 export interface WinGoGameState {
-  timeLeft: number;
-  endTime?: number;
-  period: number;
+  endTime: number;
+  period: string;
   history: WinGoHistory[];
   status: 'BETTING' | 'REVEALING';
-  lastResult: WinGoHistory | null;
 }
 
 export interface Transaction {
@@ -156,16 +154,6 @@ export interface AndarBaharState {
     history: ('A' | 'B' | 'T')[];
 }
 
-export interface SpaceRaidState {
-    status: 'BETTING' | 'LOCKED' | 'RESULT';
-    timeLeft: number;
-    endTime?: number;
-    period: string;
-    multiplier: number;
-    crashPoint: number;
-    history: number[];
-}
-
 export interface CricketState {
     status: 'BETTING' | 'LOCKED' | 'RESULT';
     timeLeft: number;
@@ -195,15 +183,6 @@ export interface RouletteState {
     history: number[];
 }
 
-export interface SicBoState {
-    status: 'BETTING' | 'LOCKED' | 'RESULT';
-    timeLeft: number;
-    endTime?: number;
-    period: string;
-    dice: number[];
-    history: number[][];
-}
-
 export interface JhandiMundaState {
     status: 'BETTING' | 'LOCKED' | 'RESULT';
     timeLeft: number;
@@ -211,6 +190,15 @@ export interface JhandiMundaState {
     period: string;
     dice: string[];
     history: number[];
+}
+
+export interface SicBoState {
+    status: 'BETTING' | 'LOCKED' | 'RESULT';
+    timeLeft: number;
+    endTime?: number;
+    period: string;
+    dice: number[];
+    history: number[][];
 }
 
 export interface RouletteBet {

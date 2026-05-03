@@ -152,16 +152,16 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
           ]}
       />
       {floatingResults.map(res => (
-          <div key={res.id} className="fixed top-[40%] left-1/2 -translate-x-1/2 z-[100] w-full px-10 pointer-events-none animate-in fade-in zoom-in slide-in-from-bottom-10 duration-500">
-               <div className={`py-6 px-10 rounded-[2.5rem] border-4 shadow-[0_0_50px_rgba(0,0,0,0.5)] flex items-center justify-center gap-8 backdrop-blur-2xl ${res.mult >= 1 ? 'bg-green-600/90 border-green-400' : 'bg-red-600/90 border-red-400'}`}>
+          <div key={res.id} className="fixed top-[15%] left-1/2 -translate-x-1/2 z-[100] w-full px-12 pointer-events-none animate-in fade-in slide-in-from-top-10 duration-500">
+               <div className={`py-3 px-6 rounded-2xl border-2 shadow-2xl flex items-center justify-center gap-4 backdrop-blur-2xl ${res.mult >= 1 ? 'bg-green-600/90 border-green-400' : 'bg-red-600/90 border-red-400'}`}>
                    <div className="flex flex-col items-center">
-                       <span className="text-[10px] font-black uppercase opacity-60">Multiplier</span>
-                       <span className="font-black italic text-4xl">{res.mult}x</span>
+                       <span className="text-[7px] font-black uppercase opacity-60">Win</span>
+                       <span className="font-black italic text-xl">₹{res.amount.toFixed(2)}</span>
                    </div>
-                   <div className="w-[2px] h-12 bg-white/20"></div>
+                   <div className="w-[1px] h-6 bg-white/20"></div>
                    <div className="flex flex-col items-center">
-                       <span className="text-[10px] font-black uppercase opacity-60">Win Amount</span>
-                       <span className="font-black text-5xl">₹{res.amount.toFixed(2)}</span>
+                       <span className="text-[7px] font-black uppercase opacity-60">Mult</span>
+                       <span className="font-black text-xl">{res.mult}x</span>
                    </div>
                </div>
           </div>

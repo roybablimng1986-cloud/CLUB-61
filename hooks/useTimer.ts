@@ -8,31 +8,40 @@ export function useStabilizedTimer(endTime: number | undefined) {
     const lastCalculatedRef = useRef<number>(0);
 
     useEffect(() => {
-        if (!endTime) return;
-
-        // If endTime changed significantly, reset immediately
-        if (Math.abs((endTime || 0) - (lastEndTimeRef.current || 0)) > 2000) {
-            const initial = Math.max(0, Math.floor((endTime - (Date.now() + getClockOffset())) / 1000));
-            setTimeLeft(initial);
-            lastCalculatedRef.current = initial;
+        if (!endTime) {
+            setTimeLeft(0);
+            return;
         }
-        lastEndTimeRef.current = endTime;
 
-        const interval = setInterval(() => {
+        const syncWithServer = () => {
             const now = Date.now() + getClockOffset();
             const actualRemaining = Math.max(0, Math.floor((endTime - now) / 1000));
             
-            // Stabilize: Don't jump if the difference is small (network jitter)
-            // Only update if it's a natural countdown or a significant sync correction
-            if (actualRemaining !== lastCalculatedRef.current) {
-                // If the jump is too large (e.g. > 2s jump in 1s), we might be syncing.
-                // But usually we just want to follow the server.
-                // The jitter happens when it flickers between e.g. 5 and 6.
-                setTimeLeft(actualRemaining);
-                lastCalculatedRef.current = actualRemaining;
-            }
-        }, 1000);
+            setTimeLeft(prev => {
+                // If it's a new period/endTime, reset immediately
+                if (endTime !== lastEndTimeRef.current) {
+                    lastEndTimeRef.current = endTime;
+                    return actualRemaining;
+                }
 
+                // If deviation is significantly > 2s, force sync
+                if (Math.abs(prev - actualRemaining) > 2) {
+                    return actualRemaining;
+                }
+                
+                // Otherwise let it count down naturally if close enough
+                if (actualRemaining < prev) {
+                    return prev - 1;
+                }
+
+                return actualRemaining;
+            });
+        };
+
+        // Initial sync
+        syncWithServer();
+
+        const interval = setInterval(syncWithServer, 1000);
         return () => clearInterval(interval);
     }, [endTime]);
 

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, HelpCircle, X, ChevronUp, Lock, Sparkles } from 'lucide-react';
+import { ArrowLeft, Wallet, HelpCircle, X, ChevronUp, Lock, Sparkles, RotateCcw } from 'lucide-react';
 import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
@@ -84,6 +84,11 @@ const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
     setCurrentLv(-1);
   };
 
+  const cancelBet = () => {
+    if (gameState !== 'IDLE') return;
+    playSound('click');
+  };
+
   return (
     <div className="bg-[#0c0a1a] min-h-screen flex flex-col font-sans text-white overflow-hidden relative">
       <DragonTowerResultPopup result={tResult} onClose={() => setTResult(null)} />
@@ -129,20 +134,25 @@ const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
               </div>
           )}
           {LEVELS.map((m, i) => (
-              <div key={i} className={`h-16 w-full rounded-2xl border-2 flex items-center justify-between px-6 transition-all duration-500 ${currentLv === i ? 'bg-indigo-600 border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-105' : i === currentLv + 1 ? 'bg-slate-800/80 border-slate-600' : 'bg-black/40 border-white/5 opacity-40'}`}>
-                  <span className="font-black text-lg italic">{m}x</span>
+              <div key={i} className={`h-32 w-full rounded-3xl border-2 flex items-center justify-between px-8 transition-all duration-500 ${currentLv === i ? 'bg-indigo-600 border-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.4)] scale-105' : i === currentLv + 1 ? 'bg-slate-800/80 border-slate-600' : 'bg-black/40 border-white/5 opacity-40'}`}>
+                  <div className="flex flex-col">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none mb-1">Floor {i+1}</span>
+                      <span className="font-black text-3xl italic tracking-tighter text-white drop-shadow-lg">{m}x</span>
+                  </div>
                   {i === currentLv + 1 && (gameState === 'PLAYING' || gameState === 'REVEALING') ? (
-                      <div className="flex gap-2">
+                      <div className="flex gap-3">
                           {[0,1,2].map(btn => (
-                              <button key={btn} onClick={() => pick(btn)} className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all ${revealedIdx === btn ? 'bg-yellow-500 text-black scale-110 shadow-lg' : 'bg-indigo-500/20 hover:bg-indigo-500 border border-indigo-400/30'}`}>
-                                  ?
+                              <button key={btn} onClick={() => pick(btn)} className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all shadow-xl active:scale-90 ${revealedIdx === btn ? 'bg-yellow-500 text-black scale-110' : 'bg-indigo-500/20 hover:bg-indigo-500 border border-indigo-400/30 text-white'}`}>
+                                  <span className="text-2xl font-black italic">?</span>
                               </button>
                           ))}
                       </div>
                   ) : currentLv >= i ? (
-                      <Sparkles className="text-yellow-400" />
+                      <div className="bg-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)] p-4 rounded-full border border-white/20">
+                          <Sparkles className="text-black" size={28} />
+                      </div>
                   ) : (
-                      <Lock size={16} className="text-slate-600" />
+                      <Lock size={24} className="text-slate-600" />
                   )}
               </div>
           ))}
@@ -151,10 +161,15 @@ const Tower: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
       <div className="bg-[#111] p-6 border-t border-white/5 pb-12 z-50">
         {gameState === 'IDLE' ? (
             <div className="space-y-4">
-                <div className="flex gap-3 overflow-x-auto no-scrollbar py-2">
-                    {[10, 50, 100, 500, 1000].map(a => <button key={a} onClick={() => setBet(a)} className={`flex-shrink-0 px-6 py-2 rounded-xl font-black border ${bet === a ? 'bg-yellow-500 text-black border-white' : 'bg-zinc-900 text-zinc-500 border-white/5'}`}>₹{a}</button>)}
+                <div className="flex items-center gap-3">
+                    <div className="flex gap-3 overflow-x-auto no-scrollbar py-2 flex-1">
+                        {[10, 50, 100, 500, 1000].map(a => <button key={a} onClick={() => setBet(a)} className={`flex-shrink-0 px-6 py-2 rounded-xl font-black border transition-all ${bet === a ? 'bg-yellow-500 text-black border-white shadow-lg' : 'bg-zinc-900 text-zinc-500 border-white/5'}`}>₹{a}</button>)}
+                    </div>
+                    <button onClick={cancelBet} className="p-4 bg-red-600/10 rounded-2xl text-red-500 border border-red-500/20 active:scale-90 transition-all">
+                        <RotateCcw size={20} />
+                    </button>
                 </div>
-                <button onClick={start} className="w-full py-5 bg-gradient-to-r from-indigo-600 to-blue-600 rounded-[2rem] font-black text-xl shadow-xl active:scale-95 transition-all">START CLIMB</button>
+                <button onClick={start} className="w-full py-5 bg-gradient-to-r from-indigo-600 to-blue-600 rounded-[2.5rem] font-black text-xl shadow-2xl active:scale-95 transition-all outline-none border-t border-white/20">START CLIMB</button>
             </div>
         ) : gameState === 'PLAYING' || gameState === 'REVEALING' ? (
             <div className="space-y-4">

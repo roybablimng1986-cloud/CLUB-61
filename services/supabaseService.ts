@@ -7,7 +7,7 @@ import {
     where, getDocs, deleteDoc, writeBatch, increment, getDocFromServer
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
-import { UserProfile, WinGoHistory, WinGoGameState, Transaction, GameHistoryItem, ReferralData, SubordinateItem, CommissionItem, AviatorState, DragonTigerState, ChatMessage, GiftCode, AppSettings, AndarBaharState, JhandiMundaState, SpaceRaidState, CricketState, BaccaratState, RouletteState, SicBoState } from '../types';
+import { UserProfile, WinGoHistory, WinGoGameState, Transaction, GameHistoryItem, ReferralData, SubordinateItem, CommissionItem, AviatorState, DragonTigerState, ChatMessage, GiftCode, AppSettings, AndarBaharState, JhandiMundaState, CricketState, BaccaratState, RouletteState, SicBoState } from '../types';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -16,17 +16,20 @@ export const db = config.firestoreDatabaseId && config.firestoreDatabaseId !== '
   ? getFirestore(app, config.firestoreDatabaseId)
   : getFirestore(app);
 
-// testConnection removed to save quota
-// async function testConnection() {
-//   try {
-//     await getDocFromServer(doc(db, 'test', 'connection'));
-//   } catch (error: any) {
-//     if(error.message?.includes('the client is offline')) {
-//       console.error("Please check your Firebase configuration. Ensure Firestore is enabled and domain is allowlisted.");
-//     }
-//   }
-// }
-// testConnection();
+// testConnection: Handshake to verify connectivity on boot
+async function testConnection() {
+  try {
+    // Attempt a foreground fetch to verify the connection
+    await getDocFromServer(doc(db, 'app_settings', 'global'));
+    console.log("Firestore connection verified.");
+  } catch (error: any) {
+    if (error.message?.includes('the client is offline') || error.message?.includes('ECONNRESET') || error.message?.includes('UNAVAILABLE')) {
+      console.error("Firestore connectivity issue detected:", error.message);
+      // We don't throw here to allow the app to try and recover naturally
+    }
+  }
+}
+testConnection();
 
 // Helper for handling Firebase Permission/Connectivity errors
 export enum OperationType {
@@ -76,6 +79,13 @@ const handleFirebaseError = (error: any, operationType: OperationType, path: str
         operationType,
         path
     };
+    
+    // Specifically log connectivity errors to help debugging
+    if (error.message?.includes('ECONNRESET') || error.message?.includes('UNAVAILABLE')) {
+        console.warn(`Transient Firestore connectivity error [${operationType} at ${path}]:`, error.message);
+        return; // Don't throw for transient network errors, let the SDK retry
+    }
+
     console.error(`Firestore Error [${operationType} at ${path}]:`, JSON.stringify(errInfo));
     if (error.message.includes('permission-denied') || error.message.includes('PERMISSION_DENIED')) {
         console.warn(`Permission Denied for ${operationType} at ${path}. Ensure Firestore Rules allow access.`);
@@ -179,8 +189,18 @@ const flushUpdates = async () => {
             batch.update(userRef, update.updates);
         }
         
-        // 2. Process History Updates - DISABLED in Ultra-Low Quota Mode
-        pendingHistoryUpdates = []; // Clear without writing
+        // 2. Process History Updates
+        const historyToProcess = pendingHistoryUpdates.splice(0, 50);
+        for (const h of historyToProcess) {
+            const histRef = doc(collection(db, `game_history/${h.uid}/items`));
+            batch.set(histRef, {
+                game: h.game,
+                amount: h.bet,
+                win: h.win,
+                details: h.details,
+                timestamp: serverTimestamp()
+            });
+        }
         
         // 3. Process Transactions (Only vital ones)
         const txToProcess = pendingTransactions.splice(0, 100);
@@ -210,8 +230,8 @@ const flushUpdates = async () => {
     }
 };
 
-// Flush every 30 seconds to stay within ultra-low quota (20k/day)
-setInterval(flushUpdates, 30000);
+// Flush every 3 minutes to stay within ultra-low quota (20k/day)
+setInterval(flushUpdates, 180000);
 
 const notifySubscribers = (errorMsg?: string) => {
     balanceSubscribers.forEach(sub => {
@@ -349,14 +369,33 @@ export const addGameHistory = async (game: string, bet: number, win: number, det
 
 export const addGameBet = async (collectionName: string, data: any) => {
     if (!currentUser) return;
-    pendingBets.push({
-        collection: collectionName,
-        data: {
-            ...data,
-            uid: currentUser.uid,
-            username: currentUser.username || 'Player'
-        }
-    });
+    
+    // Instead of queueing for Firestore, send to Server API
+    try {
+        await fetch('/api/bets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                collection: collectionName,
+                data: {
+                    ...data,
+                    uid: currentUser.uid,
+                    username: currentUser.username || 'Player'
+                }
+            })
+        });
+    } catch (e) {
+        console.error('Bet API Error:', e);
+        // Fallback for extreme cases: add to pending but it will likely be ignored by ultra-low quota mode
+        pendingBets.push({
+            collection: collectionName,
+            data: {
+                ...data,
+                uid: currentUser.uid,
+                username: currentUser.username || 'Player'
+            }
+        });
+    }
 };
 
 export const login = async (phone: string, email: string, pass: string) => {
@@ -566,11 +605,30 @@ export const setWithdrawalPassword = async (password: string) => {
     }
 };
 
-// ENGINES REMOVED: Handled by server.ts
-const winGoSubscribers: Function[] = [];
+// ENGINES REMOVED: Handled locally in pages
+export const subscribeToWinGo = (cb: (state: WinGoGameState) => void) => { return () => {}; };
+export const subscribeToAviator = (cb: (state: AviatorState) => void) => { return () => {}; };
+export const subscribeToDragonTiger = (cb: (state: DragonTigerState) => void) => { return () => {}; };
+export const subscribeToAndarBahar = (cb: (state: AndarBaharState) => void) => { return () => {}; };
+export const subscribeToJhandiMunda = (cb: (state: JhandiMundaState) => void) => { return () => {}; };
+export const subscribeToCricket = (cb: (state: CricketState) => void) => { return () => {}; };
+export const subscribeToBaccarat = (cb: (state: BaccaratState) => void) => { return () => {}; };
+export const subscribeToRoulette = (cb: (state: RouletteState) => void) => { return () => {}; };
+export const subscribeToSevenUpDown = (cb: (state: any) => void) => { return () => {}; };
+export const subscribeToWinGoBets = (cb: (data: any[]) => void) => { return () => {}; };
+export const subscribeToAviatorBets = (cb: (data: any[]) => void) => { return () => {}; };
+export const subscribeToDragonTigerBets = (cb: (data: any[]) => void) => { return () => {}; };
+export const subscribeToAndarBaharBets = (cb: (data: any[]) => void) => { return () => {}; };
+export const subscribeToJhandiMundaBets = (cb: (data: any[]) => void) => { return () => {}; };
+export const subscribeToCricketBets = (cb: (data: any[]) => void) => { return () => {}; };
+export const subscribeToBaccaratBets = (cb: (data: any[]) => void) => { return () => {}; };
+export const subscribeToRouletteBets = (cb: (data: any[]) => void) => { return () => {}; };
+export const subscribeToSevenUpDownBets = (cb: (data: any[]) => void) => { return () => {}; };
 
-// Leadership logic removed
+export const startGlobalEngines = () => {};
+export const getClockOffset = () => 0;
 
+let lastReferralCalcAt = 0;
 export const getLeaderboard = (cb: (data: UserProfile[]) => void) => {
     const usersColRef = collection(db, 'users');
     const q = query(usersColRef, orderBy('balance', 'desc'), limit(20));
@@ -579,146 +637,6 @@ export const getLeaderboard = (cb: (data: UserProfile[]) => void) => {
     }, (err) => handleFirebaseError(err, OperationType.LIST, 'users'));
 };
 
-export const startGlobalEngines = () => {
-  console.log('Engines are now handled by the server.');
-};
-// SHARED GAME STATE LISTENER
-let sharedGameState: any = null;
-let clockOffset = 0;
-const sharedListeners: { [key: string]: ((state: any) => void)[] } = {};
-
-export const getClockOffset = () => clockOffset;
-
-let lastSyncedServerTime = 0;
-let offsetSamples: number[] = [];
-const initSharedListener = () => {
-    const allDocRef = doc(db, 'game_states', 'all');
-    
-    // Initial fetch to avoid getting stuck
-    getDoc(allDocRef).then(s => {
-        if (s.exists()) {
-            sharedGameState = s.data();
-            
-            if (sharedGameState.serverTime) {
-                const newOffset = sharedGameState.serverTime - Date.now();
-                offsetSamples.push(newOffset);
-                clockOffset = newOffset;
-            }
-
-            Object.keys(sharedListeners).forEach(gameKey => {
-                if (sharedGameState?.[gameKey]) {
-                    sharedListeners[gameKey].forEach(cb => cb(sharedGameState[gameKey]));
-                }
-            });
-        }
-    });
-
-    onSnapshot(allDocRef, (s) => {
-        const data = s.data();
-        if (!data) return;
-        
-        sharedGameState = data;
-        
-        if (data.serverTime && data.serverTime !== lastSyncedServerTime) {
-            const newOffset = data.serverTime - Date.now();
-            offsetSamples.push(newOffset);
-            if (offsetSamples.length > 5) offsetSamples.shift();
-            // Use median or average to stabilize
-            clockOffset = offsetSamples.reduce((a, b) => a + b, 0) / offsetSamples.length;
-            lastSyncedServerTime = data.serverTime;
-        }
-        
-        Object.keys(sharedListeners).forEach(gameKey => {
-            if (data[gameKey]) {
-                sharedListeners[gameKey].forEach(cb => cb(data[gameKey]));
-            }
-        });
-    }, (err) => console.error('Shared Listener Error:', err));
-};
-
-initSharedListener();
-
-const betListeners: { [key: string]: ((data: any[]) => void)[] } = {};
-const realBetsCache: { [key: string]: any[] } = {};
-
-const triggerBetUpdate = (betKey: string) => {
-    if (!betListeners[betKey]) return;
-    const fakeBets = sharedGameState?.fakeBets?.[betKey] || [];
-    const realBets = realBetsCache[betKey] || [];
-    const merged = [...realBets, ...fakeBets].sort((a, b) => b.timestamp - a.timestamp).slice(0, 100);
-    betListeners[betKey].forEach(cb => cb(merged));
-};
-
-const addBetListener = (betKey: string, cb: (data: any[]) => void) => {
-    if (!betListeners[betKey]) betListeners[betKey] = [];
-    betListeners[betKey].push(cb);
-    
-    // Listen to real bets from Firestore if not already listening
-    let unsubReal = () => {};
-    if (betListeners[betKey].length === 1) {
-        const q = query(collection(db, betKey), orderBy('timestamp', 'desc'), limit(50));
-        unsubReal = onSnapshot(q, (s) => {
-            realBetsCache[betKey] = s.docs.map(d => ({ id: d.id, ...d.data(), isFake: false }));
-            triggerBetUpdate(betKey);
-        }, (err) => console.error(`Real bet listener error for ${betKey}:`, err));
-    }
-
-    triggerBetUpdate(betKey);
-    
-    return () => {
-        betListeners[betKey] = betListeners[betKey].filter(c => c !== cb);
-        if (betListeners[betKey].length === 0) {
-            unsubReal();
-            delete realBetsCache[betKey];
-        }
-    };
-};
-
-export const subscribeToWinGoBets = (cb: (data: any[]) => void) => {
-    return addBetListener('wingo_bets', cb);
-};
-
-export const subscribeToAviatorBets = (cb: (data: any[]) => void) => {
-    return addBetListener('aviator_bets', cb);
-};
-
-export const subscribeToDragonTigerBets = (cb: (data: any[]) => void) => {
-    return addBetListener('dragon_tiger_bets', cb);
-};
-
-export const subscribeToAndarBaharBets = (cb: (data: any[]) => void) => {
-    return addBetListener('andar_bahar_bets', cb);
-};
-
-export const subscribeToJhandiMundaBets = (cb: (data: any[]) => void) => {
-    return addBetListener('jhandi_munda_bets', cb);
-};
-
-export const subscribeToSpaceRaidBets = (cb: (data: any[]) => void) => {
-    return addBetListener('space_raid_bets', cb);
-};
-
-export const subscribeToCricketBets = (cb: (data: any[]) => void) => {
-    return addBetListener('cricket_bets', cb);
-};
-
-export const subscribeToBaccaratBets = (cb: (data: any[]) => void) => {
-    return addBetListener('baccarat_bets', cb);
-};
-
-export const subscribeToRouletteBets = (cb: (data: any[]) => void) => {
-    return addBetListener('roulette_bets', cb);
-};
-
-export const subscribeToSicBoBets = (cb: (data: any[]) => void) => {
-    return addBetListener('sic_bo_bets', cb);
-};
-
-export const subscribeToSevenUpDownBets = (cb: (data: any[]) => void) => {
-    return addBetListener('seven_up_down_bets', cb);
-};
-
-let lastReferralCalcAt = 0;
 const calculateReferralStats = async (myCode: string) => {
     if (!myCode) return;
     const now = Date.now();
@@ -745,60 +663,6 @@ const calculateReferralStats = async (myCode: string) => {
     } catch (e) {
         handleFirebaseError(e, OperationType.LIST, 'users');
     }
-};
-
-const addSharedListener = (gameKey: string, cb: (state: any) => void) => {
-    if (!sharedListeners[gameKey]) sharedListeners[gameKey] = [];
-    sharedListeners[gameKey].push(cb);
-    if (sharedGameState && sharedGameState[gameKey]) cb(sharedGameState[gameKey]);
-    
-    return () => {
-        sharedListeners[gameKey] = sharedListeners[gameKey].filter(c => c !== cb);
-    };
-};
-
-export const subscribeToWinGo = (cb: (state: WinGoGameState) => void) => { 
-    return addSharedListener('wingo', cb);
-};
-
-export const subscribeToAviator = (cb: (state: AviatorState) => void) => {
-    return addSharedListener('aviator', cb);
-};
-
-export const subscribeToDragonTiger = (cb: (state: DragonTigerState) => void) => {
-    return addSharedListener('dragon_tiger', cb);
-};
-
-export const subscribeToAndarBahar = (cb: (state: AndarBaharState) => void) => {
-    return addSharedListener('andar_bahar', cb);
-};
-
-export const subscribeToJhandiMunda = (cb: (state: JhandiMundaState) => void) => {
-    return addSharedListener('jhandi_munda', cb);
-};
-
-export const subscribeToSpaceRaid = (cb: (state: SpaceRaidState) => void) => {
-    return addSharedListener('space_raid', cb);
-};
-
-export const subscribeToCricket = (cb: (state: CricketState) => void) => {
-    return addSharedListener('cricket', cb);
-};
-
-export const subscribeToBaccarat = (cb: (state: BaccaratState) => void) => {
-    return addSharedListener('baccarat', cb);
-};
-
-export const subscribeToRoulette = (cb: (state: RouletteState) => void) => {
-    return addSharedListener('roulette', cb);
-};
-
-export const subscribeToSicBo = (cb: (state: SicBoState) => void) => {
-    return addSharedListener('sic_bo', cb);
-};
-
-export const subscribeToSevenUpDown = (cb: (state: any) => void) => {
-    return addSharedListener('seven_up_down', cb);
 };
 
 export const getSubordinates = (cb: (data: SubordinateItem[]) => void) => {
