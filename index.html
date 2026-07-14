@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mafia Club - High Stakes Arena</title>
+    <title>CLUB 99 - High Stakes Arena</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
     <style>
@@ -60,27 +60,90 @@
         .animate-float {
             animation: float 3s ease-in-out infinite;
         }
+
+        /* Vortex Game Custom Classes */
+        :root {
+          --color-vortex-bg: #0f1117;
+          --color-vortex-ring: #1a1e28;
+          --color-vortex-fire: #ff3c3c;
+          --color-vortex-earth: #2cfd5d;
+          --color-vortex-water: #00b4ff;
+          --color-vortex-accent: #9333ea;
+        }
+
+        .vortex-bg { background-color: var(--color-vortex-bg); }
+        .vortex-ring { border-color: var(--color-vortex-ring); }
+        .vortex-fire-color { color: var(--color-vortex-fire); }
+        .vortex-earth-color { color: var(--color-vortex-earth); }
+        .vortex-water-color { color: var(--color-vortex-water); }
+        .vortex-accent-color { color: var(--color-vortex-accent); }
+
+        .vortex-gradient {
+            background: radial-gradient(circle at center, #1a1e28 0%, #080a0f 100%);
+        }
+
+        .swirl-bg {
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 86c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm66-3c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm-46-45c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zm20-17c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%23ffffff' fill-opacity='0.02' fill-rule='evenodd'/%3E%3C/svg%3E");
+            background-position: center;
+            background-repeat: repeat;
+            background-size: cover;
+            background-blend-mode: overlay;
+        }
+
+        @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .animate-spin-slow { animation: spin-slow 3s linear infinite; }
+        @keyframes spin-fast { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .animate-spin-fast { animation: spin-fast 0.5s linear infinite; }
+
+        .glow-fire { filter: drop-shadow(0 0 12px rgba(255, 60, 60, 0.9)); }
+        .glow-earth { filter: drop-shadow(0 0 12px rgba(44, 253, 93, 0.9)); }
+        .glow-water { filter: drop-shadow(0 0 12px rgba(0, 180, 255, 0.9)); }
+        .glow-purple { filter: drop-shadow(0 0 25px rgba(147, 51, 234, 0.8)); }
+        .skull-glow { filter: drop-shadow(0 0 35px rgba(234, 179, 8, 0.7)); }
+
+        .circle-emboss {
+            box-shadow: 
+                inset 0 4px 10px rgba(255, 255, 255, 0.05),
+                inset 0 -6px 12px rgba(0, 0, 0, 0.9),
+                0 15px 30px rgba(0, 0, 0, 0.8);
+        }
+
+        .button-purple {
+            background: linear-gradient(135deg, #9333ea 0%, #c026d3 100%);
+            box-shadow: 0 0 30px rgba(147, 51, 234, 0.4);
+        }
+
+        .button-purple:active {
+            transform: scale(0.95);
+            box-shadow: 0 0 15px rgba(147, 51, 234, 0.2);
+        }
+
+        /* 3D Card Flip CSS */
+        .perspective-500 {
+            perspective: 500px;
+        }
+        .perspective-1000 {
+            perspective: 1000px;
+        }
+        .preserve-3d {
+            transform-style: preserve-3d;
+        }
+        .backface-hidden {
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+        .rotate-y-180 {
+            transform: rotateY(180deg);
+        }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@19.0.0",
-    "react-dom": "https://esm.sh/react-dom@19.0.0",
-    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-    "lucide-react": "https://esm.sh/lucide-react@0.468.0",
-    "@google/genai": "https://esm.sh/@google/genai@1.34.0",
-    "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
-    "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
-    "firebase/database": "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "firebase/": "https://esm.sh/firebase@^12.8.0/"
-  }
-}
-</script>
 </head>
-<body>
-    <div id="root"></div>
+<body class="bg-[#0a0f1d]">
+    <div id="root">
+        <div class="min-h-screen flex flex-col items-center justify-center p-10 bg-[#0a0f1d]">
+            <div class="w-16 h-16 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+            <p class="text-yellow-500 font-black tracking-widest text-xs uppercase animate-pulse">Initializing Arena...</p>
+        </div>
+    </div>
     <script type="module" src="/index.tsx"></script>
 </body>
 </html>

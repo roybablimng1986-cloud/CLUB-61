@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Trophy, AlertCircle, Dice6 } from 'lucide-react';
+import { X, Trophy, Swords, Zap, HelpCircle } from 'lucide-react';
 import { playSound } from '../services/supabaseService';
 
 interface DiceDuelResultPopupProps {
@@ -20,73 +19,112 @@ const DiceDuelResultPopup: React.FC<DiceDuelResultPopupProps> = ({ result, onClo
     if (result) {
       if (result.win) playSound('win_popup');
       else playSound('loss_popup');
+
+      // Auto dismiss after exactly 2 seconds
+      const timer = setTimeout(() => {
+        onClose();
+      }, 2000);
+      return () => clearTimeout(timer);
     }
-  }, [result]);
+  }, [result, onClose]);
 
   if (!result) return null;
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+      <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs">
         <motion.div 
-          initial={{ scale: 0.5, opacity: 0, y: 50 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.5, opacity: 0, y: 50 }}
-          className={`w-full max-w-sm rounded-[3rem] overflow-hidden border-2 shadow-[0_0_100px_rgba(0,0,0,0.5)] ${result.win ? 'bg-[#0a1a1a] border-green-500/30' : 'bg-[#1a1a1a] border-red-500/30'}`}
+          initial={{ scale: 0.9, opacity: 0, rotate: -2 }}
+          animate={{ scale: 1, opacity: 1, rotate: 0 }}
+          exit={{ scale: 0.9, opacity: 0, rotate: 2 }}
+          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          className={`w-[270px] rounded-[2.5rem] overflow-hidden border shadow-[0_15px_40px_rgba(0,0,0,0.6)] ${
+            result.win 
+              ? 'bg-[#04151f]/95 border-cyan-500/40 text-cyan-100 shadow-cyan-950/20' 
+              : 'bg-[#18081a]/95 border-fuchsia-500/40 text-fuchsia-100 shadow-fuchsia-950/20'
+          }`}
         >
-          <div className={`p-8 text-center relative ${result.win ? 'bg-gradient-to-b from-green-500/20 to-transparent' : 'bg-gradient-to-b from-red-500/20 to-transparent'}`}>
-            <button onClick={onClose} className="absolute top-6 right-6 p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors">
-              <X size={20} className="text-white/50" />
+          <div className="p-5 text-center relative">
+            {/* Close button */}
+            <button 
+              onClick={onClose} 
+              className="absolute top-4 right-4 p-1.5 bg-white/5 rounded-full hover:bg-white/10 transition-colors"
+            >
+              <X size={14} className="text-white/40 hover:text-white" />
             </button>
 
-            <div className="mb-6 inline-flex p-6 rounded-full bg-black/40 border border-white/10 relative">
-              {result.win ? (
-                <Trophy size={48} className="text-yellow-500 animate-bounce" />
-              ) : (
-                <Dice6 size={48} className="text-red-500 animate-pulse" />
-              )}
+            {/* Header Icon */}
+            <div className="flex justify-center mb-3">
+              <div className={`p-3 rounded-full ${
+                result.win 
+                  ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30' 
+                  : 'bg-fuchsia-500/15 text-fuchsia-400 border border-fuchsia-500/30'
+              }`}>
+                {result.win ? (
+                  <Trophy size={24} className="animate-bounce" />
+                ) : (
+                  <Swords size={24} className="animate-pulse" />
+                )}
+              </div>
             </div>
 
-            <h2 className={`text-4xl font-black italic tracking-tighter uppercase mb-2 ${result.win ? 'text-green-500' : 'text-red-500'}`}>
-              {result.win ? 'VICTORY!' : 'DEFEAT'}
-            </h2>
+            {/* Header Title */}
+            <h3 className={`text-xl font-extrabold uppercase tracking-tight ${result.win ? 'text-cyan-400' : 'text-fuchsia-400'}`}>
+              {result.win ? 'DUEL VICTORY' : 'DUEL DEFEAT'}
+            </h3>
+            <p className="text-[9px] font-mono tracking-widest text-white/30 uppercase mt-0.5 mb-4">Cyber Dice Duel</p>
 
-            <div className="space-y-4 mb-8">
-                <div className="bg-black/30 p-6 rounded-3xl border border-white/5">
-                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-4">Dice Result</p>
-                    <div className="flex justify-center gap-4 mb-2">
-                        {result.dice.map((d, i) => (
-                            <div key={i} className="w-16 h-16 bg-white rounded-xl flex items-center justify-center text-3xl font-black text-black shadow-inner border-b-4 border-slate-300">
-                                {d}
-                            </div>
-                        ))}
-                    </div>
-                    <p className="text-2xl font-black italic gold-text uppercase mt-2">Sum: {result.sum}</p>
-                    <p className="text-[10px] font-black text-yellow-500/60 uppercase tracking-widest">{result.sum >= 7 ? 'BIG (7-12)' : 'SMALL (2-6)'}</p>
+            {/* Results Grid */}
+            <div className="space-y-2 mb-4">
+              {/* Dice Circles */}
+              <div className="bg-black/40 p-3.5 rounded-2xl border border-white/5">
+                <div className="flex justify-center gap-3 mb-2.5">
+                  {result.dice.map((d, i) => (
+                    <motion.div 
+                      key={i} 
+                      initial={{ scale: 0, rotate: -45 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ delay: i * 0.1, type: 'spring' }}
+                      className="w-10 h-10 rounded-full bg-slate-950 border border-slate-700/60 shadow-inner flex items-center justify-center text-lg font-black text-white"
+                    >
+                      {d}
+                    </motion.div>
+                  ))}
                 </div>
-
-                <div className="bg-black/30 p-4 rounded-3xl border border-white/5 flex justify-between items-center">
-                    <div>
-                        <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Your Prediction</p>
-                        <p className="text-xl font-black text-white uppercase">{result.target}</p>
-                    </div>
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-[10px] font-bold text-white/40 uppercase">DICE SUM</span>
+                  <span className={`text-sm font-black italic ${result.win ? 'text-cyan-400' : 'text-fuchsia-400'}`}>
+                    {result.sum}
+                  </span>
                 </div>
+              </div>
+
+              {/* Details List */}
+              <div className="bg-black/35 px-3.5 py-1.5 rounded-xl border border-white/5 flex justify-between items-center">
+                <span className="text-[9px] font-bold text-white/40 uppercase">Your Bet</span>
+                <span className="text-[10px] font-bold text-white uppercase">{result.target}</span>
+              </div>
+
+              <div className="bg-black/35 px-3.5 py-2 rounded-xl border border-white/5 flex justify-between items-center">
+                <span className="text-[9px] font-bold text-white/40 uppercase">
+                  {result.win ? 'Profit' : 'Loss'}
+                </span>
+                <span className={`text-xs font-black italic ${result.win ? 'text-yellow-400' : 'text-white/30'}`}>
+                  {result.win ? `+₹${result.amount.toFixed(1)}` : `-₹${result.amount.toFixed(1)}`}
+                </span>
+              </div>
             </div>
 
-            <div className={`p-6 rounded-[2rem] border-2 mb-8 ${result.win ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
-              <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">
-                {result.win ? 'Total Profit' : 'Total Loss'}
-              </p>
-              <h3 className={`text-4xl font-black italic ${result.win ? 'text-yellow-500' : 'text-white/20'}`}>
-                {result.win ? `+₹${result.amount.toFixed(2)}` : `-₹${result.amount.toFixed(2)}`}
-              </h3>
-            </div>
-
+            {/* Action Button */}
             <button 
               onClick={onClose}
-              className={`w-full py-5 rounded-3xl font-black uppercase tracking-[0.4em] text-sm shadow-2xl active:scale-95 transition-all ${result.win ? 'bg-green-600 text-white' : 'bg-white/10 text-white border border-white/10'}`}
+              className={`w-full py-2.5 rounded-2xl font-black uppercase tracking-wider text-[11px] shadow-lg active:scale-95 transition-all ${
+                result.win 
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-cyan-500/20' 
+                  : 'bg-gradient-to-r from-fuchsia-600 to-pink-700 text-white shadow-fuchsia-500/20'
+              }`}
             >
-              CONTINUE DUEL
+              Continue Duel
             </button>
           </div>
         </motion.div>

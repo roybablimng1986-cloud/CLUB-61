@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, RotateCw, HelpCircle, X } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet, shouldForceLoss } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
@@ -31,16 +31,17 @@ const EgyptSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
       setTimeout(() => setFloating(null), 3000);
   };
 
+  const isForcedLoss = useRef(false);
+
   const spin = async () => {
     if (spinning || userBalance < bet) return;
     
-    // Record bet in Firestore removed to save quota for instant games
-    // addGameHistory will still record the result for the user
+    isForcedLoss.current = shouldForceLoss(bet, userBalance);
 
     updateBalance(-bet, 'BET', 'Egyptian Gold');
     setEgResult(null);
     setSpinning(true);
-    playSound('bet_place');
+    playSound('spin');
 
     let count = 0;
     const interval = setInterval(() => {
@@ -50,6 +51,10 @@ const EgyptSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
             SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]
         ]);
         count++;
+        // Play ticking sound of rolling slots
+        if (count % 3 === 0) {
+            playSound('tick');
+        }
         if (count > 30) {
             clearInterval(interval);
             finalize();
@@ -61,7 +66,9 @@ const EgyptSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
     if (!isMounted.current) return;
     
     // Balanced RTP 92%
-    const r = Math.random();
+    let r = Math.random();
+    if (isForcedLoss.current) r = 0.99; // Ensure empty outcome
+
     let outcome;
     if (r < 0.015) { // 1.5% Jackpot
         const sym = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
@@ -97,15 +104,16 @@ const EgyptSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
         const win = bet * mult;
         updateBalance(win, 'WIN', 'Egyptian Win');
         triggerFloating(`+₹${win.toFixed(2)}`, 'text-yellow-400');
+        playSound('win');
     } else {
         triggerFloating(`-₹${bet.toFixed(2)}`, 'text-red-500');
+        playSound('loss');
     }
     addGameHistory('Egypt Gold', bet, mult > 0 ? bet * mult : 0, `Outcome: ${outcome.join('|')}`);
   };
 
   return (
     <div className="bg-[#1a1200] min-h-screen flex flex-col font-sans text-white relative overflow-hidden">
-        <SlotResultPopup result={egResult} onClose={() => setEgResult(null)} />
         <HowToPlay 
             isOpen={showRules} 
             onClose={() => setShowRules(false)} 

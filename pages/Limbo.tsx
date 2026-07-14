@@ -51,7 +51,7 @@ const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
     }
 
     updateBalance(-betAmount, 'BET', 'Limbo Stake');
-    playSound('bet_place');
+    playSound('plane'); // Engine whoosh sound on start
     setLbResult(null);
     setGameState('RISING');
 
@@ -62,9 +62,11 @@ const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
     const cappedOutcome = Math.min(100000, outcome);
 
     let current = 1.0;
+    let ticks = 0;
     const interval = setInterval(() => {
         if (!isMounted.current) { clearInterval(interval); return; }
         current *= 1.25;
+        ticks++;
         if (current >= cappedOutcome) {
             clearInterval(interval);
             setResultMult(cappedOutcome);
@@ -72,6 +74,10 @@ const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
             finalize(cappedOutcome, finalTarget);
         } else {
             setResultMult(current);
+            // play tick sound every 2 steps to not be too spammy but build hype
+            if (ticks % 2 === 0) {
+                playSound('tower_step');
+            }
         }
     }, 50);
   };
@@ -80,9 +86,15 @@ const Limbo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
     const isWin = outcome >= target;
     const winAmt = isWin ? betAmount * target : 0;
     
+    if (isWin) {
+        playSound('win');
+    } else {
+        playSound('plane_crash');
+    }
+
     setLbResult({
         win: isWin,
-        amount: isWin ? winAmt : 0,
+        amount: isWin ? winAmt : (isWin ? 0 : betAmount), // passed correctly to popup for details
         multiplier: outcome,
         target: target
     });

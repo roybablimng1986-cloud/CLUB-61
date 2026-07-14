@@ -28,89 +28,119 @@ const AndarBaharResultPopup: React.FC<AndarBaharResultPopupProps> = ({ result, o
 
   if (!result) return null;
 
+  const isWinnerAndar = result.winner === 'ANDAR';
+  const isWinnerBahar = result.winner === 'BAHAR';
+
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+      <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-black/85 backdrop-blur-sm">
         <motion.div 
-          initial={{ scale: 0.5, opacity: 0, y: 50 }}
+          initial={{ scale: 0.85, opacity: 0, y: 30 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.5, opacity: 0, y: 50 }}
-          className={`w-full max-w-sm rounded-[3rem] overflow-hidden border-2 shadow-[0_0_100px_rgba(0,0,0,0.5)] ${result.win ? 'bg-[#064e3b] border-green-500/30' : 'bg-[#1a1a1a] border-red-500/30'}`}
+          exit={{ scale: 0.85, opacity: 0, y: 30 }}
+          className="w-full max-w-sm rounded-[2.5rem] bg-stone-100 text-zinc-900 border-[8px] border-yellow-500 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] relative overflow-hidden flex flex-col p-6 items-center"
         >
-          <div className={`p-8 text-center relative ${result.win ? 'bg-gradient-to-b from-green-500/20 to-transparent' : 'bg-gradient-to-b from-red-500/20 to-transparent'}`}>
-            <button onClick={onClose} className="absolute top-6 right-6 p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors">
-              <X size={20} className="text-white/50" />
+          {/* Light suit watermark in background */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.03] select-none">
+            <span className="text-[250px] font-black">{result.win ? '♥' : '♠'}</span>
+          </div>
+
+          {/* Corner Indices - Top Left */}
+          <div className={`absolute top-4 left-4 flex flex-col items-center leading-none font-black text-xl select-none ${result.win ? 'text-red-600' : 'text-stone-800'}`}>
+            <span>{result.win ? 'W' : 'L'}</span>
+            <span className="text-2xl mt-0.5">{result.win ? '♥' : '♠'}</span>
+          </div>
+
+          {/* Corner Indices - Bottom Right (Rotated) */}
+          <div className={`absolute bottom-4 right-4 flex flex-col items-center leading-none font-black text-xl select-none rotate-180 ${result.win ? 'text-red-600' : 'text-stone-800'}`}>
+            <span>{result.win ? 'W' : 'L'}</span>
+            <span className="text-2xl mt-0.5">{result.win ? '♥' : '♠'}</span>
+          </div>
+
+          <div className="w-full text-center relative z-10 flex flex-col items-center">
+            {/* Close Button */}
+            <button onClick={onClose} className="absolute -top-1 -right-1 p-2 bg-black/5 rounded-full hover:bg-black/10 transition-colors">
+              <X size={20} className="text-stone-600" />
             </button>
 
-            <div className="mb-6 inline-flex p-6 rounded-full bg-black/40 border border-white/10 relative">
+            {/* Emblem */}
+            <div className={`mt-4 mb-4 p-4 rounded-full bg-stone-200/50 border border-stone-300 shadow-inner flex items-center justify-center`}>
               {result.win ? (
-                <Trophy size={48} className="text-yellow-500 animate-bounce" />
+                <Trophy size={38} className="text-yellow-600 animate-bounce" />
               ) : (
-                <Swords size={48} className="text-red-500 animate-pulse" />
+                <Swords size={38} className="text-stone-800 animate-pulse" />
               )}
             </div>
 
-            <h2 className={`text-4xl font-black italic tracking-tighter uppercase mb-2 ${result.win ? 'text-green-500' : 'text-red-500'}`}>
+            {/* Title */}
+            <h2 className={`text-3xl font-black italic tracking-tighter uppercase leading-none mb-1 ${result.win ? 'text-red-600' : 'text-stone-900'}`}>
               {result.win ? 'VICTORY!' : 'DEFEAT'}
             </h2>
-            <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] mb-8">Period: {result.period}</p>
+            <p className="text-[8px] font-bold text-stone-500 uppercase tracking-[0.3em] mb-4">Period: {result.period}</p>
 
-            <div className="space-y-4 mb-8">
-                <div className="bg-black/40 p-6 rounded-[2.5rem] border border-white/10 shadow-inner">
-                    <p className="text-[10px] font-black text-yellow-500/60 uppercase tracking-[0.4em] mb-3">Joker Card</p>
-                    <div className="flex justify-center">
-                        <div className="w-14 h-20 bg-white rounded-xl flex flex-col items-center justify-center border border-slate-300 shadow-xl relative overflow-hidden">
-                            <div className={`absolute top-1 left-1.5 font-black text-xs ${['♥','♦'].includes(result.joker.suit) ? 'text-red-600' : 'text-slate-900'}`}>{result.joker.rank}</div>
-                            <div className={`text-2xl ${['♥','♦'].includes(result.joker.suit) ? 'text-red-600' : 'text-slate-900'}`}>{result.joker.suit}</div>
-                        </div>
+            {/* Inner Battle Cards */}
+            <div className="w-full bg-stone-200/60 border border-stone-300 rounded-[2rem] p-4 shadow-sm mb-4">
+              <p className="text-[8px] font-black text-stone-500 uppercase tracking-[0.2em] mb-3">ROUND REVEAL</p>
+              <div className="grid grid-cols-2 gap-3 items-center justify-center relative">
+                
+                {/* ANDAR Card */}
+                <div className={`flex flex-col items-center p-2 rounded-xl bg-white border-2 ${isWinnerAndar ? 'border-yellow-500 shadow-md scale-105' : 'border-stone-200 opacity-65'}`}>
+                  <span className="text-[9px] font-black text-red-600 uppercase tracking-wider mb-1">Andar</span>
+                  {result.andarCards && result.andarCards[0] ? (
+                    <div className="w-12 h-18 bg-stone-50 rounded-lg flex flex-col items-center justify-center border border-stone-300 relative overflow-hidden">
+                      <div className={`absolute top-0.5 left-1 font-black text-[10px] ${['♥','♦'].includes(result.andarCards[0].suit) ? 'text-red-600' : 'text-stone-900'}`}>{result.andarCards[0].rank}</div>
+                      <div className={`text-lg mt-1 ${['♥','♦'].includes(result.andarCards[0].suit) ? 'text-red-600' : 'text-stone-900'}`}>{result.andarCards[0].suit}</div>
+                      <div className={`absolute bottom-0.5 right-1 font-black text-[10px] rotate-180 ${['♥','♦'].includes(result.andarCards[0].suit) ? 'text-red-600' : 'text-stone-900'}`}>{result.andarCards[0].rank}</div>
                     </div>
+                  ) : (
+                    <div className="w-12 h-18 bg-stone-200 border border-dashed border-stone-300 rounded-lg" />
+                  )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-black/40 p-4 rounded-3xl border border-white/5">
-                        <p className="text-[9px] font-black text-red-500 uppercase tracking-widest mb-2">Andar</p>
-                        <div className="flex flex-wrap gap-1 justify-center">
-                            {result.andarCards.map((c, i) => (
-                                <div key={i} className="w-8 h-12 bg-white rounded-md flex flex-col items-center justify-center border border-slate-300 shadow-sm relative overflow-hidden">
-                                    <span className={`absolute top-0.5 left-1 text-[7px] font-black ${['♥', '♦'].includes(c.suit) ? 'text-red-600' : 'text-slate-900'}`}>{c.rank}</span>
-                                    <span className={`text-sm ${['♥', '♦'].includes(c.suit) ? 'text-red-600' : 'text-slate-900'}`}>{c.suit}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="bg-black/40 p-4 rounded-3xl border border-white/5">
-                        <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest mb-2">Bahar</p>
-                        <div className="flex flex-wrap gap-1 justify-center">
-                            {result.baharCards.map((c, i) => (
-                                <div key={i} className="w-8 h-12 bg-white rounded-md flex flex-col items-center justify-center border border-slate-300 shadow-sm relative overflow-hidden">
-                                    <span className={`absolute top-0.5 left-1 text-[7px] font-black ${['♥', '♦'].includes(c.suit) ? 'text-red-600' : 'text-slate-900'}`}>{c.rank}</span>
-                                    <span className={`text-sm ${['♥', '♦'].includes(c.suit) ? 'text-red-600' : 'text-slate-900'}`}>{c.suit}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                {/* VS Divider */}
+                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-yellow-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-full border-2 border-stone-100 z-20">
+                  VS
                 </div>
 
-                <div className="bg-black/40 p-4 rounded-2xl border border-white/5">
-                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Winning Side</p>
-                    <p className={`text-2xl font-black italic uppercase tracking-tighter ${result.winner === 'ANDAR' ? 'text-red-500' : 'text-blue-500'}`}>
-                        {result.winner}
-                    </p>
+                {/* BAHAR Card */}
+                <div className={`flex flex-col items-center p-2 rounded-xl bg-white border-2 ${isWinnerBahar ? 'border-yellow-500 shadow-md scale-105' : 'border-stone-200 opacity-65'}`}>
+                  <span className="text-[9px] font-black text-blue-600 uppercase tracking-wider mb-1">Bahar</span>
+                  {result.baharCards && result.baharCards[0] ? (
+                    <div className="w-12 h-18 bg-stone-50 rounded-lg flex flex-col items-center justify-center border border-stone-300 relative overflow-hidden">
+                      <div className={`absolute top-0.5 left-1 font-black text-[10px] ${['♥','♦'].includes(result.baharCards[0].suit) ? 'text-red-600' : 'text-stone-900'}`}>{result.baharCards[0].rank}</div>
+                      <div className={`text-lg mt-1 ${['♥','♦'].includes(result.baharCards[0].suit) ? 'text-red-600' : 'text-stone-900'}`}>{result.baharCards[0].suit}</div>
+                      <div className={`absolute bottom-0.5 right-1 font-black text-[10px] rotate-180 ${['♥','♦'].includes(result.baharCards[0].suit) ? 'text-red-600' : 'text-stone-900'}`}>{result.baharCards[0].rank}</div>
+                    </div>
+                  ) : (
+                    <div className="w-12 h-18 bg-stone-200 border border-dashed border-stone-300 rounded-lg" />
+                  )}
                 </div>
+
+              </div>
             </div>
 
-            <div className={`p-6 rounded-[2rem] border-2 mb-8 ${result.win ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
-              <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">
+            {/* Winning details */}
+            <div className="w-full bg-stone-200/40 p-3 rounded-2xl border border-stone-300 text-center mb-4">
+              <p className="text-[8px] font-bold text-stone-500 uppercase tracking-wider mb-0.5">Winning Side</p>
+              <p className={`text-xl font-black italic uppercase tracking-tighter ${result.winner === 'ANDAR' ? 'text-red-600' : result.winner === 'TIE' ? 'text-orange-500' : 'text-blue-600'}`}>
+                {result.winner} {result.winner === 'TIE' && '(EQUAL)'}
+              </p>
+            </div>
+
+            {/* Profit and Loss Box */}
+            <div className={`w-full p-4 rounded-2xl border mb-5 flex flex-col items-center ${result.win ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+              <p className="text-[8px] font-black text-stone-500 uppercase tracking-widest mb-0.5">
                 {result.win ? 'Total Profit' : 'Total Loss'}
               </p>
-              <h3 className={`text-4xl font-black italic ${result.win ? 'text-yellow-500' : 'text-white/20'}`}>
+              <h3 className={`text-3xl font-black italic ${result.win ? 'text-emerald-600' : 'text-red-600'}`}>
                 {result.win ? `+₹${result.amount.toFixed(2)}` : `-₹${result.amount.toFixed(2)}`}
               </h3>
             </div>
 
+            {/* Confirm Button */}
             <button 
               onClick={onClose}
-              className={`w-full py-5 rounded-3xl font-black uppercase tracking-[0.4em] text-sm shadow-2xl active:scale-95 transition-all ${result.win ? 'bg-green-600 text-white' : 'bg-white/10 text-white border border-white/10'}`}
+              className={`w-full py-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-md active:scale-95 transition-all ${result.win ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-700/10' : 'bg-stone-800 hover:bg-stone-900 text-white shadow-stone-900/10'}`}
             >
               CONTINUE BATTLE
             </button>

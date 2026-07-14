@@ -19,8 +19,14 @@ const DragonTowerResultPopup: React.FC<DragonTowerResultPopupProps> = ({ result,
     if (result) {
       if (result.win) playSound('win_popup');
       else playSound('loss_popup');
+
+      // Auto dismiss after 2 seconds
+      const timer = setTimeout(() => {
+        onClose();
+      }, 2000);
+      return () => clearTimeout(timer);
     }
-  }, [result]);
+  }, [result, onClose]);
 
   if (!result) return null;
 

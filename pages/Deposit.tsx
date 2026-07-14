@@ -1,21 +1,45 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Smartphone, QrCode, ClipboardCopy, CheckCircle2, ShieldCheck, Zap } from 'lucide-react';
-import { submitDepositRequest } from '../services/supabaseService';
+import { submitDepositRequest, adminGetSettings } from '../services/supabaseService';
+import { AppSettings } from '../types';
 
 const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     const [step, setStep] = useState(1);
     const [amount, setAmount] = useState(20); 
     const [method, setMethod] = useState<'UPI' | 'PhonePe'>('UPI');
+    const [selectedPaymentMethodIndex, setSelectedPaymentMethodIndex] = useState<number>(-1);
     const [utr, setUtr] = useState('');
     const [error, setError] = useState('');
     const [showCopied, setShowCopied] = useState(false);
+    const [settings, setSettings] = useState<AppSettings | null>(null);
+
+    useEffect(() => {
+        const unsub = adminGetSettings((s) => {
+            if (s) {
+                setSettings(s);
+                if (s.minDeposit) {
+                    setAmount(s.minDeposit);
+                }
+            }
+        });
+        return unsub;
+    }, []);
     
-    const UPI_ID = "9339409219@fam";
-    const qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`upi://pay?pa=${UPI_ID}&pn=MAFIA_CLUB&am=${amount}&cu=INR`)}&color=000000&margin=10`;
+    const paymentMethods = settings?.paymentMethods || [];
+    const UPI_ID = settings?.upiId || "9339409219@fam";
+    const qrImage = settings?.depositQrImage || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`upi://pay?pa=${UPI_ID}&pn=MAFIA_CLUB&am=${amount}&cu=INR`)}&color=000000&margin=10`;
+    const minDeposit = settings?.minDeposit ?? 20;
+
+    const currentPm = selectedPaymentMethodIndex >= 0 && paymentMethods[selectedPaymentMethodIndex]
+        ? paymentMethods[selectedPaymentMethodIndex]
+        : null;
+
+    const currentUpiId = currentPm?.upiId || UPI_ID;
+    const currentQrImage = currentPm?.qrImage || qrImage;
 
     const handleCopy = (text: string) => { navigator.clipboard.writeText(text); setShowCopied(true); setTimeout(() => setShowCopied(false), 2000); };
-    const openUpiApp = () => { window.location.href = `upi://pay?pa=${UPI_ID}&pn=MAFIA_CLUB&am=${amount}&cu=INR`; };
+    const openUpiApp = () => { window.location.href = `upi://pay?pa=${currentUpiId}&pn=MAFIA_CLUB&am=${amount}&cu=INR`; };
     
     const submitUtr = () => { 
         if (utr.length !== 12) { setError('Invalid 12-digit UTR'); return; } 
@@ -40,14 +64,30 @@ const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     </div>
 
                     <h3 className="text-[10px] font-black text-slate-500 mb-4 uppercase tracking-[0.3em]">Select Channel</h3>
-                    <div className="grid grid-cols-1 gap-4 mb-8">
-                        <div onClick={() => setMethod('UPI')} className={`p-6 rounded-3xl border-2 transition-all flex flex-col items-center gap-3 ${method === 'UPI' ? 'border-blue-500 bg-blue-500/10' : 'border-slate-800 bg-[#1e293b] opacity-60'}`}>
-                            <QrCode size={40} className={method === 'UPI' ? 'text-blue-400' : 'text-slate-500'}/>
-                            <span className="font-black text-xs uppercase tracking-widest">UPI Transfer</span>
+                    <div className="grid grid-cols-2 gap-3 mb-8">
+                        {/* Fallback default UPI */}
+                        <div 
+                            onClick={() => { setMethod('UPI'); setSelectedPaymentMethodIndex(-1); }} 
+                            className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 cursor-pointer ${selectedPaymentMethodIndex === -1 ? 'border-blue-500 bg-blue-500/10' : 'border-slate-800 bg-[#1e293b] opacity-60'}`}
+                        >
+                            <QrCode size={28} className={selectedPaymentMethodIndex === -1 ? 'text-blue-400' : 'text-slate-500'}/>
+                            <span className="font-black text-[10px] uppercase tracking-wider text-center">Default UPI</span>
                         </div>
+
+                        {/* Custom ones */}
+                        {paymentMethods.map((pm, index) => (
+                            <div 
+                                key={pm.id || index}
+                                onClick={() => { setMethod(pm.name as any); setSelectedPaymentMethodIndex(index); }} 
+                                className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 cursor-pointer ${selectedPaymentMethodIndex === index ? 'border-blue-500 bg-blue-500/10' : 'border-slate-800 bg-[#1e293b] opacity-60'}`}
+                            >
+                                <img src={pm.qrImage} className="w-8 h-8 object-contain bg-white rounded-lg p-0.5 shrink-0" alt={pm.name} />
+                                <span className="font-black text-[10px] uppercase tracking-wider text-center truncate max-w-[120px]">{pm.name}</span>
+                            </div>
+                        ))}
                     </div>
 
-                    <h3 className="text-[10px] font-black text-slate-500 mb-4 uppercase tracking-[0.3em]">Elite Amounts (Min ₹20)</h3>
+                    <h3 className="text-[10px] font-black text-slate-500 mb-4 uppercase tracking-[0.3em]">Elite Amounts (Min ₹{minDeposit})</h3>
                     <div className="grid grid-cols-3 gap-3 mb-6">
                         {[20, 50, 100, 500, 1000, 5000].map(a => (
                             <button key={a} onClick={() => setAmount(a)} className={`py-4 rounded-2xl font-black text-sm transition-all border ${amount === a ? 'bg-blue-600 border-white text-white' : 'bg-[#1e293b] border-slate-800 text-slate-400'}`}>₹{a}</button>
@@ -60,7 +100,7 @@ const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     </div>
 
                     <button 
-                        onClick={() => amount >= 20 ? setStep(2) : alert("Min deposit is ₹20")} 
+                        onClick={() => amount >= minDeposit ? setStep(2) : alert(`Min deposit is ₹${minDeposit}`)} 
                         className="w-full bg-gradient-to-r from-blue-600 to-blue-500 py-6 rounded-3xl font-black text-lg shadow-2xl active:scale-95 transition-all uppercase tracking-[0.4em] border-t-2 border-white/20"
                     >
                         CONTINUE
@@ -71,8 +111,10 @@ const Deposit: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             {step === 2 && (
                 <div className="p-6 animate-in slide-in-from-right">
                     <div className="bg-white p-8 rounded-[3rem] flex justify-center mb-8 shadow-2xl relative">
-                        <img src={qrImage} className="w-56 h-56 mix-blend-multiply" alt="QR" />
-                        <div className="absolute top-4 left-4 bg-blue-600 text-white px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">Elite Channel</div>
+                        <img src={currentQrImage} className="w-56 h-56 mix-blend-multiply" alt="QR" />
+                        <div className="absolute top-4 left-4 bg-blue-600 text-white px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">
+                            {currentPm ? currentPm.name : "Elite Channel"}
+                        </div>
                     </div>
 
                     <button onClick={openUpiApp} className="w-full py-5 bg-white text-black rounded-3xl font-black text-lg mb-8 flex justify-center items-center gap-3 shadow-xl active:scale-95">

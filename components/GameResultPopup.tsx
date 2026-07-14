@@ -44,7 +44,7 @@ const GameResultPopup: React.FC<{ result: GameResult | null; onClose: () => void
                     );
                 case 'Aviator':
                     return (
-                        <div className="w-[65vw] max-w-[220px] bg-red-600 rounded-2xl p-4 text-center shadow-xl relative">
+                        <div className="w-[65vw] max-w-[220px] bg-emerald-600 rounded-2xl p-4 text-center shadow-xl relative border border-emerald-500">
                             <button onClick={handleClose} className="absolute top-2 right-2 p-1 bg-black/20 rounded-full text-white/50"><X size={10}/></button>
                             <h2 className="text-sm font-black text-white italic tracking-tighter uppercase mb-1">TAKEOFF SUCCESS</h2>
                             <div className="bg-black/50 py-2 rounded-xl"><span className="text-2xl font-black text-yellow-400 italic">₹{result.amount.toFixed(2)}</span></div>
@@ -76,7 +76,7 @@ const GameResultPopup: React.FC<{ result: GameResult | null; onClose: () => void
                     return (
                         <div className="w-[70vw] max-w-[240px] bg-black border-2 border-yellow-500 rounded-[2rem] p-6 text-center shadow-2xl relative">
                             <button onClick={handleClose} className="absolute top-4 right-4 p-1.5 bg-slate-800 rounded-full text-yellow-500"><X size={12}/></button>
-                            <div className="text-4xl mb-3">🐔</div>
+                            <div className="text-4xl mb-3">🐶</div>
                             <h2 className="text-xl font-black gold-text italic uppercase mb-2 leading-none">FINISHED</h2>
                             <div className="text-2xl font-black text-white italic tracking-tighter">₹{result.amount.toFixed(2)}</div>
                         </div>
@@ -94,6 +94,16 @@ const GameResultPopup: React.FC<{ result: GameResult | null; onClose: () => void
                     );
             }
         } else {
+            if (result?.game === 'Aviator') {
+                return (
+                    <div className="w-[65vw] max-w-[220px] bg-red-600 rounded-2xl p-4 text-center shadow-xl border border-red-500 relative">
+                        <button onClick={handleClose} className="absolute top-2 right-2 p-1 bg-black/20 rounded-full text-white/50"><X size={10}/></button>
+                        <h2 className="text-sm font-black text-white italic tracking-tighter uppercase mb-1">TAKEOFF CRASHED</h2>
+                        <div className="bg-black/50 py-2 rounded-xl"><span className="text-xl font-black text-stone-200 italic">₹{result.amount.toFixed(2)} Lost</span></div>
+                    </div>
+                );
+            }
+
             return (
                 <div className="w-[70vw] max-w-[240px] bg-[#1e293b] rounded-[2rem] p-6 text-center border-t-2 border-slate-600 shadow-[0_20px_50px_rgba(0,0,0,0.8)] relative">
                     <button onClick={handleClose} className="absolute top-4 right-4 p-1.5 bg-slate-800 rounded-full border border-white/5 text-slate-400"><X size={12}/></button>

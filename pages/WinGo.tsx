@@ -1,452 +1,441 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, History as HistoryIcon, X, Wallet, Volume2, VolumeX, HelpCircle, Clock, ChevronRight, AlertCircle, RotateCcw } from 'lucide-react';
-import { WinGoGameState, GameResult, GameHistoryItem, WinGoHistory } from '../types';
-import { subscribeToWinGo, updateBalance, stopAllSounds, toggleMute, getMuteStatus, playSound, shouldForceLoss, getGameHistory, addGameHistory, subscribeToWinGoBets, db, auth, addGameBet, getClockOffset } from '../services/supabaseService';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { ArrowLeft, History, HelpCircle, X, Wallet, Volume2, VolumeX, ChevronRight, RotateCcw, Trash2 } from 'lucide-react';
+import { WinGoGameState, GameResult } from '../types';
+import { subscribeToWinGo, updateBalance, stopAllSounds, toggleMute, getMuteStatus, playSound } from '../services/supabaseService';
 
-import WinGoResultPopup from '../components/WinGoResultPopup';
-import HowToPlay from '../components/HowToPlay';
-import { useStabilizedTimer } from '../hooks/useTimer';
+interface WinGoProps {
+  onBack: () => void;
+  userBalance: number;
+  onResult: (result: GameResult) => void;
+  onDeposit: () => void;
+}
 
-const WinGo: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; setView: (v: any) => void; }> = ({ onBack, userBalance, onResult, setView }) => {
-  const [gameState, setGameState] = useState<WinGoGameState>({
-    status: 'BETTING',
-    period: new Date().getTime().toString().slice(-6),
-    endTime: Date.now() + 30000,
-    history: []
-  });
-  const localTimeLeft = useStabilizedTimer(gameState.endTime);
-  const [activeTab, setActiveTab] = useState<'History' | 'MyBets' | 'AllBets'>('History');
-  const [winGoResult, setWinGoResult] = useState<any | null>(null);
+interface PendingBet {
+    id: string;
+    target: string;
+    amount: number;
+    period: number;
+}
 
+const WinGo: React.FC<WinGoProps> = ({ onBack, userBalance, onResult, onDeposit }) => {
+  const [gameState, setGameState] = useState<WinGoGameState | null>(null);
   const [betDrawerOpen, setBetDrawerOpen] = useState(false);
   const [selectedBetTarget, setSelectedBetTarget] = useState<string | null>(null);
   const [betMoney, setBetMoney] = useState(1);
   const [betMultiplier, setBetMultiplier] = useState(1);
+  const [customAmount, setCustomAmount] = useState('');
   const [muted, setMuted] = useState(getMuteStatus());
-  const [showBalanceError, setShowBalanceError] = useState(false);
-  const [myBets, setMyBets] = useState<any[]>([]);
-  const [myHistory, setMyHistory] = useState<GameHistoryItem[]>([]);
-  const [allBets, setAllBets] = useState<any[]>([]);
-  const [showHelp, setShowHelp] = useState(false);
-
+  const [winAnimation, setWinAnimation] = useState<{amount: number, show: boolean, animate: boolean}>({amount: 0, show: false, animate: false});
+  const [betAnimation, setBetAnimation] = useState<{amount: number, show: boolean}>({amount: 0, show: false});
+  const [pendingBets, setPendingBets] = useState<PendingBet[]>([]);
+  
   const isMounted = useRef(true);
+  const lastTickRef = useRef(0);
 
-  // Initial Fake History
   useEffect(() => {
-    const fakeHistory: WinGoHistory[] = [];
-    for (let i = 0; i < 20; i++) {
-        const n = Math.floor(Math.random() * 10);
-        fakeHistory.push({
-            period: (parseInt(gameState.period) - i - 1).toString(),
-            number: n,
-            bigSmall: n >= 5 ? 'Big' : 'Small',
-            color: n === 0 || n === 5 ? 'Violet' : [1, 3, 7, 9].includes(n) ? 'Green' : 'Red'
-        });
-    }
-    setGameState(prev => ({ ...prev, history: fakeHistory }));
-
-    const unsubHistory = getGameHistory('WinGo', (data) => {
-        if(isMounted.current) setMyHistory(data);
-    });
-    return () => { isMounted.current = false; unsubHistory(); stopAllSounds(); };
+    isMounted.current = true;
+    return () => {
+        isMounted.current = false;
+        stopAllSounds();
+    };
   }, []);
 
-  // Local Game Engine
   useEffect(() => {
-    const interval = setInterval(() => {
-        const now = Date.now();
-        if (gameState.status === 'BETTING') {
-            if (now >= gameState.endTime - 5000) {
-                // LOCK BETS / REVEALING
-                setGameState(prev => ({ ...prev, status: 'REVEALING' }));
-                handleRevealing();
-            } else if (localTimeLeft <= 5 && localTimeLeft > 0) {
-                playSound('wingo_tick');
+    const unsubscribe = subscribeToWinGo((state) => {
+        if (!isMounted.current) return; 
+
+        setGameState(state);
+        
+        if (state.timeLeft <= 5 && state.timeLeft > 0 && state.status === 'BETTING' && state.timeLeft !== lastTickRef.current) {
+            playSound('tick');
+            lastTickRef.current = state.timeLeft;
+        }
+
+        if (state.status === 'REVEALING') {
+            setBetDrawerOpen(false);
+        }
+        
+        if (state.status === 'REVEALING' && state.lastResult) {
+            const res = state.lastResult;
+            const currentRoundBets = pendingBets.filter(b => b.period.toString() === res.period);
+            
+            if (currentRoundBets.length > 0) {
+                let totalWin = 0;
+                let totalBetAmount = 0;
+                let win = false;
+                const details: any[] = [];
+
+                currentRoundBets.forEach(bet => {
+                    const { target, amount } = bet;
+                    totalBetAmount += amount;
+                    let betWin = false;
+                    let multiplier = 0;
+
+                    if (target === 'Green') {
+                        if ([1, 3, 5, 7, 9].includes(res.number)) {
+                            betWin = true;
+                            multiplier = res.number === 5 ? 1.5 : 2; 
+                        }
+                    } 
+                    else if (target === 'Red') {
+                        if ([0, 2, 4, 6, 8].includes(res.number)) {
+                            betWin = true;
+                            multiplier = res.number === 0 ? 1.5 : 2; 
+                        }
+                    }
+                    else if (target === 'Violet') {
+                        if ([0, 5].includes(res.number)) {
+                            betWin = true;
+                            multiplier = 4.5;
+                        }
+                    }
+                    else if (target === 'Big' && res.bigSmall === 'Big') {
+                        betWin = true;
+                        multiplier = 2;
+                    }
+                    else if (target === 'Small' && res.bigSmall === 'Small') {
+                        betWin = true;
+                        multiplier = 2;
+                    }
+                    else if (target === res.number.toString()) {
+                        betWin = true;
+                        multiplier = 9;
+                    }
+
+                    if (betWin) {
+                        win = true;
+                        totalWin += amount * multiplier;
+                    }
+                });
+
+                if (totalWin > 0) {
+                     updateBalance(totalWin, 'WIN', 'WinGo Win');
+                     if (isMounted.current) {
+                         setWinAnimation({ amount: totalWin, show: true, animate: false });
+                         setTimeout(() => {
+                            if(isMounted.current) setWinAnimation({ amount: totalWin, show: true, animate: true });
+                         }, 50);
+                         
+                         setTimeout(() => {
+                             if(isMounted.current) setWinAnimation({ amount: 0, show: false, animate: false })
+                         }, 2500);
+                     }
+                }
+
+                if (isMounted.current) {
+                    onResult({
+                        win: win,
+                        amount: win ? totalWin : totalBetAmount, 
+                        game: 'WinGo',
+                        period: res.period.toString(),
+                        resultDetails: [
+                            { label: 'Number', value: res.number.toString(), color: getBallColor(res.number).split(' ')[0] },
+                            { label: 'Size', value: res.bigSmall, color: res.bigSmall === 'Big' ? 'bg-yellow-500' : 'bg-blue-500' }
+                        ]
+                    });
+                    setPendingBets(prev => prev.filter(b => b.period.toString() !== res.period));
+                }
             }
         }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [gameState.status, gameState.endTime, localTimeLeft]);
-
-  async function handleRevealing() {
-    playSound('wingo_draw');
-    await new Promise(r => setTimeout(r, 2000));
-    if (!isMounted.current) return;
-
-    const num = Math.floor(Math.random() * 10);
-    const bigSmall = num >= 5 ? 'Big' : 'Small';
-    const colorFinal = num === 0 || num === 5 ? 'Violet' : [1, 3, 7, 9].includes(num) ? 'Green' : 'Red';
-
-    const result: WinGoHistory = {
-        period: gameState.period,
-        number: num,
-        bigSmall,
-        color: colorFinal
-    };
-
-    processUserResult(result);
-
-    // Reset for next round
-    setGameState(prev => ({
-        status: 'BETTING',
-        period: (parseInt(prev.period) + 1).toString(),
-        endTime: Date.now() + 30000,
-        history: [result, ...prev.history].slice(0, 50)
-    }));
-    setMyBets([]);
-    setAllBets([]);
-  }
-
-  function processUserResult(result: any) {
-    const num = result.number;
-    const bS = result.bigSmall;
-    let totalWin = 0;
-    let totalBet = 0;
-    let hasWin = false;
-
-    // Fixed Win/Loss features - ensure all checks are robust
-    myBets.forEach(bet => {
-        totalBet += bet.amount;
-        let betWin = false, mult = 0;
-        
-        const isNum0 = num === 0;
-        const isNum5 = num === 5;
-
-        // Color Logic
-        if (bet.target === 'Green') {
-            if ([1, 3, 7, 9].includes(num)) { betWin = true; mult = 2; }
-            else if (isNum5) { betWin = true; mult = 1.5; }
-        }
-        else if (bet.target === 'Red') {
-            if ([2, 4, 6, 8].includes(num)) { betWin = true; mult = 2; }
-            else if (isNum0) { betWin = true; mult = 1.5; }
-        }
-        else if (bet.target === 'Violet') {
-            if ([0, 5].includes(num)) { betWin = true; mult = 4.5; }
-        }
-        // Size Logic
-        else if (bet.target === 'Big' && bS === 'Big') { betWin = true; mult = 2; }
-        else if (bet.target === 'Small' && bS === 'Small') { betWin = true; mult = 2; }
-        // Number Logic
-        else if (bet.target === num.toString()) { betWin = true; mult = 9; }
-
-        if (betWin) {
-            hasWin = true;
-            totalWin += bet.amount * mult;
-        }
     });
+    return () => unsubscribe();
+  }, [pendingBets]); 
 
-    if (totalWin > 0) {
-        updateBalance(totalWin, 'WIN', 'WinGo Win');
-        playSound('win');
-    }
-    if (totalBet > 0) {
-        addGameHistory('WinGo', totalBet, totalWin, `P:${result.period} | Result:${num}`);
-        setWinGoResult({
-            win: hasWin,
-            amount: hasWin ? totalWin : 0,
-            period: result.period,
-            number: num,
-            bigSmall: bS,
-            color: result.color,
-            target: myBets.map(b => b.target).join(', ')
-        });
-        
-        // Trigger result popup with delay for impact
-        setTimeout(() => {
-            onResult({ 
-                win: hasWin, 
-                amount: totalWin, 
-                game: 'WinGo',
-                resultDetails: [
-                    { label: 'Period', value: result.period },
-                    { label: 'Result', value: `${num} (${bS})`, color: result.color === 'Green' ? 'text-green-500' : result.color === 'Red' ? 'text-red-500' : 'text-purple-500' }
-                ]
-            });
-        }, 300);
-    }
-  }
+  if (!gameState) return <div className="min-h-screen bg-[#0f172a] flex items-center justify-center text-white font-black animate-pulse uppercase tracking-widest">Syncing Casino State...</div>;
 
-  const confirmBet = async () => {
-      const total = betMoney * betMultiplier;
-      if (total > userBalance) { 
-          setShowBalanceError(true); 
-          setTimeout(() => setShowBalanceError(false), 3000); 
-          return; 
+  const { timeLeft, period, history, status } = gameState;
+
+  const openBetDrawer = (target: string) => {
+      if (status !== 'BETTING') return;
+      if (timeLeft < 5) return;
+      setSelectedBetTarget(target);
+      setBetDrawerOpen(true);
+      setBetMoney(1);
+      setBetMultiplier(1);
+      setCustomAmount('');
+  };
+
+  const confirmBet = () => {
+      let baseAmount = betMoney;
+      if (customAmount && !isNaN(parseFloat(customAmount))) {
+          baseAmount = parseFloat(customAmount);
       }
       
-      try {
-          const betData = {
-              target: selectedBetTarget,
-              amount: total,
-              period: gameState.period,
-              id: Date.now(),
-              username: 'You',
-              timestamp: Date.now()
-          };
-          
-          setMyBets(prev => [betData, ...prev]);
-          setAllBets(prev => [betData, ...prev]);
-          updateBalance(-total, 'BET', `WinGo Stake: ${selectedBetTarget}`);
-          setBetDrawerOpen(false);
-          playSound('bet_place');
-      } catch (e) {
-          console.error("WinGo bet error:", e);
+      const totalAmount = baseAmount * betMultiplier;
+      if (totalAmount > userBalance) {
+          alert("Insufficient Balance!");
+          return;
+      }
+      if (totalAmount <= 0) return;
+
+      updateBalance(-totalAmount);
+      setBetDrawerOpen(false);
+      setPendingBets(prev => [...prev, { 
+          id: Math.random().toString(36).substr(2, 9),
+          target: selectedBetTarget!, 
+          amount: totalAmount, 
+          period: gameState!.period 
+      }]);
+      setBetAnimation({ amount: totalAmount, show: true });
+      setTimeout(() => {
+          if (isMounted.current) setBetAnimation({ amount: 0, show: false })
+      }, 800);
+  };
+
+  const cancelBet = (betId: string) => {
+      const bet = pendingBets.find(b => b.id === betId);
+      if (bet) {
+          updateBalance(bet.amount, 'GIFT', 'Bet Refund'); // Refund as gift/balance
+          setPendingBets(prev => prev.filter(b => b.id !== betId));
+          playSound('click');
       }
   };
 
-  const cancelLastBet = async () => {
-      if (myBets.length === 0 || isBetLocked) return;
-      const lastBet = myBets[0];
-      setMyBets(prev => prev.slice(1));
-      setAllBets(prev => prev.filter(b => b.id !== lastBet.id));
-      updateBalance(lastBet.amount, 'WIN', 'Bet Cancelled');
-      playSound('click');
+  const getBallColor = (num: number) => {
+      if (num === 0) return 'bg-gradient-to-br from-purple-500 to-red-500'; 
+      if (num === 5) return 'bg-gradient-to-br from-green-500 to-purple-500'; 
+      if ([1,3,7,9].includes(num)) return 'bg-green-500';
+      return 'bg-red-500';
+  }
+
+  const getTargetColor = (target: string | null) => {
+      if (!target) return 'bg-blue-600';
+      if (target === 'Green') return 'bg-green-600';
+      if (target === 'Red') return 'bg-red-600';
+      if (target === 'Violet') return 'bg-purple-600';
+      if (target === 'Big') return 'bg-yellow-500';
+      if (target === 'Small') return 'bg-blue-500';
+      if (!isNaN(Number(target))) return getBallColor(Number(target));
+      return 'bg-blue-600';
   };
 
-  if (!gameState) return <div className="min-h-screen bg-[#0f172a] flex items-center justify-center text-white italic font-black uppercase tracking-widest">Entering Arena...</div>;
-  
-  const isBetLocked = localTimeLeft <= 5;
-  const getBallColor = (n: number) => n===0?'bg-purple-500':n===5?'bg-purple-500':[1,3,7,9].includes(n)?'bg-green-500':'bg-red-500';
-
   return (
-    <div className="bg-[#0f172a] min-h-screen pb-24 relative font-sans select-none overflow-x-hidden">
-      <WinGoResultPopup result={winGoResult} onClose={() => setWinGoResult(null)} />
-      <HowToPlay 
-          isOpen={showHelp} 
-          onClose={() => setShowHelp(false)} 
-          title="WinGo Rules"
-          rules={[
-              "Predict the number (0-9), size (Big/Small), or color (Red/Green/Violet).",
-              "Green: 1, 3, 7, 9. Red: 2, 4, 6, 8. Violet: 0, 5.",
-              "Small: 0-4. Big: 5-9.",
-              "Bets are locked when the timer reaches 5 seconds.",
-              "Calculated based on standard lottery rules."
-          ]}
-          payouts={[
-              { label: "Number (0-9)", value: "9.0x" },
-              { label: "Big / Small", value: "2.0x" },
-              { label: "Color (R/G)", value: "2.0x" },
-              { label: "Violet (0/5)", value: "4.5x" }
-          ]}
-      />
-      {/* Insufficient Balance Popup */}
-      {showBalanceError && (
-          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] bg-red-600 px-6 py-3 rounded-full shadow-2xl flex items-center gap-3 border border-red-400 animate-in slide-in-from-top-4">
-              <AlertCircle className="text-white" size={20}/>
-              <span className="font-black text-xs uppercase tracking-widest">Insufficient Balance!</span>
+    <div className="bg-[#0f172a] min-h-screen pb-24 relative font-sans w-full max-w-md mx-auto border-x border-slate-800/80 shadow-[0_0_100px_rgba(0,0,0,0.8)]">
+      {/* HUD Overlays */}
+      {betAnimation.show && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none">
+              <div className="transform transition-all duration-500 animate-[ping_0.8s_ease-out_1] flex flex-col items-center">
+                   <div className="text-5xl font-black text-red-500 drop-shadow-lg">-₹{betAnimation.amount}</div>
+              </div>
           </div>
       )}
 
-      <div className="bg-[#1e293b] p-4 sticky top-0 z-20 flex justify-between items-center border-b border-white/5 shadow-xl">
-        <div className="flex items-center gap-3">
-            <button onClick={onBack} className="p-2 bg-slate-800 rounded-xl"><ArrowLeft size={20} /></button>
-            <h1 className="text-lg font-black italic gold-text uppercase">WINGO 30S</h1>
-        </div>
-        <div className="flex gap-2">
-            <button onClick={() => setShowHelp(true)} className="p-2 bg-slate-800 rounded-xl text-yellow-500">
-                <HelpCircle size={20} />
-            </button>
-            <button onClick={()=>{setMuted(toggleMute())}} className="p-2 bg-slate-800 rounded-xl">
-                {muted?<VolumeX size={20} className="text-slate-400"/>:<Volume2 size={20} className="text-slate-400"/>}
-            </button>
-        </div>
-      </div>
-
-      <div className="bg-[#1e293b] m-4 p-5 rounded-[2rem] flex justify-between items-center shadow-xl border border-white/5">
-          <div className="flex items-center gap-4">
-              <div className="bg-yellow-500 p-3 rounded-2xl text-slate-900 shadow-lg"><Wallet size={24} /></div>
-              <div>
-                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Balance</p>
-                  <h2 className="text-2xl font-black text-white italic">₹{userBalance.toFixed(2)}</h2>
+      {winAnimation.show && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+              <div className={`flex flex-col items-center transform transition-all duration-1000 ease-out ${winAnimation.animate ? 'scale-150 opacity-0 translate-y-[-50px]' : 'scale-50 opacity-100 translate-y-0'}`}>
+                   <h1 className="text-7xl font-black text-yellow-400" style={{ WebkitTextStroke: '2px black' }}>+₹{winAnimation.amount.toFixed(2)}</h1>
+                   <div className="text-yellow-200 font-bold text-2xl uppercase tracking-[0.2em] mt-2 bg-black/40 px-6 py-1 rounded-full backdrop-blur-sm">WINNER</div>
               </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => setView('DEPOSIT')} className="px-5 py-2 bg-blue-600 rounded-xl text-[10px] font-black uppercase text-white shadow-lg active:scale-95 transition-all">Deposit</button>
+      )}
+
+      {/* Header */}
+      <div className="bg-[#1e293b] p-4 sticky top-0 z-20 shadow-lg flex justify-between items-center border-b border-slate-700">
+          <div className="flex items-center gap-3">
+            <button onClick={onBack} className="p-2 hover:bg-slate-700 rounded-full transition-colors"><ArrowLeft className="text-white" size={20} /></button>
+            <h1 className="text-lg font-black italic tracking-tighter text-white">Win Go 30s</h1>
           </div>
+          <button onClick={() => setMuted(toggleMute())} className="p-2 bg-slate-800 rounded-full">
+            {muted ? <VolumeX className="text-slate-400" size={18}/> : <Volume2 className="text-slate-400" size={18}/>}
+          </button>
       </div>
-      
-      <div className="p-6 bg-gradient-to-br from-blue-900 to-[#0f172a] m-4 rounded-[2.5rem] flex flex-col items-center border border-white/5 shadow-2xl relative overflow-hidden">
-         <div className="absolute top-0 right-0 p-20 bg-blue-500/10 rounded-full blur-3xl -mr-10 -mt-10"></div>
-         <div className="text-center w-full relative z-10">
-            <div className="text-[10px] text-blue-200 uppercase font-black tracking-[0.3em] mb-4">Period: {gameState.period}</div>
-            <div className={`text-6xl font-black font-mono tracking-tighter flex justify-center gap-2 ${(isBetLocked || (localTimeLeft === 0 && gameState.status === 'BETTING')) ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+
+      {/* Balance Bar */}
+      <div className="bg-[#1e293b] m-4 p-4 rounded-2xl border border-slate-700 flex justify-between items-center shadow-xl">
+          <div className="flex items-center gap-4">
+              <div className="bg-yellow-500 p-2.5 rounded-xl text-slate-900 shadow-lg shadow-yellow-500/20"><Wallet size={20} /></div>
+              <div>
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Total Balance</p>
+                  <h2 className="text-2xl font-black text-white">₹{userBalance.toFixed(2)}</h2>
+              </div>
+          </div>
+          <button onClick={onDeposit} className="px-5 py-2 bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl text-xs font-black uppercase text-white shadow-lg active:scale-95 transition-transform">Deposit</button>
+      </div>
+
+      {/* Timer Card */}
+      <div className="p-6 bg-gradient-to-br from-blue-900 to-[#0f172a] m-4 rounded-3xl relative overflow-hidden shadow-2xl flex flex-col justify-center items-center text-white min-h-[160px] border border-white/5">
+          <div className="absolute top-0 right-0 p-20 bg-blue-500/5 rounded-full blur-3xl -mr-10 -mt-10"></div>
+          <p className="text-[10px] text-blue-200 uppercase font-black tracking-[0.3em] mb-4">Period ID: {period}</p>
+          {status === 'BETTING' ? (
+              <div className="text-6xl font-black font-mono tracking-tighter flex gap-2">
                 <span className="bg-black/40 px-3 py-1 rounded-xl">0</span>
                 <span className="bg-black/40 px-3 py-1 rounded-xl">0</span>
                 <span className="text-blue-500">:</span>
-                <span className="bg-black/40 px-3 py-1 rounded-xl">{localTimeLeft < 10 ? '0' : Math.floor(localTimeLeft/10)}</span>
-                <span className="bg-black/40 px-3 py-1 rounded-xl">{localTimeLeft % 10}</span>
-            </div>
-            {localTimeLeft === 0 && gameState.status === 'BETTING' && (
-                <div className="text-[10px] text-red-500 font-black uppercase mt-2 animate-bounce">Calculating Result...</div>
-            )}
-            <div className="flex gap-1.5 justify-center mt-6 overflow-x-auto no-scrollbar">
-                {(gameState.history || []).slice(0, 8).map((h, i) => (
-                    <div key={i} className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black text-white shadow-lg shrink-0 ${getBallColor(h.number)}`}>{h.number}</div>
-                ))}
-            </div>
-         </div>
-      </div>
-
-      <div className="bg-[#1e293b] rounded-t-[3.5rem] p-8 shadow-[0_-20px_60px_rgba(0,0,0,0.5)] border-t border-white/5 min-h-[600px]">
-          <div className="flex gap-3 mb-8">
-              <button disabled={isBetLocked} onClick={()=>{setSelectedBetTarget('Green');setBetDrawerOpen(true)}} className="flex-1 py-4 rounded-2xl bg-green-600 font-black uppercase text-xs text-white shadow-lg active:scale-95 disabled:opacity-30">Green</button>
-              <button disabled={isBetLocked} onClick={()=>{setSelectedBetTarget('Violet');setBetDrawerOpen(true)}} className="flex-1 py-4 rounded-2xl bg-purple-600 font-black uppercase text-xs text-white shadow-lg active:scale-95 disabled:opacity-30">Violet</button>
-              <button disabled={isBetLocked} onClick={()=>{setSelectedBetTarget('Red');setBetDrawerOpen(true)}} className="flex-1 py-4 rounded-2xl bg-red-600 font-black uppercase text-xs text-white shadow-lg active:scale-95 disabled:opacity-30">Red</button>
-          </div>
-          <div className="grid grid-cols-5 gap-4 mb-8 bg-[#0a0f1d] p-6 rounded-[2.5rem] shadow-inner border border-white/5">
-              {[0,1,2,3,4,5,6,7,8,9].map(n=><button disabled={isBetLocked} key={n} onClick={()=>{setSelectedBetTarget(n.toString());setBetDrawerOpen(true)}} className={`aspect-square rounded-full flex items-center justify-center text-xl font-black text-white active:scale-90 transition-all disabled:opacity-30 shadow-lg border-2 border-white/5 ${getBallColor(n)}`}>{n}</button>)}
-          </div>
-          <div className="flex gap-4 mb-10">
-              <button disabled={isBetLocked} onClick={()=>{setSelectedBetTarget('Big');setBetDrawerOpen(true)}} className="flex-1 py-4 rounded-2xl bg-yellow-500 font-black uppercase text-xs text-slate-900 shadow-lg active:scale-95 disabled:opacity-30">BIG</button>
-              <button disabled={isBetLocked} onClick={()=>{setSelectedBetTarget('Small');setBetDrawerOpen(true)}} className="flex-1 py-4 rounded-2xl bg-blue-600 font-black uppercase text-xs text-white shadow-lg active:scale-95 disabled:opacity-30">SMALL</button>
-          </div>
-
-          <div className="mt-4 pb-20">
-              <div className="flex bg-[#0a0f1d] p-1 rounded-2xl mb-8 border border-white/5 relative">
-                  <button onClick={() => setActiveTab('History')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'History' ? 'bg-yellow-500 text-black shadow-lg' : 'text-slate-500'}`}>Game Logs</button>
-                  <button onClick={() => setActiveTab('AllBets')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'AllBets' ? 'bg-yellow-500 text-black shadow-lg' : 'text-slate-500'}`}>All Bets</button>
-                  <button onClick={() => setActiveTab('MyBets')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'MyBets' ? 'bg-yellow-500 text-black shadow-lg' : 'text-slate-500'}`}>My Record</button>
+                <span className="bg-black/40 px-3 py-1 rounded-xl">{timeLeft < 10 ? `0` : Math.floor(timeLeft/10)}</span>
+                <span className="bg-black/40 px-3 py-1 rounded-xl">{timeLeft % 10}</span>
               </div>
-
-              {activeTab === 'History' ? (
-                  <div className="bg-[#0a0f1d] rounded-3xl overflow-hidden border border-white/5">
-                      <table className="w-full text-[11px]">
-                          <thead className="bg-[#1e293b] text-slate-400 font-black uppercase">
-                              <tr>
-                                  <th className="py-3 pl-4 text-left">Period</th>
-                                  <th className="py-3 text-center">Num</th>
-                                  <th className="py-3 text-center">Size</th>
-                                  <th className="py-3 pr-4 text-right">Color</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/5">
-                              {(gameState.history || []).map((h, i) => (
-                                  <tr key={i} className="hover:bg-white/5">
-                                      <td className="py-3 pl-4 text-slate-500 font-mono">{h.period}</td>
-                                      <td className="py-3 text-center">
-                                          <div className={`w-6 h-6 rounded-full inline-flex items-center justify-center font-black text-white shadow-md ${getBallColor(h.number)}`}>
-                                              {h.number}
-                                          </div>
-                                      </td>
-                                      <td className="py-3 text-center">
-                                          <span className={`font-black uppercase ${h.bigSmall === 'Big' ? 'text-yellow-500' : 'text-blue-500'}`}>
-                                              {h.bigSmall.charAt(0)}
-                                          </span>
-                                      </td>
-                                      <td className="py-3 pr-4 text-right">
-                                          <div className="flex justify-end gap-1">
-                                              {h.color === 'Violet' ? (
-                                                  <><div className="w-2 h-2 rounded-full bg-purple-500"></div><div className="w-2 h-2 rounded-full bg-red-500"></div></>
-                                              ) : (
-                                                  <div className={`w-2 h-2 rounded-full ${h.color === 'Green' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                              )}
-                                          </div>
-                                      </td>
-                                  </tr>
-                              ))}
-                          </tbody>
-                      </table>
-                  </div>
-              ) : activeTab === 'AllBets' ? (
-                  <div className="space-y-3">
-                      {allBets.map((b, i) => (
-                          <div key={b.id || `wingo-all-${i}-${b.uid}`} className="bg-[#111827] p-4 rounded-2xl border border-white/5 flex justify-between items-center">
-                              <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[10px] font-black text-white shadow-lg">
-                                      {b.username?.charAt(0).toUpperCase() || 'U'}
-                                  </div>
-                                  <div>
-                                      <div className="text-[10px] font-black text-white uppercase tracking-tighter italic">{b.username || 'Anonymous'}</div>
-                                      <div className="text-[8px] text-slate-500 font-bold uppercase">Bet on {b.target}</div>
-                                  </div>
-                              </div>
-                              <div className="text-right">
-                                  <div className="text-sm font-black text-yellow-500">₹{b.amount}</div>
-                                  <div className="text-[8px] text-slate-600 font-bold uppercase">{new Date(b.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}</div>
-                              </div>
-                          </div>
-                      ))}
-                  </div>
-              ) : (
-                  <div className="space-y-4">
-                      {myBets.map((pb, i) => (
-                          <div key={`p-${i}`} className="bg-blue-600/10 p-5 rounded-[1.5rem] border border-blue-500/20 flex justify-between items-center animate-pulse">
-                              <div>
-                                  <div className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Period: {pb.period}</div>
-                                  <div className="text-[8px] text-slate-500 font-bold mt-1 uppercase">Target: {pb.target}</div>
-                              </div>
-                              <div className="text-right">
-                                  <div className="text-lg font-black text-yellow-500">₹{pb.amount}</div>
-                                  <div className="text-[8px] text-yellow-500/50 font-black uppercase">Staking...</div>
-                              </div>
-                          </div>
-                      ))}
-                      
-                      {(myHistory || []).length > 0 ? myHistory.map((item, i) => (
-                          <div key={i} className="bg-black/20 p-5 rounded-[1.5rem] border border-white/5 flex justify-between items-center">
-                              <div>
-                                  <div className="text-[10px] font-black text-white uppercase tracking-tighter italic">{item.details.split(' | ')[0]}</div>
-                                  <div className="text-[9px] text-slate-600 font-bold mt-1">{item.date}</div>
-                              </div>
-                              <div className="text-right">
-                                  <div className={`text-lg font-black ${item.win > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                      {item.win > 0 ? `+₹${item.win.toFixed(2)}` : `-₹${item.amount.toFixed(2)}`}
-                                  </div>
-                                  <div className="text-[8px] text-slate-700 font-black uppercase">{item.win > 0 ? 'Success' : 'Settled'}</div>
-                              </div>
-                          </div>
-                      )) : myBets.length === 0 && (
-                          <div className="text-center py-20 text-slate-700 font-black uppercase text-[10px] italic tracking-widest">Empty Archives</div>
-                      )}
-                  </div>
-              )}
+          ) : (
+              <div className="text-3xl font-black text-yellow-400 animate-pulse tracking-widest uppercase">REVEALING...</div>
+          )}
+          
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 opacity-60">
+              {history.slice(0, 8).map((h, i) => (
+                  <div key={i} className={`w-5 h-5 rounded-full border border-white/20 flex items-center justify-center text-[8px] font-black shadow-lg ${getBallColor(h.number)}`}>{h.number}</div>
+              ))}
           </div>
       </div>
 
+      {/* Betting Zone */}
+      <div className="bg-[#1e293b] rounded-t-[3rem] p-6 mt-6 shadow-[0_-10px_40px_rgba(0,0,0,0.4)] border-t border-slate-700/50 relative z-10 pb-12">
+        <div className="flex justify-between gap-3 mb-8">
+            <button onClick={() => openBetDrawer('Green')} className="flex-1 py-4 rounded-2xl bg-green-600 font-black uppercase text-xs text-white shadow-lg active:scale-95 transition-all shadow-green-900/40">Green</button>
+            <button onClick={() => openBetDrawer('Violet')} className="flex-1 py-4 rounded-2xl bg-purple-600 font-black uppercase text-xs text-white shadow-lg active:scale-95 transition-all shadow-purple-900/40">Violet</button>
+            <button onClick={() => openBetDrawer('Red')} className="flex-1 py-4 rounded-2xl bg-red-600 font-black uppercase text-xs text-white shadow-lg active:scale-95 transition-all shadow-red-900/40">Red</button>
+        </div>
+
+        <div className="grid grid-cols-5 gap-4 mb-8 bg-[#0f172a] p-6 rounded-[2rem] shadow-inner border border-slate-700/30">
+            {[0,1,2,3,4,5,6,7,8,9].map((num) => (
+                <button key={num} onClick={() => openBetDrawer(num.toString())} className={`aspect-square rounded-full flex items-center justify-center text-xl font-black text-white border-2 border-white/5 active:scale-90 transition-all shadow-lg ${getBallColor(num)}`}>{num}</button>
+            ))}
+        </div>
+
+        <div className="flex gap-4 mb-10">
+            <button onClick={() => openBetDrawer('Big')} className="flex-1 py-4 bg-yellow-500 rounded-2xl font-black uppercase text-sm text-slate-900 shadow-lg active:scale-95 transition-all shadow-yellow-900/20">Big</button>
+            <button onClick={() => openBetDrawer('Small')} className="flex-1 py-4 bg-blue-500 rounded-2xl font-black uppercase text-sm text-white shadow-lg active:scale-95 transition-all shadow-blue-900/20">Small</button>
+        </div>
+        
+        {/* Active Bets Section (Refund enabled) */}
+        {pendingBets.length > 0 && (
+            <div className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <h3 className="text-white font-black text-sm uppercase tracking-widest mb-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse"></div>
+                    My Current Stakes
+                  </div>
+                  <span className="text-[9px] text-slate-500 italic">Cancellable during betting phase</span>
+                </h3>
+                <div className="space-y-3">
+                    {pendingBets.map((bet) => (
+                        <div key={bet.id} className="bg-[#0f172a] border border-slate-700/50 rounded-2xl p-4 flex justify-between items-center shadow-md">
+                            <div className="flex items-center gap-4">
+                                <div className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase text-white shadow-md ${getTargetColor(bet.target)}`}>{bet.target}</div>
+                                <div>
+                                    <div className="text-[10px] text-slate-500 font-bold uppercase">Period: {bet.period}</div>
+                                    <div className="font-black text-white">₹{bet.amount}</div>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => cancelBet(bet.id)}
+                                className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500/20 transition-all active:scale-90"
+                                title="Cancel Bet"
+                            >
+                                <RotateCcw size={18} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )}
+
+        {/* Original Detailed History Table */}
+        <div className="mb-20">
+            <div className="flex items-center justify-between mb-4 px-2">
+              <h3 className="text-white font-black text-sm uppercase tracking-widest flex items-center gap-2">
+                <History size={18} className="text-yellow-500"/>
+                Game Record
+              </h3>
+              <div className="text-slate-500 text-[10px] font-black uppercase flex items-center gap-1">Details <ChevronRight size={12}/></div>
+            </div>
+            
+            <div className="bg-[#0f172a] rounded-3xl overflow-hidden border border-slate-700/50 shadow-inner">
+                <table className="w-full text-[11px]">
+                    <thead className="bg-[#1e293b] text-slate-400 font-black uppercase border-b border-slate-700">
+                        <tr>
+                            <th className="py-3 pl-4 text-left">Period</th>
+                            <th className="py-3 text-center">Number</th>
+                            <th className="py-3 text-center">Size</th>
+                            <th className="py-3 pr-4 text-right">Color</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/50">
+                        {history.slice(0, 15).map((h, i) => (
+                            <tr key={i} className="hover:bg-white/5 transition-colors">
+                                <td className="py-3 pl-4 text-slate-500 font-mono">{h.period}</td>
+                                <td className="py-3 text-center">
+                                    <div className={`w-6 h-6 rounded-full inline-flex items-center justify-center font-black text-white shadow-md ${getBallColor(h.number)}`}>
+                                        {h.number}
+                                    </div>
+                                </td>
+                                <td className="py-3 text-center">
+                                    <span className={`font-black uppercase ${h.bigSmall === 'Big' ? 'text-yellow-500' : 'text-blue-500'}`}>
+                                        {h.bigSmall === 'Big' ? 'B' : 'S'}
+                                    </span>
+                                </td>
+                                <td className="py-3 pr-4 text-right">
+                                    <div className="flex justify-end gap-1">
+                                        {h.color === 'Violet' ? (
+                                            <><div className="w-2 h-2 rounded-full bg-purple-500"></div><div className="w-2 h-2 rounded-full bg-red-500"></div></>
+                                        ) : (
+                                            <div className={`w-2 h-2 rounded-full ${h.color === 'Green' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                        )}
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+      </div>
+
+      {/* Bet Confirm Modal with Custom Amount */}
       {betDrawerOpen && (
-          <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/85 backdrop-blur-md">
-            <div className="w-full max-w-md bg-[#1e293b] rounded-t-[3.5rem] p-10 shadow-2xl animate-in slide-in-from-bottom border-t border-white/10">
-                <div className="flex justify-between items-center mb-10">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-md">
+            <div className="w-full max-w-md bg-[#1e293b] rounded-t-[3rem] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 border-t border-slate-700">
+                <div className="flex justify-between items-center mb-8">
                     <div>
                       <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Confirming Stake</p>
-                      <h3 className="text-white font-black text-3xl italic gold-text uppercase">ON {selectedBetTarget}</h3>
+                      <h3 className="text-white font-black text-2xl italic tracking-tighter">Stake on {selectedBetTarget}</h3>
                     </div>
-                    <button onClick={() => setBetDrawerOpen(false)} className="p-4 bg-slate-800 rounded-full active:scale-90"><X size={26}/></button>
+                    <button onClick={() => setBetDrawerOpen(false)} className="p-3 bg-slate-800 rounded-full border border-slate-700 hover:bg-slate-700 transition-colors"><X size={20} className="text-slate-400"/></button>
                 </div>
-                <div className="space-y-8">
-                    <div className="grid grid-cols-4 gap-3">
-                        {[1, 10, 100, 1000].map(amt => (
-                            <button key={amt} onClick={() => setBetMoney(amt)} className={`py-4 rounded-2xl font-black text-sm transition-all border-2 ${betMoney === amt ? 'bg-blue-600 border-white text-white shadow-xl scale-105' : 'bg-[#0f172a] border-white/5 text-slate-500'}`}>₹{amt}</button>
-                        ))}
+
+                <div className="space-y-6">
+                    <div>
+                      <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-3 ml-1">Select Unit</p>
+                      <div className="flex gap-2 mb-4">
+                          {[1, 10, 100, 1000].map(amt => (
+                              <button key={amt} onClick={() => { setBetMoney(amt); setCustomAmount(''); }} className={`flex-1 py-3 rounded-xl font-black text-xs transition-all border ${betMoney === amt && !customAmount ? 'bg-blue-600 border-blue-400 text-white shadow-lg' : 'bg-[#0f172a] border-slate-800 text-slate-500 hover:text-slate-300'}`}>₹{amt}</button>
+                          ))}
+                      </div>
+                      
+                      <div className="relative">
+                          <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest absolute -top-2 left-4 bg-[#1e293b] px-2">Custom Amount</label>
+                          <input 
+                            type="number"
+                            placeholder="Enter custom stake amount"
+                            value={customAmount}
+                            onChange={(e) => {
+                                setCustomAmount(e.target.value);
+                                setBetMoney(0);
+                            }}
+                            className="w-full bg-[#0f172a] border border-slate-700 rounded-2xl p-4 text-white font-black text-lg focus:border-blue-500 outline-none shadow-inner"
+                          />
+                      </div>
                     </div>
-                    <div className="bg-[#0f172a] p-6 rounded-[2rem] flex items-center justify-between border border-white/5 shadow-inner">
-                        <button onClick={() => setBetMultiplier(Math.max(1, betMultiplier - 1))} className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center font-black text-2xl border border-white/5">-</button>
+
+                    <div className="bg-[#0f172a] p-6 rounded-3xl flex items-center justify-between border border-slate-800 shadow-inner">
+                        <button onClick={() => setBetMultiplier(Math.max(1, betMultiplier - 1))} className="bg-slate-800 w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-black border border-slate-700 active:scale-90 transition-transform">-</button>
                         <div className="text-center">
-                            <p className="text-[10px] text-slate-500 font-black uppercase mb-1">Multiplier</p>
-                            <span className="text-3xl font-black text-white italic">{betMultiplier}X</span>
+                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Multiplier</p>
+                            <span className="text-white font-black text-3xl font-mono">{betMultiplier}x</span>
                         </div>
-                        <button onClick={() => setBetMultiplier(betMultiplier + 1)} className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center font-black text-2xl border border-white/5">+</button>
+                        <button onClick={() => setBetMultiplier(betMultiplier + 1)} className="bg-slate-800 w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-black border border-slate-700 active:scale-90 transition-transform">+</button>
                     </div>
-                    <button onClick={confirmBet} className="w-full py-6 rounded-[2.5rem] bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black uppercase tracking-[0.4em] shadow-2xl active:scale-95 transition-all text-xl border-t-2 border-white/20">CONFIRM ₹{betMoney * betMultiplier}</button>
+
+                    <button 
+                      onClick={confirmBet} 
+                      className={`w-full py-5 rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-white shadow-2xl transition-all active:scale-95 ${getTargetColor(selectedBetTarget)}`}
+                    >
+                      Confirm Stake ₹{((customAmount ? parseFloat(customAmount) : betMoney) * betMultiplier) || 0}
+                    </button>
                 </div>
             </div>
-          </div>
+        </div>
       )}
-
-      {myBets.length > 0 && !isBetLocked && (
-          <button 
-              onClick={cancelLastBet} 
-              className="fixed bottom-10 right-6 w-14 h-14 bg-red-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90 transition-all border-2 border-white/20 z-50 animate-bounce"
-              title="Return Last Bet"
-          >
-              <RotateCcw size={28} className="text-white" />
-          </button>
-      )}
-
-      <style>{`.no-scrollbar::-webkit-scrollbar { display: none; }`}</style>
     </div>
   );
 };
+
 export default WinGo;

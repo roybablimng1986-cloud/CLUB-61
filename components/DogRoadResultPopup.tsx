@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Trophy, AlertCircle, Zap } from 'lucide-react';
+import { X, Trophy } from 'lucide-react';
 import { playSound } from '../services/supabaseService';
 
 interface DogRoadResultPopupProps {
@@ -31,18 +30,25 @@ const DogRoadResultPopup: React.FC<DogRoadResultPopupProps> = ({ result, onClose
           initial={{ scale: 0.5, opacity: 0, y: 50 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.5, opacity: 0, y: 50 }}
-          className={`w-full max-w-sm rounded-[3rem] overflow-hidden border-2 shadow-[0_0_100px_rgba(0,0,0,0.5)] ${result.win ? 'bg-[#0a1a1a] border-yellow-500/30' : 'bg-[#1a1a1a] border-red-500/30'}`}
+          className={`w-full max-w-sm rounded-[3rem] overflow-hidden border-2 shadow-[0_0_100px_rgba(0,0,0,0.5)] ${result.win ? 'bg-[#0a1a1a] border-yellow-500/30 shadow-yellow-950/20' : 'bg-[#1a1a1a] border-red-500/30 shadow-red-950/20'}`}
         >
           <div className={`p-8 text-center relative ${result.win ? 'bg-gradient-to-b from-yellow-500/20 to-transparent' : 'bg-gradient-to-b from-red-500/20 to-transparent'}`}>
             <button onClick={onClose} className="absolute top-6 right-6 p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors">
               <X size={20} className="text-white/50" />
             </button>
 
+            {/* Prominent Dog Character Display instead of Chicken */}
             <div className="mb-6 inline-flex p-6 rounded-full bg-black/40 border border-white/10 relative">
               {result.win ? (
-                <Trophy size={48} className="text-yellow-500 animate-bounce" />
+                <div className="relative">
+                  <img src="https://cdn-icons-png.flaticon.com/512/616/616554.png" alt="Dog Winner" className="w-20 h-20 object-contain animate-bounce" />
+                  <Trophy size={24} className="text-yellow-500 absolute -bottom-1 -right-1" />
+                </div>
               ) : (
-                <div className="text-5xl animate-pulse">🚓</div>
+                <div className="relative">
+                  <img src="https://cdn-icons-png.flaticon.com/512/616/616554.png" alt="Dog Crash" className="w-20 h-20 object-contain filter grayscale opacity-70" />
+                  <div className="text-3xl absolute -bottom-1 -right-1">💥</div>
+                </div>
               )}
             </div>
 

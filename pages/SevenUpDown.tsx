@@ -1,11 +1,187 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Plus, Minus, Info, HelpCircle, Check, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Info, HelpCircle, Check, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, subscribeToSevenUpDown, subscribeToSevenUpDownBets, getClockOffset, addGameBet } from '../services/supabaseService';
+import { updateBalance, addGameHistory, stopAllSounds, subscribeToSevenUpDown, subscribeToSevenUpDownBets, getClockOffset, addGameBet, shouldForceLoss, getMuteStatus, toggleMute } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { db, auth } from '../services/supabaseService';
 import { doc, onSnapshot, setDoc, getDoc, collection, query, where, limit, orderBy, serverTimestamp, addDoc } from 'firebase/firestore';
+
+// Custom standalone AudioContext Synth class for lag-free professional 7 Up Down audio
+class SevenUpDownSfx {
+  private ctx: AudioContext | null = null;
+  private isMuted: boolean = false;
+
+  constructor() {
+    this.isMuted = getMuteStatus();
+  }
+
+  setMuted(muted: boolean) {
+    this.isMuted = muted;
+  }
+
+  private init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  playClick() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600, now);
+    osc.frequency.exponentialRampToValueAtTime(300, now + 0.05);
+    gain.gain.setValueAtTime(0.04, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.05);
+  }
+
+  playBet() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(250, now);
+    osc.frequency.exponentialRampToValueAtTime(500, now + 0.12);
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.12);
+  }
+
+  playTick() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, now);
+    gain.gain.setValueAtTime(0.03, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.05);
+  }
+
+  playLock() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.exponentialRampToValueAtTime(60, now + 0.25);
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.25);
+  }
+
+  playDiceRattle() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    
+    // Play a sequence of short low thuds to simulate rattle
+    const now = this.ctx.currentTime;
+    for (let i = 0; i < 8; i++) {
+      const delay = i * 0.12;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(180 + Math.random() * 80, now + delay);
+      gain.gain.setValueAtTime(0.04, now + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.08);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now + delay);
+      osc.stop(now + delay + 0.08);
+    }
+  }
+
+  playDiceRoll() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    
+    // Hard dice bounce thuds
+    [0, 0.1].forEach((delay) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(120, now + delay);
+      osc.frequency.exponentialRampToValueAtTime(50, now + delay + 0.12);
+      gain.gain.setValueAtTime(0.08, now + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.12);
+      osc.connect(gain);
+      gain.connect(this.ctx!.destination);
+      osc.start(now + delay);
+      osc.stop(now + delay + 0.12);
+    });
+  }
+
+  playWin() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const freqs = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+    freqs.forEach((f, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, now + i * 0.08);
+      gain.gain.setValueAtTime(0.05, now + i * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.25);
+      osc.connect(gain);
+      gain.connect(this.ctx!.destination);
+      osc.start(now + i * 0.08);
+      osc.stop(now + i * 0.08 + 0.25);
+    });
+  }
+
+  playLoss() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.linearRampToValueAtTime(100, now + 0.4);
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.linearRampToValueAtTime(0.001, now + 0.4);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.4);
+  }
+}
 
 const CYCLE_DURATION = 40000; // 40s total
 const BETTING_TIME = 25000;   // 25s to bet
@@ -18,10 +194,19 @@ import { useStabilizedTimer } from '../hooks/useTimer';
 import HowToPlay from '../components/HowToPlay';
 
 const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
+  const [muted, setMuted] = useState(getMuteStatus());
+  const sfx = useRef(new SevenUpDownSfx());
+
+  const handleToggleMute = () => {
+    const newMute = toggleMute();
+    setMuted(newMute);
+    sfx.current.setMuted(newMute);
+  };
+
   const [gameState, setGameState] = useState<any>({
     status: 'BETTING',
     period: new Date().getTime().toString().slice(-6),
-    endTime: Date.now() + 30000,
+    endTime: Date.now() + 12000,
     dice: [1, 1],
     history: [2, 7, 5, 12, 10]
   });
@@ -34,117 +219,196 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
   
   const timeLeft = useStabilizedTimer(gameState.endTime);
   const [isLocked, setIsLocked] = useState(false);
+  
+  const [lockSoundPlayed, setLockSoundPlayed] = useState(false);
+  const [fakeBets, setFakeBets] = useState<any[]>([]);
+
+  const FAKE_NAMES = [
+    'Rahul S.', 'Aman K.', 'Priya M.', 'Vikram R.', 'Rajesh G.', 
+    'Sunil D.', 'Ankit P.', 'Rohan J.', 'Sanjay T.', 'Karan W.', 
+    'Deepak L.', 'Vijay B.', 'Abhishek N.', 'Ravi C.', 'Amit H.',
+    'Nisha V.', 'Preeti Y.', 'Siddharth F.', 'Arjun Z.', 'Varun Q.'
+  ];
+
+  useEffect(() => {
+    setIsLocked(gameState.status !== 'BETTING' || timeLeft <= 5);
+    
+    // Play precise local real-time tick sound
+    if (gameState.status === 'BETTING' && timeLeft <= 5 && timeLeft > 0 && timeLeft !== lastTickRef.current) {
+      sfx.current.playTick();
+      lastTickRef.current = timeLeft;
+    }
+
+    // Play lock sound once when round locks
+    if (gameState.status === 'BETTING' && timeLeft === 5 && !lockSoundPlayed) {
+      sfx.current.playLock(); // Heavy slam sound
+      setLockSoundPlayed(true);
+    }
+  }, [timeLeft, gameState.status, lockSoundPlayed]);
+
+  // Fake bets simulation during betting window
+  useEffect(() => {
+    if (gameState.status !== 'BETTING' || timeLeft <= 5) {
+      return;
+    }
+
+    if (timeLeft > 20) {
+      setFakeBets([]);
+    }
+
+    const interval = setInterval(() => {
+      if (Math.random() > 0.45) return; // 45% chance every interval to spawn a fake bet
+
+      const randomName = FAKE_NAMES[Math.floor(Math.random() * FAKE_NAMES.length)] + ' ' + Math.floor(100 + Math.random() * 900);
+      const randomTarget = ['DOWN', 'SEVEN', 'UP'][Math.floor(Math.random() * 3)];
+      const possibleAmounts = [10, 10, 10, 50, 100, 100, 500, 1000]; // high chance of ₹10 as requested
+      const randomAmount = possibleAmounts[Math.floor(Math.random() * possibleAmounts.length)];
+
+      const newFakeBet = {
+        id: `fake_${Date.now()}_${Math.random()}`,
+        username: randomName,
+        target: randomTarget,
+        amount: randomAmount,
+        uid: 'fake-user'
+      };
+
+      setFakeBets(prev => [newFakeBet, ...prev].slice(0, 30));
+    }, 1200);
+
+    return () => clearInterval(interval);
+  }, [gameState.status, timeLeft, gameState.period]);
   const [activeTab, setActiveTab] = useState<'ALL' | 'MY'>('ALL');
   const [allBets, setAllBets] = useState<any[]>([]);
   const [myBets, setMyBets] = useState<any[]>([]);
+  const myBetsRef = useRef<any[]>([]);
   const [currentRoundId, setCurrentRoundId] = useState<string>(gameState.period);
+  const currentRoundRef = useRef<string>('');
+  const [localUserBets, setLocalUserBets] = useState<any[]>([]);
+  const localUserBetsRef = useRef<any[]>([]);
+  const updateLocalUserBets = (newBets: any[]) => {
+      setLocalUserBets(newBets);
+      localUserBetsRef.current = newBets;
+  };
   const [phase, setPhase] = useState<'BETTING' | 'RESULT' | 'ROLLING'>('BETTING');
   const [showHelp, setShowHelp] = useState(false);
   const [isBetting, setIsBetting] = useState(false);
   
   const isMounted = useRef(true);
+  const lastEvaluatedPeriod = useRef<string>('');
+  const lastTickRef = useRef<number>(-1);
 
-  // Initial Logic
   useEffect(() => {
-    setHistory(gameState.history);
-    const mainInterval = setInterval(() => {
-        if (gameState.status === 'BETTING') {
-            if (Date.now() >= gameState.endTime) {
-                setGameState(prev => ({ ...prev, status: 'ROLLING' }));
-                handleRollSequence();
-            } else if (timeLeft <= 3) {
-                setIsLocked(true);
-            }
-            if (timeLeft <= 5 && timeLeft > 0) playSound('wingo_tick');
-        }
-    }, 1000);
-    return () => clearInterval(mainInterval);
-  }, [gameState.status, gameState.endTime, timeLeft]);
-
-  async function handleRollSequence() {
-    setIsRolling(true);
-    playSound('wheel_spin');
+    isMounted.current = true;
     
-    // Pre-calculate the result
-    const finalD1 = Math.floor(Math.random() * 6) + 1;
-    const finalD2 = Math.floor(Math.random() * 6) + 1;
-    const sum = finalD1 + finalD2;
-    const outcome = sum < 7 ? 'DOWN' : sum > 7 ? 'UP' : 'SEVEN';
+    const unsubscribe = subscribeToSevenUpDown((state) => {
+      if (!isMounted.current) return;
+
+      if (state.status === 'BETTING' && currentRoundRef.current !== state.period) {
+        currentRoundRef.current = state.period;
+        setCurrentRoundId(state.period);
+        updateLocalUserBets([]);
+        setMyBets([]);
+        myBetsRef.current = [];
+        setAllBets([]);
+        setSuResult(null);
+        setLockSoundPlayed(false); // Reset lock sound
+      }
+
+      setGameState(state);
+      setHistory(state.history.map((h: any) => h.sum));
+
+      const list = state.betsList || [];
+      const listWithoutUser = list.filter((b: any) => b.uid !== auth.currentUser?.uid);
+
+      setAllBets([...localUserBetsRef.current, ...listWithoutUser]);
+      setMyBets(localUserBetsRef.current);
+      myBetsRef.current = localUserBetsRef.current;
+
+      setIsLocked(state.status !== 'BETTING' || state.timeLeft <= 5);
+      setPhase(state.status === 'BETTING' ? 'BETTING' : 'RESULT');
+
+      // Check if there is a new result to animate and evaluate
+      if (state.status === 'REVEALING' && state.lastResult && state.period !== lastEvaluatedPeriod.current) {
+        lastEvaluatedPeriod.current = state.period;
+        handleRollSequence(state.lastResult, state.period);
+      }
+    });
+
+    return () => {
+      isMounted.current = false;
+      unsubscribe();
+      stopAllSounds();
+    };
+  }, []);
+
+  async function handleRollSequence(result: any, roundPeriod: string) {
+    setIsRolling(true);
+    sfx.current.playDiceRattle();
+
+    const finalD1 = result.dice[0];
+    const finalD2 = result.dice[1];
+    const sum = result.sum;
+    const outcome = result.outcome;
 
     // Dice randomization animation
     let rollCount = 0;
     const rollInterval = setInterval(() => {
+      if (isMounted.current) {
         setDice([Math.floor(Math.random() * 6) + 1, Math.floor(Math.random() * 6) + 1]);
-        rollCount++;
-        if (rollCount >= 20) {
-            clearInterval(rollInterval);
-            setDice([finalD1, finalD2]);
+      }
+      rollCount++;
+      if (rollCount >= 10) {
+        clearInterval(rollInterval);
+        if (isMounted.current) {
+          setDice([finalD1, finalD2]);
         }
-    }, 150);
+      }
+    }, 100);
 
-    await new Promise(r => setTimeout(r, 4000));
+    await new Promise(r => setTimeout(r, 1200));
     if (!isMounted.current) return;
 
     setDice([finalD1, finalD2]);
     setIsRolling(false);
     setPhase('RESULT');
-    playSound('dt_card');
+    sfx.current.playDiceRoll();
 
-    processResult(sum, outcome, [finalD1, finalD2]);
-
-    await new Promise(r => setTimeout(r, 6000));
-    if (isMounted.current) {
-        const nextPeriod = (parseInt(gameState.period) + 1).toString();
-        setGameState(prev => ({
-            status: 'BETTING',
-            period: nextPeriod,
-            endTime: Date.now() + 30000,
-            dice: [finalD1, finalD2],
-            history: [sum, ...prev.history].slice(0, 20)
-        }));
-        setHistory(prev => [sum, ...prev].slice(0, 20));
-        setCurrentRoundId(nextPeriod);
-        setPhase('BETTING');
-        setIsLocked(false);
-        setMyBets([]);
-        setAllBets([]);
-        setSuResult(null);
-    }
+    processResult(sum, outcome, [finalD1, finalD2], roundPeriod);
   }
 
-  function processResult(sum: number, outcome: string, finalDice: number[]) {
+  function processResult(sum: number, outcome: string, finalDice: number[], roundPeriod: string) {
     let totalWin = 0;
     let totalBet = 0;
     
-    myBets.forEach(bet => {
+    const activeBets = myBetsRef.current;
+    
+    activeBets.forEach(bet => {
         totalBet += bet.amount;
         if (bet.target === outcome) {
-            const mult = outcome === 'SEVEN' ? 3 : 2;
+            const mult = outcome === 'SEVEN' ? 5 : 1.95; // Pay 5x on SEVEN, 1.95x on Small/Big as per rules
             totalWin += bet.amount * mult;
         }
     });
 
     if (totalWin > 0) {
         updateBalance(totalWin, 'WIN', '7 Up Down Win');
+        sfx.current.playWin();
+    } else if (totalBet > 0) {
+        sfx.current.playLoss();
     }
 
     if (totalBet > 0) {
         setSuResult({
             win: totalWin > 0,
             amount: totalWin,
-            period: gameState.period,
+            period: roundPeriod,
             dice: finalDice,
             sum: sum,
-            target: myBets.map(b => b.target).join(', ')
+            target: activeBets.map(b => b.target).join(', ')
         });
-        addGameHistory('7 Up Down', totalBet, totalWin, `Landed ${sum} | Period: ${gameState.period}`);
+        addGameHistory('7 Up Down', totalBet, totalWin, `Landed ${sum} | Period: ${roundPeriod}`);
     }
   }
-
-  useEffect(() => {
-    isMounted.current = true;
-    return () => { isMounted.current = false; stopAllSounds(); };
-  }, []);
 
     const handleConfirmBet = async () => {
         if (!selectedTarget || isLocked || betAmount > userBalance || phase !== 'BETTING' || isBetting) return;
@@ -159,10 +423,24 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
                 username: 'You',
                 id: Date.now()
             };
-            setMyBets(prev => [...prev, betData]);
-            setAllBets(prev => [betData, ...prev]);
+            const updated = [...localUserBetsRef.current, betData];
+            updateLocalUserBets(updated);
+            
+            // Immediately update the display states as well for instant responsiveness
+            setMyBets(updated);
+            myBetsRef.current = updated;
+            
+            const listWithoutUser = allBets.filter((b: any) => b.uid !== auth.currentUser?.uid);
+            setAllBets([...updated, ...listWithoutUser]);
+            
+            await addGameBet('seven_up_down_bets', {
+                target: selectedTarget,
+                amount: betAmount,
+                period: gameState.period
+            });
+
             await updateBalance(-betAmount, 'BET', `7 Up Down: ${selectedTarget}`);
-            playSound('bet_place');
+            sfx.current.playBet();
         } catch (e) {
             console.error(e);
         } finally {
@@ -171,18 +449,25 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
     };
 
     const handleCancelLastBet = async () => {
-        if (myBets.length === 0 || isLocked || phase !== 'BETTING') return;
-        const lastBet = myBets[myBets.length - 1];
-        setMyBets(prev => prev.slice(0, -1));
-        setAllBets(prev => prev.filter(b => b.id !== lastBet.id));
+        if (localUserBetsRef.current.length === 0 || isLocked || phase !== 'BETTING') return;
+        const lastBet = localUserBetsRef.current[localUserBetsRef.current.length - 1];
+        const updated = localUserBetsRef.current.slice(0, -1);
+        updateLocalUserBets(updated);
+        
+        setMyBets(updated);
+        myBetsRef.current = updated;
+        
+        const listWithoutUser = allBets.filter((b: any) => b.id !== lastBet.id);
+        setAllBets([...updated, ...listWithoutUser]);
+
         await updateBalance(lastBet.amount, 'WIN', 'Bet Cancelled');
-        playSound('click');
+        sfx.current.playClick();
     };
 
     const adjustBet = (amt: number) => {
     if (isLocked) return;
     setBetAmount(prev => Math.max(10, prev + amt));
-    playSound('click');
+    sfx.current.playClick();
   };
 
   const handleManualBetChange = (val: string) => {
@@ -192,7 +477,7 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
   };
 
   return (
-    <div className="h-screen flex flex-col font-sans text-white select-none relative overflow-hidden" 
+    <div className="min-h-screen flex flex-col font-sans text-white select-none relative overflow-x-hidden pb-10" 
          style={{ 
             backgroundColor: '#4a0404',
             backgroundImage: `radial-gradient(circle at center, #800000 0%, #4a0404 100%), url("https://www.transparenttextures.com/patterns/damask.png")`,
@@ -205,13 +490,13 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
             title="7 Up Down Rules"
             rules={[
                 "Two dice are rolled. Predict if the sum will be UNDER 7 (2-6), EQUAL to 7, or OVER 7 (8-12).",
-                "Winner payout: Under 7 pays 2x, Over 7 pays 2x, 7 pays 3x.",
+                "Winner payout: Under 7 pays 2x, Over 7 pays 2x, 7 pays 9x.",
                 "Place your bets while the dice are sitting idle."
             ]}
             payouts={[
                 { label: "Under 7 (2-6)", value: "2x" },
                 { label: "Over 7 (8-12)", value: "2x" },
-                { label: "Exactly 7", value: "3x" }
+                { label: "Exactly 7", value: "9x" }
             ]}
         />
         
@@ -221,6 +506,9 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
                 <ArrowLeft size={20} />
             </button>
             <div className="flex gap-4">
+                <button onClick={handleToggleMute} className="w-10 h-10 bg-black/40 rounded-full flex items-center justify-center border border-white/10 active:scale-90 shadow-lg">
+                    {muted ? <VolumeX size={18} className="text-red-500" /> : <Volume2 size={18} className="text-yellow-500" />}
+                </button>
                 <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-white/10">
                     <img src="https://cdn-icons-png.flaticon.com/512/2489/2489756.png" className="w-4 h-4" alt="coins" referrerPolicy="no-referrer" />
                     <span className="text-xs font-black">{userBalance.toLocaleString()}</span>
@@ -229,26 +517,39 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
         </div>
 
         {/* Game Content */}
-        <div className="flex-1 flex flex-col items-center justify-start p-4 pt-0 relative z-10 overflow-hidden">
+        <div className="w-full flex-1 flex flex-col items-center justify-start p-4 pt-0 relative z-10">
             
             {/* History (Scrollable) */}
-            <div className="w-full mb-4 shrink-0 overflow-x-auto no-scrollbar">
-                <div className="flex gap-2 justify-start px-2 min-w-max flex-row-reverse">
-                    {history.map((h, i) => (
-                        <div key={`${i}-${h}`} className={`w-8 h-8 flex-shrink-0 flex items-center justify-center text-[10px] font-black border-2 rounded-lg shadow-lg ${h < 7 ? 'bg-blue-600/20 border-blue-500/40 text-blue-400' : h > 7 ? 'bg-red-600/20 border-red-500/40 text-red-400' : 'bg-yellow-600/20 border-yellow-500/40 text-yellow-400'}`}>
-                            {h}
-                        </div>
-                    ))}
+            <div className="w-full mb-5 shrink-0 overflow-x-auto no-scrollbar">
+                <div className="flex gap-3 justify-start px-2 min-w-max flex-row-reverse">
+                    {history.map((h, i) => {
+                        const isTie = h === 7;
+                        const isBig = h > 7;
+                        const label = isTie ? 'SEV' : isBig ? 'UP' : 'DWN';
+                        const colorClass = isTie 
+                            ? 'from-yellow-500 to-amber-600 border-yellow-400 text-white shadow-[0_4px_10px_rgba(234,179,8,0.3)]' 
+                            : isBig 
+                                ? 'from-red-500 to-rose-600 border-red-400 text-white shadow-[0_4px_10px_rgba(239,68,68,0.3)]' 
+                                : 'from-blue-500 to-cyan-600 border-blue-400 text-white shadow-[0_4px_10px_rgba(59,130,246,0.3)]';
+                        return (
+                            <div key={i} className="flex flex-col items-center gap-1 flex-shrink-0">
+                                <span className={`w-11 h-11 rounded-full flex items-center justify-center text-sm font-black border-2 bg-gradient-to-b shadow-lg transition-all ${colorClass}`}>
+                                    {h}
+                                </span>
+                                <span className={`text-[8px] font-black uppercase tracking-wider ${isTie ? 'text-yellow-400/80' : isBig ? 'text-red-400/80' : 'text-blue-400/80'}`}>{label}</span>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
             {/* Timer Display */}
             <div className="mb-4 flex flex-col items-center shrink-0">
-                <div className={`text-4xl font-black italic tracking-tighter ${(phase === 'BETTING' && (timeLeft || 0) <= 5) ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
+                <div className={`text-4xl font-black italic tracking-tighter ${(phase === 'BETTING' && isLocked) ? 'text-red-500 animate-pulse' : 'text-yellow-400'}`}>
                     00:{(timeLeft || 0).toString().padStart(2, '0')}
                 </div>
-                <div className="text-[10px] uppercase font-black tracking-[0.2em] text-white/40">
-                    {phase === 'BETTING' ? 'Betting Open' : 'Waiting for Result'}
+                <div className={`text-[10px] uppercase font-black tracking-[0.2em] ${phase === 'BETTING' && isLocked ? 'text-red-500 animate-pulse' : 'text-white/40'}`}>
+                    {phase === 'BETTING' ? (isLocked ? 'BETS LOCKED' : 'Betting Open') : 'Waiting for Result'}
                 </div>
             </div>
 
@@ -280,50 +581,103 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
             </div>
 
             {/* Betting Targets */}
-            <div className={`grid grid-cols-3 gap-2 w-full max-w-sm mb-4 transition-all shrink-0 ${isLocked ? 'opacity-40 grayscale pointer-events-none' : ''}`}>
+            <div className="grid grid-cols-3 gap-2.5 w-full max-w-sm mb-4 transition-all shrink-0">
+                {/* DOWN */}
                 <div className="relative">
                     <button 
                         onClick={() => setSelectedTarget('DOWN')}
-                        className={`w-full flex flex-col items-center justify-center py-4 rounded-2xl border-b-4 transition-all ${selectedTarget === 'DOWN' ? 'bg-blue-600 border-blue-800 scale-105 shadow-xl text-white' : 'bg-black/40 border-black/60 text-white/60 hover:bg-black/60'}`}
+                        disabled={isLocked && phase !== 'RESULT'}
+                        className={`w-full flex flex-col items-center justify-center py-5 rounded-2xl border-b-4 transition-all ${
+                            selectedTarget === 'DOWN' ? 'bg-blue-600 border-blue-800 scale-105 shadow-xl text-white' : 'bg-black/40 border-black/60 text-white/60 hover:bg-black/60'
+                        } ${
+                            isLocked && phase !== 'RESULT' ? 'opacity-40 grayscale pointer-events-none' : ''
+                        } ${
+                            phase === 'RESULT' && gameState.lastResult?.outcome === 'DOWN' ? 'ring-4 ring-yellow-400 border-yellow-500 scale-110 shadow-[0_0_25px_rgba(250,204,21,0.9)] z-20 bg-blue-500 text-white font-black' : ''
+                        }`}
                     >
                         <span className="text-[10px] font-black uppercase mb-1">Down</span>
                         <span className="text-xl font-black italic">2 - 6</span>
                         <span className="text-[10px] font-bold opacity-60">Payout 2x</span>
                     </button>
-                    {allBets.filter(b => b.target === 'DOWN').length > 0 && (
-                        <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg">
-                            ₹{allBets.filter(b => b.target === 'DOWN').reduce((acc, curr) => acc + curr.amount, 0)}
-                        </div>
+
+                    {/* Active Bet Chip/Tile for user on DOWN */}
+                    {myBets.filter(b => b.target === 'DOWN').length > 0 && (
+                        <motion.div 
+                            initial={{ scale: 0, rotate: -90 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            className="absolute -bottom-1.5 -left-1.5 w-10 h-10 rounded-full bg-gradient-to-tr from-blue-700 via-blue-500 to-blue-400 border-2 border-dashed border-white flex items-center justify-center text-white font-black text-[9px] shadow-[0_4px_10px_rgba(0,0,0,0.6)] z-20 animate-bounce"
+                            style={{ backgroundImage: 'radial-gradient(circle, transparent 40%, rgba(0,0,0,0.15) 41%)' }}
+                        >
+                            <div className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center font-black">
+                                ₹{myBets.filter(b => b.target === 'DOWN').reduce((acc, curr) => acc + curr.amount, 0)}
+                            </div>
+                        </motion.div>
                     )}
                 </div>
+
+                {/* LUCKY 7 */}
                 <div className="relative">
                     <button 
                         onClick={() => setSelectedTarget('SEVEN')}
-                        className={`w-full flex flex-col items-center justify-center py-4 rounded-2xl border-b-4 transition-all ${selectedTarget === 'SEVEN' ? 'bg-yellow-600 border-yellow-800 scale-105 shadow-xl text-white' : 'bg-black/40 border-black/60 text-white/60 hover:bg-black/60'}`}
+                        disabled={isLocked && phase !== 'RESULT'}
+                        className={`w-full flex flex-col items-center justify-center py-5 rounded-2xl border-b-4 transition-all ${
+                            selectedTarget === 'SEVEN' ? 'bg-yellow-600 border-yellow-800 scale-105 shadow-xl text-white' : 'bg-black/40 border-black/60 text-white/60 hover:bg-black/60'
+                        } ${
+                            isLocked && phase !== 'RESULT' ? 'opacity-40 grayscale pointer-events-none' : ''
+                        } ${
+                            phase === 'RESULT' && gameState.lastResult?.outcome === 'SEVEN' ? 'ring-4 ring-yellow-400 border-yellow-500 scale-110 shadow-[0_0_25px_rgba(250,204,21,0.9)] z-20 bg-yellow-500 text-black font-black' : ''
+                        }`}
                     >
                         <span className="text-[10px] font-black uppercase mb-1">Lucky</span>
                         <span className="text-xl font-black italic">7</span>
-                        <span className="text-[10px] font-bold opacity-60">Payout 3x</span>
+                        <span className="text-[10px] font-bold opacity-60">Payout 9x</span>
                     </button>
-                    {allBets.filter(b => b.target === 'SEVEN').length > 0 && (
-                        <div className="absolute -top-2 -right-2 bg-yellow-500 text-black text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg">
-                            ₹{allBets.filter(b => b.target === 'SEVEN').reduce((acc, curr) => acc + curr.amount, 0)}
-                        </div>
+
+                    {/* Active Bet Chip/Tile for user on SEVEN */}
+                    {myBets.filter(b => b.target === 'SEVEN').length > 0 && (
+                        <motion.div 
+                            initial={{ scale: 0, rotate: -90 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            className="absolute -bottom-1.5 -left-1.5 w-10 h-10 rounded-full bg-gradient-to-tr from-yellow-600 via-amber-500 to-yellow-400 border-2 border-dashed border-white flex items-center justify-center text-black font-black text-[9px] shadow-[0_4px_10px_rgba(0,0,0,0.6)] z-20 animate-bounce"
+                            style={{ backgroundImage: 'radial-gradient(circle, transparent 40%, rgba(0,0,0,0.15) 41%)' }}
+                        >
+                            <div className="w-7 h-7 rounded-full border border-black/10 flex items-center justify-center font-black">
+                                ₹{myBets.filter(b => b.target === 'SEVEN').reduce((acc, curr) => acc + curr.amount, 0)}
+                            </div>
+                        </motion.div>
                     )}
                 </div>
+
+                {/* UP */}
                 <div className="relative">
                     <button 
                         onClick={() => setSelectedTarget('UP')}
-                        className={`w-full flex flex-col items-center justify-center py-4 rounded-2xl border-b-4 transition-all ${selectedTarget === 'UP' ? 'bg-red-600 border-red-800 scale-105 shadow-xl text-white' : 'bg-black/40 border-black/60 text-white/60 hover:bg-black/60'}`}
+                        disabled={isLocked && phase !== 'RESULT'}
+                        className={`w-full flex flex-col items-center justify-center py-5 rounded-2xl border-b-4 transition-all ${
+                            selectedTarget === 'UP' ? 'bg-red-600 border-red-800 scale-105 shadow-xl text-white' : 'bg-black/40 border-black/60 text-white/60 hover:bg-black/60'
+                        } ${
+                            isLocked && phase !== 'RESULT' ? 'opacity-40 grayscale pointer-events-none' : ''
+                        } ${
+                            phase === 'RESULT' && gameState.lastResult?.outcome === 'UP' ? 'ring-4 ring-yellow-400 border-yellow-500 scale-110 shadow-[0_0_25px_rgba(250,204,21,0.9)] z-20 bg-red-500 text-white font-black' : ''
+                        }`}
                     >
                         <span className="text-[10px] font-black uppercase mb-1">Up</span>
                         <span className="text-xl font-black italic">8 - 12</span>
                         <span className="text-[10px] font-bold opacity-60">Payout 2x</span>
                     </button>
-                    {allBets.filter(b => b.target === 'UP').length > 0 && (
-                        <div className="absolute -top-2 -right-2 bg-red-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg">
-                            ₹{allBets.filter(b => b.target === 'UP').reduce((acc, curr) => acc + curr.amount, 0)}
-                        </div>
+
+                    {/* Active Bet Chip/Tile for user on UP */}
+                    {myBets.filter(b => b.target === 'UP').length > 0 && (
+                        <motion.div 
+                            initial={{ scale: 0, rotate: -90 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            className="absolute -bottom-1.5 -left-1.5 w-10 h-10 rounded-full bg-gradient-to-tr from-red-700 via-rose-500 to-red-400 border-2 border-dashed border-white flex items-center justify-center text-white font-black text-[9px] shadow-[0_4px_10px_rgba(0,0,0,0.6)] z-20 animate-bounce"
+                            style={{ backgroundImage: 'radial-gradient(circle, transparent 40%, rgba(0,0,0,0.15) 41%)' }}
+                        >
+                            <div className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center font-black">
+                                ₹{myBets.filter(b => b.target === 'UP').reduce((acc, curr) => acc + curr.amount, 0)}
+                            </div>
+                        </motion.div>
                     )}
                 </div>
             </div>
@@ -335,7 +689,7 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
                         {[10, 50, 100, 500, 1000, 5000].map(amt => (
                             <button 
                                 key={amt}
-                                onClick={() => { setBetAmount(amt); playSound('click'); }}
+                                onClick={() => { setBetAmount(amt); sfx.current.playClick(); }}
                                 className={`flex-shrink-0 w-11 h-11 rounded-full border-2 font-black text-[10px] transition-all flex items-center justify-center shadow-lg active:scale-90 ${betAmount === amt ? 'bg-yellow-500 text-black border-white' : 'bg-black/60 text-yellow-500 border-yellow-500/20'}`}
                             >
                                 {amt >= 1000 ? (amt/1000)+'K' : amt}
@@ -364,13 +718,13 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
             </div>
 
             {/* Bets List */}
-            <div className="w-full max-w-md bg-black/40 rounded-t-3xl border-t border-x border-white/5 flex flex-col flex-1 min-h-0 overflow-hidden">
-                <div className="flex border-b border-white/5 shrink-0">
+            <div className="w-full max-w-md bg-black/40 rounded-2xl border border-white/5 flex flex-col mt-6 overflow-hidden">
+                <div className="flex border-b border-white/5 shrink-0 bg-black/20">
                     <button 
                         onClick={() => setActiveTab('ALL')}
                         className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'ALL' ? 'text-yellow-500 border-b-2 border-yellow-500 bg-white/5' : 'text-white/40'}`}
                     >
-                        Live Bets ({allBets.length})
+                        Live Bets ({myBets.length + fakeBets.length + allBets.filter(b => b.uid !== auth.currentUser?.uid).length})
                     </button>
                     <button 
                         onClick={() => setActiveTab('MY')}
@@ -380,8 +734,8 @@ const SevenUpDown: React.FC<{ onBack: () => void; userBalance: number; onResult:
                     </button>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto no-scrollbar p-3 space-y-1">
-                    {(activeTab === 'ALL' ? allBets : myBets).map((b, idx) => (
+                <div className="h-64 overflow-y-scroll p-3 space-y-1.5 scrollbar-thin scrollbar-thumb-yellow-500/50 scrollbar-track-transparent pr-1 touch-pan-y">
+                    {(activeTab === 'ALL' ? [...myBets, ...fakeBets, ...allBets.filter(b => b.uid !== auth.currentUser?.uid)] : myBets).map((b, idx) => (
                         <motion.div 
                             key={b.id || `bet-${idx}`}
                             initial={{ opacity: 0, y: 10 }}

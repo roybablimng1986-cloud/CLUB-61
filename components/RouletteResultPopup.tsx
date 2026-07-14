@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Trophy, AlertCircle, Target } from 'lucide-react';
+import { X, Trophy, AlertCircle, RefreshCw } from 'lucide-react';
 import { playSound } from '../services/supabaseService';
 
 interface RouletteResultPopupProps {
@@ -28,65 +27,75 @@ const RouletteResultPopup: React.FC<RouletteResultPopupProps> = ({ result, onClo
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+      <div className="fixed inset-x-0 top-0 z-[300] flex justify-center p-4 bg-black/40 backdrop-blur-xs">
         <motion.div 
-          initial={{ scale: 0.5, opacity: 0, y: 50 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.5, opacity: 0, y: 50 }}
-          className={`w-full max-w-sm rounded-[3rem] overflow-hidden border-2 shadow-[0_0_100px_rgba(0,0,0,0.5)] ${result.win ? 'bg-[#1a2e1a] border-green-500/30' : 'bg-[#1a1a1a] border-red-500/30'}`}
+          initial={{ y: -150, opacity: 0, scale: 0.95 }}
+          animate={{ y: 0, opacity: 1, scale: 1 }}
+          exit={{ y: -150, opacity: 0, scale: 0.95 }}
+          transition={{ type: 'spring', damping: 20, stiffness: 280 }}
+          className={`w-[290px] rounded-3xl overflow-hidden border shadow-[0_12px_40px_rgba(0,0,0,0.6)] ${
+            result.win 
+              ? 'bg-[#0f2414]/95 border-emerald-500/40 text-emerald-100' 
+              : 'bg-[#180e0e]/95 border-red-500/40 text-red-100'
+          }`}
         >
-          <div className={`p-8 text-center relative ${result.win ? 'bg-gradient-to-b from-green-500/20 to-transparent' : 'bg-gradient-to-b from-red-500/20 to-transparent'}`}>
-            <button onClick={onClose} className="absolute top-6 right-6 p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors">
-              <X size={20} className="text-white/50" />
+          <div className="p-4 text-center relative">
+            <button 
+              onClick={onClose} 
+              className="absolute top-3 right-3 p-1 bg-white/5 rounded-full hover:bg-white/10 transition-colors"
+            >
+              <X size={12} className="text-white/40 hover:text-white" />
             </button>
 
-            <div className="mb-6 inline-flex p-6 rounded-full bg-black/40 border border-white/10 relative">
-              {result.win ? (
-                <Trophy size={48} className="text-yellow-500 animate-bounce" />
-              ) : (
-                <Target size={48} className="text-red-500 animate-pulse" />
-              )}
+            <div className="flex items-center gap-3 justify-center mb-2">
+              <div className={`p-1.5 rounded-full ${result.win ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                {result.win ? <Trophy size={18} className="animate-bounce" /> : <RefreshCw size={18} className="animate-spin" />}
+              </div>
+              <h4 className={`text-base font-black uppercase tracking-tight ${result.win ? 'text-emerald-400' : 'text-red-400'}`}>
+                {result.win ? 'Roulette Win!' : 'Round Ended'}
+              </h4>
             </div>
 
-            <h2 className={`text-4xl font-black italic tracking-tighter uppercase mb-2 ${result.win ? 'text-green-500' : 'text-red-500'}`}>
-              {result.win ? 'VICTORY!' : 'DEFEAT'}
-            </h2>
-            <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] mb-8">Period: {result.period}</p>
+            <p className="text-[8px] font-mono tracking-widest text-white/30 uppercase mb-3">Period: {result.period}</p>
 
-            <div className="space-y-4 mb-8">
-                <div className="bg-black/30 p-6 rounded-3xl border border-white/5">
-                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-4">Winning Number</p>
-                    <div className="flex justify-center">
-                        <div className={`w-24 h-24 rounded-full flex items-center justify-center text-6xl font-black italic border-4 shadow-2xl ${result.winningNumber === 0 ? 'bg-green-600 border-green-400' : result.isRed ? 'bg-red-600 border-red-400' : 'bg-zinc-900 border-zinc-700'}`}>
-                            {result.winningNumber}
-                        </div>
-                    </div>
-                    <div className="mt-4 flex justify-center gap-4">
-                        <div className="px-3 py-1 bg-white/5 rounded-full text-[10px] font-black uppercase text-yellow-500">{result.winningNumber % 2 === 0 ? 'Even' : 'Odd'}</div>
-                        <div className="px-3 py-1 bg-white/5 rounded-full text-[10px] font-black uppercase text-yellow-500">{result.winningNumber >= 1 && result.winningNumber <= 18 ? '1-18' : '19-36'}</div>
-                    </div>
-                </div>
+            <div className="flex items-center gap-4 bg-black/40 p-3 rounded-2xl border border-white/5 mb-3">
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center text-3xl font-black italic border-2 shadow-inner ${
+                result.winningNumber === 0 
+                  ? 'bg-emerald-600 border-emerald-400 text-white' 
+                  : result.isRed 
+                    ? 'bg-red-600 border-red-400 text-white' 
+                    : 'bg-zinc-800 border-zinc-600 text-white'
+              }`}>
+                {result.winningNumber}
+              </div>
 
-                <div className="bg-black/30 p-4 rounded-3xl border border-white/5">
-                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Your Bets</p>
-                    <p className="text-xs font-black text-white uppercase">{result.target}</p>
+              <div className="flex-1 text-left space-y-0.5">
+                <div className="text-[9px] font-bold text-white/40 uppercase tracking-wider">Landed Number</div>
+                <div className="flex gap-1.5">
+                  <span className="text-[9px] px-2 py-0.5 bg-white/5 rounded-md font-bold text-yellow-500 uppercase">{result.winningNumber === 0 ? 'Zero' : result.isRed ? 'Red' : 'Black'}</span>
+                  <span className="text-[9px] px-2 py-0.5 bg-white/5 rounded-md font-bold text-yellow-500 uppercase">{result.winningNumber !== 0 && (result.winningNumber % 2 === 0 ? 'Even' : 'Odd')}</span>
                 </div>
+              </div>
             </div>
 
-            <div className={`p-6 rounded-[2rem] border-2 mb-8 ${result.win ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
-              <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">
-                {result.win ? 'Total Profit' : 'Total Loss'}
-              </p>
-              <h3 className={`text-4xl font-black italic ${result.win ? 'text-yellow-500' : 'text-white/20'}`}>
-                {result.win ? `+₹${result.amount.toFixed(2)}` : `-₹${result.amount.toFixed(2)}`}
-              </h3>
+            <div className="bg-black/30 px-3.5 py-2 rounded-2xl border border-white/5 mb-3 text-left">
+              <div className="flex justify-between items-center">
+                <span className="text-[9px] font-bold text-white/40 uppercase">Payout</span>
+                <span className={`text-xs font-black ${result.win ? 'text-yellow-400' : 'text-white/20'}`}>
+                  {result.win ? `+₹${result.amount.toFixed(1)}` : 'No Match'}
+                </span>
+              </div>
             </div>
 
             <button 
               onClick={onClose}
-              className={`w-full py-5 rounded-3xl font-black uppercase tracking-[0.4em] text-sm shadow-2xl active:scale-95 transition-all ${result.win ? 'bg-green-600 text-white' : 'bg-white/10 text-white border border-white/10'}`}
+              className={`w-full py-2 rounded-xl font-black uppercase tracking-wider text-[10px] transition-all duration-300 ${
+                result.win 
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-950/45' 
+                  : 'bg-white/5 hover:bg-white/10 text-white border border-white/10'
+              }`}
             >
-              CONTINUE PLAYING
+              Continue Playing
             </button>
           </div>
         </motion.div>

@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Trophy, AlertCircle, Coins } from 'lucide-react';
+import { X, Trophy, Coins, Sparkles, Flame, Percent } from 'lucide-react';
 import { playSound } from '../services/supabaseService';
 
 interface HeadTailsResultPopupProps {
@@ -26,65 +25,103 @@ const HeadTailsResultPopup: React.FC<HeadTailsResultPopupProps> = ({ result, onC
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+      <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs">
         <motion.div 
-          initial={{ scale: 0.5, opacity: 0, y: 50 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.5, opacity: 0, y: 50 }}
-          className={`w-full max-w-sm rounded-[3rem] overflow-hidden border-2 shadow-[0_0_100px_rgba(0,0,0,0.5)] ${result.win ? 'bg-[#0a1a1a] border-blue-500/30' : 'bg-[#1a1a1a] border-red-500/30'}`}
+          initial={{ scale: 0.9, opacity: 0, rotateX: 45 }}
+          animate={{ scale: 1, opacity: 1, rotateX: 0 }}
+          exit={{ scale: 0.9, opacity: 0, rotateX: -45 }}
+          transition={{ type: "spring", damping: 20 }}
+          className={`w-[270px] rounded-[2.5rem] p-0.5 overflow-hidden relative ${
+            result.win 
+              ? 'bg-gradient-to-b from-[#10b981] via-[#059669] to-[#047857] shadow-[0_0_30px_rgba(16,185,129,0.25)]' 
+              : 'bg-gradient-to-b from-[#f97316] via-[#ea580c] to-[#c2410c] shadow-[0_0_30px_rgba(234,88,12,0.25)]'
+          }`}
         >
-          <div className={`p-8 text-center relative ${result.win ? 'bg-gradient-to-b from-blue-500/20 to-transparent' : 'bg-gradient-to-b from-red-500/20 to-transparent'}`}>
-            <button onClick={onClose} className="absolute top-6 right-6 p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors">
-              <X size={20} className="text-white/50" />
+          {/* Futuristic inner dark container */}
+          <div className="bg-[#0b0f19]/95 rounded-[2.4rem] p-5 text-center relative overflow-hidden flex flex-col items-center">
+            {/* Hologram scanlines effect */}
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(18,24,38,0)_95%,rgba(255,255,255,0.05)_95%)] bg-[length:100%_8px] pointer-events-none opacity-30"></div>
+            
+            {/* Close Button */}
+            <button onClick={onClose} className="absolute top-4 right-4 p-1.5 bg-white/5 hover:bg-white/10 rounded-full transition-all border border-white/10 active:scale-90 z-50">
+              <X size={14} className="text-white/40" />
             </button>
-
-            <div className="mb-6 inline-flex p-6 rounded-full bg-black/40 border border-white/10 relative">
-              {result.win ? (
-                <Trophy size={48} className="text-yellow-500 animate-bounce" />
-              ) : (
-                <Coins size={48} className="text-red-500 animate-pulse" />
-              )}
+ 
+            {/* The Landed Coin Area - Compact */}
+            <div className="relative mb-4 mt-2">
+              {/* Spinning background light */}
+              <div className={`absolute -inset-2 rounded-full opacity-30 blur-xl animate-pulse ${result.win ? 'bg-emerald-500' : 'bg-orange-500'}`}></div>
+              
+              {/* Golden metallic 3D Coin token display */}
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center relative z-10 border-2 shadow-lg p-0.5 ${
+                result.outcome === 'HEAD' 
+                  ? 'bg-gradient-to-r from-yellow-300 via-amber-500 to-yellow-600 border-yellow-300 shadow-[0_0_15px_rgba(234,179,8,0.4)]' 
+                  : 'bg-gradient-to-r from-orange-400 via-red-500 to-orange-600 border-orange-400 shadow-[0_0_15px_rgba(239,68,68,0.4)]'
+              }`}>
+                <div className="w-full h-full rounded-full bg-black/40 border border-white/20 flex flex-col items-center justify-center">
+                  <span className={`text-3xl font-black italic select-none drop-shadow-md ${
+                    result.outcome === 'HEAD' ? 'text-yellow-400' : 'text-orange-400'
+                  }`}>
+                    {result.outcome === 'HEAD' ? 'H' : 'T'}
+                  </span>
+                  <span className="text-[7px] font-black text-white/50 tracking-widest uppercase mt-0.5">
+                    {result.outcome}
+                  </span>
+                </div>
+              </div>
             </div>
-
-            <h2 className={`text-4xl font-black italic tracking-tighter uppercase mb-2 ${result.win ? 'text-blue-500' : 'text-red-500'}`}>
-              {result.win ? 'NICE FLIP!' : 'BAD LUCK'}
+ 
+            {/* Text result with premium font size */}
+            <h2 className={`text-2xl font-black italic tracking-tight uppercase mb-1 ${
+              result.win 
+                ? 'bg-gradient-to-r from-emerald-400 to-teal-200 bg-clip-text text-transparent drop-shadow-[0_2px_5px_rgba(16,185,129,0.3)]' 
+                : 'bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent drop-shadow-[0_2px_5px_rgba(234,88,12,0.3)]'
+            }`}>
+              {result.win ? 'GOLD FLIP!' : 'RUST FLIP'}
             </h2>
-
-            <div className="space-y-4 mb-8">
-                <div className="bg-black/30 p-6 rounded-3xl border border-white/5">
-                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-4">Coin Landed On</p>
-                    <div className="flex flex-col items-center">
-                        <div className={`w-24 h-24 rounded-full border-4 flex items-center justify-center mb-2 ${result.outcome === 'HEAD' ? 'bg-yellow-500 border-yellow-600' : 'bg-orange-600 border-orange-700'}`}>
-                            <span className="text-5xl font-black text-black italic">{result.outcome === 'HEAD' ? 'H' : 'T'}</span>
-                        </div>
-                        <p className={`text-2xl font-black italic tracking-tighter ${result.win ? 'text-blue-400' : 'text-red-500'}`}>
-                            {result.outcome}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="bg-black/30 p-4 rounded-3xl border border-white/5 flex justify-between items-center px-6">
-                    <div>
-                        <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Your Bet</p>
-                        <p className="text-xl font-black text-white uppercase">{result.target}</p>
-                    </div>
-                </div>
+            <p className="text-[9px] text-slate-500 uppercase tracking-widest font-black mb-4">
+              {result.win ? 'PREDICTED CORRECTLY' : 'COIN COLLIDED OPPOSITE'}
+            </p>
+ 
+            {/* Middle Info Panel */}
+            <div className="grid grid-cols-2 gap-2 w-full mb-4">
+              <div className="bg-slate-900/40 p-2.5 rounded-xl border border-white/5 text-left">
+                <span className="text-[7px] font-black text-slate-600 uppercase tracking-widest block mb-0.5">Your Bet</span>
+                <span className={`text-[10px] font-black italic ${result.target === 'HEAD' ? 'text-yellow-500' : 'text-orange-500'}`}>
+                  {result.target === 'HEAD' ? 'HEADS (H)' : 'TAILS (T)'}
+                </span>
+              </div>
+              <div className="bg-slate-900/40 p-2.5 rounded-xl border border-white/5 text-left">
+                <span className="text-[7px] font-black text-slate-600 uppercase tracking-widest block mb-0.5">Landed</span>
+                <span className={`text-[10px] font-black italic ${result.outcome === 'HEAD' ? 'text-yellow-500' : 'text-orange-500'}`}>
+                  {result.outcome === 'HEAD' ? 'HEADS (H)' : 'TAILS (T)'}
+                </span>
+              </div>
             </div>
-
-            <div className={`p-6 rounded-[2rem] border-2 mb-8 ${result.win ? 'bg-blue-500/10 border-blue-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
-              <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">
-                {result.win ? 'Total Profit' : 'Total Loss'}
-              </p>
-              <h3 className={`text-4xl font-black italic ${result.win ? 'text-yellow-500' : 'text-white/20'}`}>
+ 
+            {/* Payout Display */}
+            <div className={`w-full p-3.5 rounded-2xl border mb-4 flex flex-col items-center justify-center relative overflow-hidden ${
+              result.win ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-orange-500/5 border-orange-500/20'
+            }`}>
+              <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">
+                {result.win ? 'CREDITED' : 'DEBITED'}
+              </span>
+              <h3 className={`text-2xl font-black italic tracking-tight ${result.win ? 'text-emerald-400' : 'text-orange-500'}`}>
                 {result.win ? `+₹${result.amount.toFixed(2)}` : `-₹${result.amount.toFixed(2)}`}
               </h3>
             </div>
-
+ 
+            {/* Primary Action Button */}
             <button 
               onClick={onClose}
-              className={`w-full py-5 rounded-3xl font-black uppercase tracking-[0.4em] text-sm shadow-2xl active:scale-95 transition-all ${result.win ? 'bg-blue-600 text-white' : 'bg-white/10 text-white border border-white/10'}`}
+              className={`w-full py-3 rounded-2xl font-black uppercase tracking-wider text-[11px] shadow-lg active:scale-95 transition-all text-black hover:brightness-110 flex items-center justify-center gap-2 ${
+                result.win 
+                  ? 'bg-gradient-to-r from-emerald-400 via-teal-500 to-emerald-400' 
+                  : 'bg-gradient-to-r from-orange-400 via-amber-500 to-orange-400'
+              }`}
             >
-              FLIP AGAIN
+              {result.win ? <Trophy size={12} /> : <Flame size={12} />}
+              {result.win ? 'CONTINUE' : 'RETRY'}
             </button>
           </div>
         </motion.div>

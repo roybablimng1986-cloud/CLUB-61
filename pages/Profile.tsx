@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { UserProfile, View, Transaction, GameHistoryItem } from '../types';
-import { Settings, Copy, Wallet, ArrowUpRight, ArrowDownLeft, ChevronRight, Gamepad2, RefreshCw, X, History, Shield, Crown, CheckCircle2, Sparkles, ShieldAlert, Zap, Gift } from 'lucide-react';
-import { logout, getGameHistory, getTransactionHistory, claimRebate, playSound } from '../services/supabaseService';
+import { Settings, Copy, Wallet, ArrowUpRight, ArrowDownLeft, ChevronRight, Gamepad2, RefreshCw, X, History, Shield, Crown, CheckCircle2, Sparkles, ShieldAlert, Zap, Gift, Key } from 'lucide-react';
+import { logout, getGameHistory, getTransactionHistory, claimRebate, playSound, redeemActivationCode } from '../services/supabaseService';
 import AiSupportChat from '../components/AiSupportChat';
 
 interface ProfileProps {
@@ -16,6 +16,8 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
   const [showAiChat, setShowAiChat] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [showRebateModal, setShowRebateModal] = useState(false);
+  const [showActivateModal, setShowActivateModal] = useState(false);
+  const [activationCode, setActivationCode] = useState('');
   const [historyData, setHistoryData] = useState<GameHistoryItem[]>([]);
   const [txData, setTxData] = useState<Transaction[]>([]);
 
@@ -36,6 +38,19 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
     if (pendingRebate <= 0) return;
     const res = await claimRebate();
     if (res.success) { playSound('win'); alert(`Success! ₹${res.amount?.toFixed(2)} added.`); setShowRebateModal(false); }
+  };
+
+  const handleActivateSubmit = async () => {
+    if (!activationCode.trim()) return;
+    const res = await redeemActivationCode(activationCode);
+    if (res.success) {
+      playSound('win');
+      alert(res.message);
+      setActivationCode('');
+      setShowActivateModal(false);
+    } else {
+      alert(res.message);
+    }
   };
 
   const getVIPBadge = (lv: number) => (
@@ -61,7 +76,7 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
         <div className="relative z-10 flex items-center justify-between mb-10">
            <div className="flex items-center gap-5">
                 <div className="relative"><img src={user.avatar} className="w-20 h-20 rounded-full border-4 border-white/20 shadow-2xl" alt="P" /><div className="absolute -bottom-1 -right-1 bg-yellow-500 rounded-full p-1.5 border-2 border-slate-900"><Crown size={14} className="text-slate-900 fill-slate-900" /></div></div>
-                <div>{getVIPBadge(user.vipLevel || 0)}<h2 className="text-2xl font-black italic tracking-tighter mt-1">{user.username}</h2><div className="flex items-center gap-2 mt-1"><span className="text-blue-300 text-[9px] font-bold font-mono">ID: {user.uid?.slice(-6)}</span><Copy size={12} className="text-blue-400 cursor-pointer" onClick={() => handleCopy(user.uid)} /></div></div>
+                <div>{getVIPBadge(user.vipLevel || 0)}<h2 className="text-2xl font-black italic tracking-tighter mt-1">{user.username}</h2><div className="flex flex-col gap-1 mt-1.5"><div className="flex items-center gap-2"><span className="text-blue-300 text-[9px] font-bold font-mono">ID: {user.uid?.slice(-6)}</span><Copy size={12} className="text-blue-400 cursor-pointer" onClick={() => handleCopy(user.uid)} /></div><div className="flex items-center gap-2"><span className="text-yellow-400 text-[9px] font-black font-mono">REF: {user.inviteCode}</span><Copy size={12} className="text-yellow-400 cursor-pointer" onClick={() => handleCopy(user.inviteCode)} /></div></div></div>
            </div>
            <button onClick={() => setView('SAFETY')} className="p-3 bg-white/10 rounded-2xl backdrop-blur-md active:scale-90"><Settings size={22}/></button>
         </div>
@@ -107,9 +122,15 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
              <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
              <MenuItem onClick={() => setShowHistoryModal('TRANSACTION')} icon={History} label="Financial Ledger" bg="bg-blue-500/10" color="text-blue-400" />
              <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
-             <MenuItem onClick={() => setView('PROMOTION')} icon={Gift} label="Gift Center" bg="bg-pink-500/10" color="text-pink-400" subtitle="Redeem bounty codes" />
-             <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
              <MenuItem onClick={() => setView('REWARDS_HUB')} icon={Sparkles} label="Rewards Hub" bg="bg-yellow-500/10" color="text-yellow-400" subtitle="Bind bank and upi" />
+             <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
+             <MenuItem onClick={() => setShowActivateModal(true)} icon={Key} label="Premium Activation" bg="bg-emerald-500/10" color="text-emerald-400" subtitle="Enter your license key" />
+             {user.isAdmin && (
+                 <>
+                     <div className="h-[1px] bg-slate-800 mx-10 opacity-30"></div>
+                     <MenuItem onClick={() => setView('ADMIN_PANEL')} icon={Shield} label="Admin Command" bg="bg-red-500/10" color="text-red-400" subtitle="App configuration panel" />
+                 </>
+             )}
         </div>
 
         <button onClick={() => logout()} className="w-full py-5 rounded-3xl text-red-500 font-black uppercase tracking-widest bg-[#1e293b] border border-red-500/20 active:scale-95 transition-all mb-10 shadow-xl">Sign Out Session</button>
@@ -122,6 +143,31 @@ const Profile: React.FC<ProfileProps> = ({ user, setView }) => {
                   <div className="text-center mb-8"><div className="w-20 h-20 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-purple-500/30"><Zap size={40} className="text-purple-400 fill-purple-400" /></div><h3 className="text-2xl font-black italic gold-text uppercase">ELITE REBATE</h3><p className="text-slate-400 text-[10px] mt-2 font-bold uppercase tracking-widest">Daily turnover payout</p></div>
                   <div className="bg-black/40 p-6 rounded-3xl border border-white/5 text-center mb-8"><p className="text-[10px] text-slate-500 font-black uppercase mb-1">Available Bounty</p><p className="text-4xl font-black text-white italic">₹{pendingRebate.toFixed(2)}</p></div>
                   <button onClick={handleClaimRebateAction} disabled={pendingRebate <= 0} className={`w-full py-5 rounded-2xl font-black uppercase tracking-widest text-lg shadow-xl active:scale-95 transition-all ${pendingRebate > 0 ? 'bg-purple-600 text-white' : 'bg-slate-700 text-slate-500 grayscale cursor-not-allowed'}`}>CLAIM REBATE</button>
+              </div>
+          </div>
+      )}
+
+      {showActivateModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+              <div className="bg-[#1e293b] w-full max-w-sm rounded-[3rem] p-8 border border-white/10 shadow-2xl relative animate-in zoom-in">
+                  <button onClick={() => setShowActivateModal(false)} className="absolute top-6 right-6 p-2 bg-slate-800 rounded-full"><X size={20}/></button>
+                  <div className="text-center mb-8">
+                    <div className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-emerald-500/30">
+                        <Key size={40} className="text-emerald-400" />
+                    </div>
+                    <h3 className="text-2xl font-black italic gold-text uppercase">ACTIVATE KEY</h3>
+                    <p className="text-slate-400 text-[10px] mt-2 font-bold uppercase tracking-widest">Enter license key for balance & days</p>
+                  </div>
+                  <div className="bg-black/40 p-4 rounded-3xl border border-white/5 mb-8">
+                    <input 
+                        type="text" 
+                        value={activationCode}
+                        onChange={(e) => setActivationCode(e.target.value.toUpperCase())}
+                        placeholder="LIC-XXXXX"
+                        className="w-full bg-transparent text-white font-black text-center text-xl outline-none placeholder:text-slate-700 font-mono tracking-widest"
+                    />
+                  </div>
+                  <button onClick={handleActivateSubmit} className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black uppercase tracking-widest text-lg shadow-xl active:scale-95 transition-all outline-none">ACTIVATE NOW</button>
               </div>
           </div>
       )}

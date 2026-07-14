@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Trophy, AlertCircle, Rocket } from 'lucide-react';
+import { Trophy, Rocket, X } from 'lucide-react';
 import { playSound } from '../services/supabaseService';
 
 interface LimboResultPopupProps {
@@ -17,67 +17,74 @@ interface LimboResultPopupProps {
 const LimboResultPopup: React.FC<LimboResultPopupProps> = ({ result, onClose }) => {
   React.useEffect(() => {
     if (result) {
-      if (result.win) playSound('win_popup');
-      else playSound('loss_popup');
+      if (result.win) {
+        playSound('win_popup');
+      } else {
+        playSound('loss_popup');
+      }
+
+      // Auto dismiss after 3 seconds
+      const timer = setTimeout(() => {
+        onClose();
+      }, 3000);
+      return () => clearTimeout(timer);
     }
-  }, [result]);
+  }, [result, onClose]);
 
   if (!result) return null;
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] w-[90%] max-w-xs pointer-events-none">
         <motion.div 
-          initial={{ scale: 0.5, opacity: 0, y: 50 }}
+          initial={{ scale: 0.9, opacity: 0, y: -20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.5, opacity: 0, y: 50 }}
-          className={`w-full max-w-sm rounded-[3rem] overflow-hidden border-2 shadow-[0_0_100px_rgba(0,0,0,0.5)] ${result.win ? 'bg-[#0a1a1a] border-blue-500/30' : 'bg-[#1a1a1a] border-red-500/30'}`}
+          exit={{ scale: 0.9, opacity: 0, y: -20 }}
+          transition={{ type: "spring", stiffness: 350, damping: 25 }}
+          className={`pointer-events-auto relative rounded-xl border px-3 py-2 shadow-xl flex items-center gap-2.5 overflow-hidden backdrop-blur-xl ${
+            result.win 
+              ? 'bg-emerald-950/90 border-emerald-500/40 shadow-emerald-500/10 text-emerald-400' 
+              : 'bg-rose-950/90 border-rose-500/40 shadow-rose-500/10 text-rose-400'
+          }`}
         >
-          <div className={`p-8 text-center relative ${result.win ? 'bg-gradient-to-b from-blue-500/20 to-transparent' : 'bg-gradient-to-b from-red-500/20 to-transparent'}`}>
-            <button onClick={onClose} className="absolute top-6 right-6 p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors">
-              <X size={20} className="text-white/50" />
-            </button>
-
-            <div className="mb-6 inline-flex p-6 rounded-full bg-black/40 border border-white/10 relative">
-              {result.win ? (
-                <Trophy size={48} className="text-yellow-500 animate-bounce" />
-              ) : (
-                <Rocket size={48} className="text-red-500 animate-pulse" />
-              )}
-            </div>
-
-            <h2 className={`text-4xl font-black italic tracking-tighter uppercase mb-2 ${result.win ? 'text-blue-500' : 'text-red-500'}`}>
-              {result.win ? 'TARGET HIT!' : 'CRASHED!'}
-            </h2>
-
-            <div className="space-y-4 mb-8">
-                <div className="bg-black/30 p-6 rounded-3xl border border-white/5">
-                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-4">Rocket Outcome</p>
-                    <div className="flex flex-col items-center">
-                        <p className={`text-5xl font-black italic tracking-tighter ${result.win ? 'text-blue-400' : 'text-red-500'}`}>
-                            {result.multiplier.toFixed(2)}x
-                        </p>
-                        <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mt-2">Target: {result.target.toFixed(2)}x</p>
-                    </div>
-                </div>
-            </div>
-
-            <div className={`p-6 rounded-[2rem] border-2 mb-8 ${result.win ? 'bg-blue-500/10 border-blue-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
-              <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">
-                {result.win ? 'Total Profit' : 'Total Loss'}
-              </p>
-              <h3 className={`text-4xl font-black italic ${result.win ? 'text-yellow-500' : 'text-white/20'}`}>
-                {result.win ? `+₹${result.amount.toFixed(2)}` : `-₹${result.amount.toFixed(2)}`}
-              </h3>
-            </div>
-
-            <button 
-              onClick={onClose}
-              className={`w-full py-5 rounded-3xl font-black uppercase tracking-[0.4em] text-sm shadow-2xl active:scale-95 transition-all ${result.win ? 'bg-blue-600 text-white' : 'bg-white/10 text-white border border-white/10'}`}
-            >
-              BOOST AGAIN
-            </button>
+          {/* Status Icon */}
+          <div className="shrink-0">
+            {result.win ? (
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center">
+                <Trophy size={14} className="text-emerald-400 animate-bounce" />
+              </div>
+            ) : (
+              <div className="w-8 h-8 rounded-lg bg-rose-500/20 border border-rose-400/30 flex items-center justify-center">
+                <Rocket size={14} className="text-rose-400 rotate-45" />
+              </div>
+            )}
           </div>
+
+          {/* Details column */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 leading-none">
+              <span className="text-[10px] font-black tracking-widest uppercase">
+                {result.win ? 'WIN' : 'CRASHED'}
+              </span>
+              <span className="text-[9px] opacity-75 font-bold font-mono">
+                {result.multiplier.toFixed(2)}x
+              </span>
+            </div>
+            <p className="text-[9px] text-white/80 truncate mt-0.5 font-mono">
+              {result.win 
+                ? `Payout: +₹${result.amount.toFixed(2)}`
+                : `Lost: ₹${result.amount.toFixed(2)}`
+              }
+            </p>
+          </div>
+
+          {/* Manual close */}
+          <button 
+            onClick={onClose}
+            className="text-white/40 hover:text-white/70 p-1 active:scale-95 transition-all self-center shrink-0"
+          >
+            <X size={14} />
+          </button>
         </motion.div>
       </div>
     </AnimatePresence>
@@ -85,3 +92,4 @@ const LimboResultPopup: React.FC<LimboResultPopupProps> = ({ result, onClose }) 
 };
 
 export default LimboResultPopup;
+

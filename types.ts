@@ -1,5 +1,5 @@
 
-export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_MINES' | 'GAME_VORTEX' | 'GAME_LUCKY_WHEEL' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS' | 'REWARDS_HUB' | 'GAME_DRAGON_TIGER' | 'GAME_ROULETTE' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'GAME_HEAD_TAILS' | 'GAME_LIMBO' | 'GAME_PLINKO' | 'GAME_HILO' | 'GAME_KENO' | 'GAME_DICE' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_MOTO_RACING' | 'LEADERBOARD' | 'CHAT' | 'GAME_CRICKET' | 'GAME_TOWER' | 'GAME_SLOT_MACHINE' | 'GAME_ANDAR_BAHAR' | 'GAME_CRAZY_WHEEL' | 'GAME_7UP_DOWN' | 'GIFT_CODE' | 'GAME_CHICKEN_ROAD' | 'GAME_PUMP' | 'GAME_MOLES' | 'GAME_JACKPOT_SPIN' | 'GAME_SCRATCH_CARD' | 'GAME_CYBER_VOYAGE';
+export type View = 'HOME' | 'REFERRAL' | 'PROMOTION' | 'WALLET' | 'ACCOUNT' | 'GAME_MINES' | 'GAME_VORTEX' | 'GAME_LUCKY_WHEEL' | 'DEPOSIT' | 'WITHDRAW' | 'LOGIN' | 'REGISTER' | 'SAFETY' | 'STATISTICS' | 'REWARDS_HUB' | 'GAME_DRAGON_TIGER' | 'GAME_ROULETTE' | 'GAME_STREET_RACE' | 'GAME_VAULT' | 'GAME_HEAD_TAILS' | 'GAME_LIMBO' | 'GAME_PLINKO' | 'GAME_HILO' | 'GAME_KENO' | 'GAME_DICE' | 'GAME_FRUIT_SLOT' | 'GAME_EGYPT_SLOT' | 'GAME_MOTO_RACING' | 'LEADERBOARD' | 'CHAT' | 'GAME_CRICKET' | 'GAME_TOWER' | 'GAME_SLOT_MACHINE' | 'GAME_ANDAR_BAHAR' | 'GAME_CRAZY_WHEEL' | 'GAME_7UP_DOWN' | 'GIFT_CODE' | 'GAME_CHICKEN_ROAD' | 'GAME_PUMP' | 'GAME_MOLES' | 'GAME_JACKPOT_SPIN' | 'GAME_SCRATCH_CARD' | 'GAME_CYBER_VOYAGE' | 'GAME_WINGO' | 'GAME_AVIATOR' | 'GAME_LUDO' | 'ADMIN_PANEL' | string;
 
 export interface UserProfile {
   uid: string;
@@ -25,8 +25,12 @@ export interface UserProfile {
   isUpiBound?: boolean;
   isTelegramJoined?: boolean;
   isBlocked?: boolean;
+  forcedOutcome?: 'WIN' | 'LOSS' | null;
+  expiryDate?: number;
+  isPremium?: boolean;
   bankDetails?: { accountName: string; accountNo: string; ifsc: string };
   upiDetails?: { upiId: string };
+  isAdmin?: boolean;
 }
 
 export interface ChatMessage {
@@ -37,30 +41,6 @@ export interface ChatMessage {
     timestamp: number;
     avatar: string;
     vip: number;
-}
-
-export interface AviatorState {
-  phase: 'WAITING' | 'FLYING' | 'CRASHED';
-  multiplier: number;
-  timeLeft: number;
-  endTime?: number;
-  startTime?: number;
-  history: number[];
-  crashPoint: number;
-}
-
-export interface WinGoHistory {
-  period: string;
-  number: number;
-  bigSmall: 'Big' | 'Small';
-  color: 'Red' | 'Green' | 'Violet';
-}
-
-export interface WinGoGameState {
-  endTime: number;
-  period: string;
-  history: WinGoHistory[];
-  status: 'BETTING' | 'REVEALING';
 }
 
 export interface Transaction {
@@ -125,6 +105,21 @@ export interface GameResult {
         value: string;
         color?: string;
     }[];
+}
+
+export interface WinGoHistory {
+  period: string;
+  number: number;
+  bigSmall: 'Big' | 'Small';
+  color: 'Red' | 'Green' | 'Violet';
+}
+
+export interface WinGoGameState {
+  timeLeft: number;
+  period: number;
+  history: WinGoHistory[];
+  status: 'BETTING' | 'REVEALING';
+  lastResult: WinGoHistory | null;
 }
 
 export interface DragonTigerState {
@@ -214,9 +209,40 @@ export interface GiftCode {
   usedCount: number;
   minVip: number;
   createdAt: number;
+  expiryDate?: number;
+  personalUser?: string;
+}
+
+export interface PaymentMethod {
+  id?: string;
+  name: string;
+  qrImage: string;
+  upiId?: string;
 }
 
 export interface AppSettings {
   upiId: string;
   disabledGames: Record<string, boolean>;
+  globalWinProbability: number;
+  gameProbabilities?: Record<string, number>;
+  minWithdrawal: number;
+  maxWithdrawal: number;
+  minDeposit?: number;
+  depositQrImage?: string;
+  bannerImage?: string;
+  bannerLink?: string;
+  bannerImages?: string[];
+  bannerLinks?: string[];
+  gameBanners?: Record<string, string>;
+  paymentMethods?: PaymentMethod[];
+  customGames?: { id: string; name: string; banner: string; link: string; disabled?: boolean }[];
+}
+
+export interface ActivationCode {
+  id: string;
+  days: number;
+  balance: number;
+  isUsed: boolean;
+  usedBy?: string;
+  createdAt: number;
 }

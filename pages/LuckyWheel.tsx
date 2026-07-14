@@ -24,7 +24,113 @@ const SEGMENTS = [
   { label: '0.5X', val: 0.5, color: '#64748b' },
 ];
 
+// Custom standalone AudioContext Synth class for lag-free professional lucky wheel audio
+class LuckyWheelSfx {
+  private ctx: AudioContext | null = null;
+  private isMuted: boolean = false;
+
+  constructor() {
+    this.isMuted = getMuteStatus();
+  }
+
+  setMuted(muted: boolean) {
+    this.isMuted = muted;
+  }
+
+  private init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  playTick(pitch: number = 800) {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(pitch, now);
+    
+    gain.gain.setValueAtTime(0.04, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.03);
+  }
+
+  playSpinStart() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(200, now);
+    osc.frequency.exponentialRampToValueAtTime(800, now + 0.2);
+    
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.25);
+  }
+
+  playWin() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const freqs = [523.25, 659.25, 783.99, 1046.50]; // C Major Chord
+    freqs.forEach((f, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, now + i * 0.08);
+      gain.gain.setValueAtTime(0.05, now + i * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.4);
+      osc.connect(gain);
+      gain.connect(this.ctx!.destination);
+      osc.start(now + i * 0.08);
+      osc.stop(now + i * 0.08 + 0.4);
+    });
+  }
+
+  playLoss() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.linearRampToValueAtTime(80, now + 0.4);
+    
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.linearRampToValueAtTime(0.001, now + 0.4);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.4);
+  }
+}
+
 const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
+  const sfx = useRef(new LuckyWheelSfx());
   const [betAmount, setBetAmount] = useState(10);
   const [isSpinning, setIsSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
@@ -37,11 +143,12 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
 
   useEffect(() => {
     isMounted.current = true;
+    sfx.current.setMuted(muted);
     return () => {
       isMounted.current = false;
       stopAllSounds();
     };
-  }, []);
+  }, [muted]);
 
   const handleSpin = () => {
     if (isSpinning) return;
@@ -52,6 +159,7 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
 
     setIsSpinning(true);
     playSound('bet_place');
+    playSound('spin');
     setLwResult(null);
     updateBalance(-betAmount, 'BET', 'Lucky Wheel Stake');
 
@@ -74,6 +182,22 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     
     setRotation(targetRotation);
 
+    // Schedule wheel spin ticks and sounds
+    sfx.current.playSpinStart();
+    let tickDelay = 50;
+    let accumulatedTime = 0;
+    const maxDuration = 3700;
+    
+    const playNextTick = () => {
+      if (accumulatedTime >= maxDuration || !isMounted.current) return;
+      sfx.current.playTick(600 + (200 * (accumulatedTime / maxDuration)));
+      const progress = accumulatedTime / maxDuration;
+      tickDelay = 50 + Math.pow(progress, 2.2) * 500;
+      accumulatedTime += tickDelay;
+      setTimeout(playNextTick, tickDelay);
+    };
+    setTimeout(playNextTick, tickDelay);
+
     setTimeout(() => {
       if (!isMounted.current) return;
       
@@ -92,6 +216,9 @@ const LuckyWheel: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
 
       if (winAmount > 0) {
         updateBalance(winAmount, 'WIN', 'Lucky Wheel Win');
+        sfx.current.playWin();
+      } else {
+        sfx.current.playLoss();
       }
 
       setHistory(prev => [result.label, ...prev].slice(0, 10));

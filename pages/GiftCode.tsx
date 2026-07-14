@@ -11,6 +11,37 @@ const GiftCode: React.FC<{ onBack: () => void; userBalance: number }> = ({ onBac
 
   const [showPopup, setShowPopup] = useState(false);
 
+  const playClaimSound = () => {
+    try {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        const now = ctx.currentTime;
+        
+        // Staggered arpeggio (C Major chord: C, E, G, C, E, G, C)
+        const freqs = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99, 1046.50];
+        freqs.forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+            
+            gain.gain.setValueAtTime(0, now + idx * 0.08);
+            gain.gain.linearRampToValueAtTime(0.2, now + idx * 0.08 + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.5);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start(now + idx * 0.08);
+            osc.stop(now + idx * 0.08 + 0.6);
+        });
+    } catch (e) {
+        console.warn('Web Audio API not supported', e);
+    }
+  };
+
   const handleRedeem = async () => {
     if (!code.trim()) return;
     
@@ -22,7 +53,7 @@ const GiftCode: React.FC<{ onBack: () => void; userBalance: number }> = ({ onBac
         setStatus('SUCCESS');
         setMessage(res.message);
         setShowPopup(true);
-        playSound('win');
+        playClaimSound();
     } else {
         setStatus('ERROR');
         setMessage(res.message);

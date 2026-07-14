@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Building2, Smartphone, AlertCircle, ShieldCheck, Lock, CheckCircle2 } from 'lucide-react';
-import { handleWithdraw, subscribeToBalance } from '../services/supabaseService';
-import { UserProfile } from '../types';
+import { handleWithdraw, subscribeToBalance, adminGetSettings } from '../services/supabaseService';
+import { UserProfile, AppSettings } from '../types';
 
 const Withdraw: React.FC<{ onBack: () => void; userBalance: number }> = ({ onBack, userBalance }) => {
     const [amount, setAmount] = useState('');
@@ -10,6 +10,7 @@ const Withdraw: React.FC<{ onBack: () => void; userBalance: number }> = ({ onBac
     const [message, setMessage] = useState<{ type: 'S'|'E', text: string } | null>(null);
     const [user, setUser] = useState<UserProfile | null>(null);
     const [details, setDetails] = useState({ accountName: '', accountNo: '', ifsc: '', upiId: '', phonePe: '' });
+    const [settings, setSettings] = useState<AppSettings | null>(null);
 
     useEffect(() => {
         const unsub = subscribeToBalance(u => {
@@ -17,7 +18,13 @@ const Withdraw: React.FC<{ onBack: () => void; userBalance: number }> = ({ onBac
             if (u?.isBankBound) setMethod('BANK');
             else if (u?.isUpiBound) setMethod('UPI');
         });
-        return unsub;
+        const unsubSettings = adminGetSettings(s => {
+            if (s) setSettings(s);
+        });
+        return () => {
+            unsub();
+            unsubSettings();
+        };
     }, []);
 
     const showMsg = (text: string, type: 'S'|'E' = 'E') => {
@@ -31,7 +38,10 @@ const Withdraw: React.FC<{ onBack: () => void; userBalance: number }> = ({ onBac
         if (!user.withdrawalPassword) return showMsg('Please set your Security PIN in Safety Hub first.');
         
         const val = parseFloat(amount);
-        if (isNaN(val) || val < 110) return showMsg('Minimum withdrawal is ₹110');
+        const minWithdrawalVal = settings?.minWithdrawal ?? 110;
+        const maxWithdrawalVal = settings?.maxWithdrawal ?? 100000;
+        if (isNaN(val) || val < minWithdrawalVal) return showMsg(`Minimum withdrawal is ₹${minWithdrawalVal}`);
+        if (val > maxWithdrawalVal) return showMsg(`Maximum withdrawal is ₹${maxWithdrawalVal}`);
         if ((user.wagerRequired || 0) > 0) return showMsg(`Turnover incomplete! ₹${user.wagerRequired.toFixed(2)} left.`);
         if (!password) return showMsg('Enter Security PIN');
 
@@ -93,7 +103,7 @@ const Withdraw: React.FC<{ onBack: () => void; userBalance: number }> = ({ onBac
                 <div className="space-y-4">
                     <div className="bg-[#111827] border-2 border-slate-800 rounded-3xl p-5 flex items-center gap-4">
                         <span className="text-yellow-500 font-black text-2xl">₹</span>
-                        <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Min 110" className="bg-transparent w-full outline-none font-black text-3xl italic" />
+                        <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder={`Min ${settings?.minWithdrawal ?? 110}`} className="bg-transparent w-full outline-none font-black text-3xl italic" />
                     </div>
                     <div className="bg-[#111827] border-2 border-slate-800 rounded-3xl p-5 flex items-center gap-4">
                         <Lock size={24} className="text-slate-600" />

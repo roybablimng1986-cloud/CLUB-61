@@ -5,7 +5,6 @@ import { getClockOffset } from '../services/supabaseService';
 export function useStabilizedTimer(endTime: number | undefined) {
     const [timeLeft, setTimeLeft] = useState(0);
     const lastEndTimeRef = useRef<number | undefined>(undefined);
-    const lastCalculatedRef = useRef<number>(0);
 
     useEffect(() => {
         if (!endTime) {
@@ -13,35 +12,32 @@ export function useStabilizedTimer(endTime: number | undefined) {
             return;
         }
 
-        const syncWithServer = () => {
+        const getRemaining = () => {
             const now = Date.now() + getClockOffset();
-            const actualRemaining = Math.max(0, Math.floor((endTime - now) / 1000));
-            
-            setTimeLeft(prev => {
-                // If it's a new period/endTime, reset immediately
-                if (endTime !== lastEndTimeRef.current) {
-                    lastEndTimeRef.current = endTime;
-                    return actualRemaining;
-                }
-
-                // If deviation is significantly > 2s, force sync
-                if (Math.abs(prev - actualRemaining) > 2) {
-                    return actualRemaining;
-                }
-                
-                // Otherwise let it count down naturally if close enough
-                if (actualRemaining < prev) {
-                    return prev - 1;
-                }
-
-                return actualRemaining;
-            });
+            return Math.max(0, Math.ceil((endTime - now) / 1000));
         };
 
-        // Initial sync
-        syncWithServer();
+        const initial = getRemaining();
+        setTimeLeft(initial);
+        lastEndTimeRef.current = endTime;
 
-        const interval = setInterval(syncWithServer, 1000);
+        const interval = setInterval(() => {
+            setTimeLeft(prev => {
+                const actual = getRemaining();
+                // If it's a new endTime, reset immediately
+                if (endTime !== lastEndTimeRef.current) {
+                    lastEndTimeRef.current = endTime;
+                    return actual;
+                }
+                // If there's a drift of more than 2 seconds, force sync to actual
+                if (Math.abs(prev - actual) > 2) {
+                    return actual;
+                }
+                // Otherwise, just count down by 1 smoothly
+                return Math.max(0, prev - 1);
+            });
+        }, 1000);
+
         return () => clearInterval(interval);
     }, [endTime]);
 

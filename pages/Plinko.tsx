@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, Volume2, VolumeX, PlayCircle, HelpCircle, X } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, db, auth, addGameBet } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, getMuteStatus, toggleMute, db, auth, addGameBet, shouldForceLoss } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
@@ -18,7 +18,128 @@ const CANVAS_WIDTH = 380; const CANVAS_HEIGHT = 540;
 import PlinkoResultPopup from '../components/PlinkoResultPopup';
 import HowToPlay from '../components/HowToPlay';
 
+// Custom standalone AudioContext Synth class for lag-free professional Plinko audio
+class PlinkoSfx {
+  private ctx: AudioContext | null = null;
+  private isMuted: boolean = false;
+
+  constructor() {
+    this.isMuted = getMuteStatus();
+  }
+
+  setMuted(muted: boolean) {
+    this.isMuted = muted;
+  }
+
+  private init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  playPegBounce() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sine';
+    const pitch = 750 + Math.random() * 350;
+    osc.frequency.setValueAtTime(pitch, now);
+    
+    gain.gain.setValueAtTime(0.04, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.02);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.02);
+  }
+
+  playDropStart() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(400, now);
+    osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+    
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.12);
+  }
+
+  playLand(multiplier: number) {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    
+    if (multiplier >= 2) {
+      const freqs = [523.25, 659.25, 783.99, 1046.50];
+      freqs.forEach((f, i) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, now + i * 0.06);
+        gain.gain.setValueAtTime(0.04, now + i * 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.3);
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
+        osc.start(now + i * 0.06);
+        osc.stop(now + i * 0.06 + 0.3);
+      });
+    } else {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(320, now);
+      gain.gain.setValueAtTime(0.06, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.05);
+    }
+  }
+
+  playError() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.linearRampToValueAtTime(100, now + 0.25);
+    
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.linearRampToValueAtTime(0.001, now + 0.25);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.25);
+  }
+}
+
 const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
+  const sfx = useRef(new PlinkoSfx());
   const [betAmount, setBetAmount] = useState(10);
   const [muted, setMuted] = useState(getMuteStatus());
   const [showRules, setShowRules] = useState(false);
@@ -29,6 +150,10 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
   const [floatingResults, setFloatingResults] = useState<{ id: string; mult: number; amount: number }[]>([]);
 
   const startY = 110; const rowSpacing = 40; const colSpacing = 36;
+
+  useEffect(() => {
+    sfx.current.setMuted(muted);
+  }, [muted]);
 
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
@@ -53,12 +178,17 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
         ball.x = ball.targetX; ball.y = ball.targetY; ball.progress = 0; ball.startPos = { x: ball.x, y: ball.y };
         if (ball.row < ROWS - 1) {
           pulsesRef.current.push({ row: ball.row, col: ball.col, startTime: Date.now() });
-          playSound('wingo_tick');
-          const nextRow = ball.row + 1; const moveRight = Math.random() > 0.49 ? 1 : 0;
+          sfx.current.playPegBounce();
+          const nextRow = ball.row + 1; 
+          let moveRight = Math.random() > 0.49 ? 1 : 0;
+          if (isForcedLoss.current) {
+              const targetCenter = (ball.row + 1) / 2;
+              if (ball.col < targetCenter) moveRight = 1; else moveRight = 0;
+          }
           const nextCol = ball.col + moveRight; const coords = getPinCoords(nextRow, nextCol);
           return { ...ball, row: nextRow, col: nextCol, targetX: coords.x, targetY: coords.y } as Ball;
         } else {
-          if (ball.y < slotY) { playSound('wingo_tick'); return { ...ball, targetY: slotY + 25, targetX: ball.x, row: ROWS } as Ball; }
+          if (ball.y < slotY) { sfx.current.playPegBounce(); return { ...ball, targetY: slotY + 25, targetX: ball.x, row: ROWS } as Ball; }
           else { handleBallLand(ball); return { ...ball, status: 'DONE' } as Ball; }
         }
       }
@@ -108,8 +238,8 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
 
     if (isWin) {
         updateBalance(winAmount, 'WIN', `Plinko ${multiplier}x`);
-        playSound('win');
     }
+    sfx.current.playLand(multiplier);
     
     const rid = Math.random().toString(36).substr(2, 5);
     setFloatingResults(prev => [...prev, { id: rid, mult: multiplier, amount: winAmount }]);
@@ -117,11 +247,12 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
     addGameHistory('Plinko', ball.bet, winAmount, `Hit ${multiplier}x`);
   };
 
+  const isForcedLoss = useRef(false);
+
   const dropBall = async () => {
-    if (userBalance < betAmount) { playSound('loss'); return; }
+    if (userBalance < betAmount) { sfx.current.playError(); return; }
     
-    // Record bet in Firestore removed to save quota for instant games
-    // addGameHistory will still record the result for the user
+    isForcedLoss.current = shouldForceLoss(betAmount, userBalance);
 
     updateBalance(-betAmount, 'BET', 'Plinko Stake');
     const startCoords = getPinCoords(0, 0);
@@ -129,7 +260,7 @@ const Plinko: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: 
       id: Math.random().toString(36).substr(2, 9), x: CANVAS_WIDTH / 2, y: 30, row: 0, col: 0, bet: betAmount,
       status: 'DROPPING', targetX: startCoords.x, targetY: startCoords.y, progress: 0, startPos: { x: CANVAS_WIDTH / 2, y: 30 }
     });
-    playSound('bet_place');
+    sfx.current.playDropStart();
   };
 
   return (

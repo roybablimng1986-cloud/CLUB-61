@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Trophy, AlertCircle, Bomb } from 'lucide-react';
+import { X, Trophy, Bomb, Check, TrendingUp } from 'lucide-react';
 import { playSound } from '../services/supabaseService';
 
 interface MinesResultPopupProps {
@@ -27,65 +26,76 @@ const MinesResultPopup: React.FC<MinesResultPopupProps> = ({ result, onClose }) 
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+      <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
         <motion.div 
-          initial={{ scale: 0.5, opacity: 0, y: 50 }}
+          initial={{ scale: 0.9, opacity: 0, y: -40 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.5, opacity: 0, y: 50 }}
-          className={`w-full max-w-sm rounded-[3rem] overflow-hidden border-2 shadow-[0_0_100px_rgba(0,0,0,0.5)] ${result.win ? 'bg-[#1a2e1a] border-green-500/30' : 'bg-[#1a1a1a] border-red-500/30'}`}
+          exit={{ scale: 0.9, opacity: 0, y: -40 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+          className={`w-[260px] rounded-[2rem] overflow-hidden border shadow-[0_10px_30px_rgba(0,0,0,0.5)] ${
+            result.win 
+              ? 'bg-[#0b1c10]/95 border-emerald-500/40 text-emerald-100 shadow-emerald-950/20' 
+              : 'bg-[#180a0a]/95 border-red-500/40 text-red-100 shadow-red-950/20'
+          }`}
         >
-          <div className={`p-8 text-center relative ${result.win ? 'bg-gradient-to-b from-green-500/20 to-transparent' : 'bg-gradient-to-b from-red-500/20 to-transparent'}`}>
-            <button onClick={onClose} className="absolute top-6 right-6 p-2 bg-white/5 rounded-full hover:bg-white/10 transition-colors">
-              <X size={20} className="text-white/50" />
+          <div className="p-5 text-center relative">
+            <button 
+              onClick={onClose} 
+              className="absolute top-4 right-4 p-1.5 bg-white/5 rounded-full hover:bg-white/10 transition-colors"
+            >
+              <X size={14} className="text-white/40 hover:text-white" />
             </button>
 
-            <div className="mb-6 inline-flex p-6 rounded-full bg-black/40 border border-white/10 relative">
-              {result.win ? (
-                <Trophy size={48} className="text-yellow-500 animate-bounce" />
-              ) : (
-                <Bomb size={48} className="text-red-500 animate-pulse" />
-              )}
+            <div className="flex justify-center mb-3">
+              <div className={`p-3 rounded-full ${result.win ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                {result.win ? (
+                  <Trophy size={24} className="animate-bounce" />
+                ) : (
+                  <Bomb size={24} className="animate-pulse" />
+                )}
+              </div>
             </div>
 
-            <h2 className={`text-4xl font-black italic tracking-tighter uppercase mb-2 ${result.win ? 'text-green-500' : 'text-red-500'}`}>
-              {result.win ? 'CASHOUT!' : 'EXPLODED'}
-            </h2>
-            <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] mb-8">Mines Hunt</p>
+            <h3 className={`text-xl font-extrabold uppercase tracking-tight ${result.win ? 'text-emerald-400' : 'text-red-400'}`}>
+              {result.win ? 'CASHOUT' : 'EXPLODED'}
+            </h3>
+            
+            <p className="text-[9px] font-mono tracking-widest text-white/30 uppercase mt-0.5 mb-3">Mines Hunt</p>
 
-            <div className="space-y-4 mb-8">
-                <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-black/30 p-4 rounded-2xl border border-white/5">
-                        <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Gems Found</p>
-                        <div className="text-2xl font-black italic text-white">{result.gemsFound}</div>
-                    </div>
-                    <div className="bg-black/30 p-4 rounded-2xl border border-white/5">
-                        <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Mines Count</p>
-                        <div className="text-2xl font-black italic text-white">{result.minesCount}</div>
-                    </div>
-                </div>
+            <div className="space-y-1.5 mb-4">
+              <div className="flex justify-between items-center bg-black/35 px-3.5 py-1.5 rounded-xl border border-white/5">
+                <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Multiplier</span>
+                <span className={`text-xs font-black italic ${result.win ? 'text-yellow-400' : 'text-slate-400'}`}>
+                  {result.multiplier.toFixed(2)}x
+                </span>
+              </div>
 
-                <div className="bg-black/30 p-4 rounded-3xl border border-white/5">
-                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Multiplier</p>
-                    <p className="text-2xl font-black italic text-yellow-500">
-                        {result.multiplier.toFixed(2)}x
-                    </p>
-                </div>
-            </div>
+              <div className="flex justify-between items-center bg-black/35 px-3.5 py-1.5 rounded-xl border border-white/5">
+                <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">Gems Found</span>
+                <span className="text-xs font-bold text-white font-mono">
+                  {result.gemsFound} 💎
+                </span>
+              </div>
 
-            <div className={`p-6 rounded-[2rem] border-2 mb-8 ${result.win ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
-              <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">
-                {result.win ? 'Total Profit' : 'Total Loss'}
-              </p>
-              <h3 className={`text-4xl font-black italic ${result.win ? 'text-yellow-500' : 'text-white/20'}`}>
-                {result.win ? `+₹${result.amount.toFixed(2)}` : `-₹${result.amount.toFixed(2)}`}
-              </h3>
+              <div className="flex justify-between items-center bg-black/35 px-3.5 py-2 rounded-xl border border-white/5">
+                <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider">
+                  {result.win ? 'Profit' : 'Loss'}
+                </span>
+                <span className={`text-sm font-black italic ${result.win ? 'text-yellow-400' : 'text-red-400'}`}>
+                  {result.win ? `+₹${result.amount.toFixed(1)}` : `-₹${result.amount.toFixed(1)}`}
+                </span>
+              </div>
             </div>
 
             <button 
               onClick={onClose}
-              className={`w-full py-5 rounded-3xl font-black uppercase tracking-[0.4em] text-sm shadow-2xl active:scale-95 transition-all ${result.win ? 'bg-green-600 text-white' : 'bg-white/10 text-white border border-white/10'}`}
+              className={`w-full py-2.5 rounded-2xl font-black uppercase tracking-wider text-[11px] shadow-lg active:scale-95 transition-all ${
+                result.win 
+                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-emerald-500/20' 
+                  : 'bg-gradient-to-r from-red-600 to-rose-700 text-white shadow-red-500/20'
+              }`}
             >
-              CONTINUE PLAYING
+              Continue
             </button>
           </div>
         </motion.div>

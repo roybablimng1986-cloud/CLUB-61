@@ -13,6 +13,7 @@ const ScratchCard: React.FC<{ onBack: () => void; userBalance: number; onResult:
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isScratching, setIsScratching] = useState(false);
     const [scratchPercent, setScratchPercent] = useState(0);
+    const lastScratchSoundTime = useRef(0);
     
     const isMounted = useRef(true);
 
@@ -41,6 +42,12 @@ const ScratchCard: React.FC<{ onBack: () => void; userBalance: number; onResult:
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
+
+        const now = Date.now();
+        if (now - lastScratchSoundTime.current > 300) {
+            playSound('scratch');
+            lastScratchSoundTime.current = now;
+        }
 
         const rect = canvas.getBoundingClientRect();
         const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;

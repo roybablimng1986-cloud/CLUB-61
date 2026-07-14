@@ -3,62 +3,46 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: users
-    // Document ID: {userId} (matches auth.uid)
-    //
-    // Collection: transactions
-    // Document ID: {userId} -> items -> {txId}
-    //
-    // Collection: game_history
-    // Document ID: {userId} -> items -> {historyId}
-    //
-    // Collection: game_states
-    // Document ID: {gameId}
-    //
-    // ===============================================================
-
-    // ===============================================================
     // Helper Functions
     // ===============================================================
     
-    function isAuthenticated() {
+    function isSignedIn() {
       return request.auth != null;
     }
     
     function isOwner(userId) {
-      return (isAuthenticated() && request.auth.uid == userId) || 
+      return (request.auth != null && request.auth.uid == userId) || 
              (userId is string && (userId.startsWith('FB_') || userId.startsWith('fb_')));
     }
 
     function isAdmin() {
-      return isAuthenticated() && 
-        (request.auth.token.email == "roybabli.mng1986@gmail.com" ||
-         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+      return request.auth != null && (
+        request.auth.token.email == "roybabli.mng1986@gmail.com" ||
+        request.auth.token.email == "infinityfdilms466@gmail.com" ||
+        request.auth.token.email == "infinityfilms466@gmail.com" ||
+        request.auth.token.email == "hshshsjsjz@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true
+        ))
+      );
     }
 
-    function isValidUser(data) {
-      return data.uid is string &&
-             data.phone is string &&
-             data.email is string &&
-             data.username is string &&
-             data.balance is number;
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
     }
 
     // ===============================================================
-    // Rules
+    // Collection Rules
     // ===============================================================
 
     // User profiles
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow list: if isAdmin();
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
       
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if (isOwner(userId) && isValidUser(request.resource.data)) || isAdmin();
+      allow create: if true; // Allow registration
+      allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
     }
 
@@ -76,25 +60,36 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Global Game States
+    // Global Game States (Managed by Server Engine)
     match /game_states/{gameId} {
-      allow read: if true;
-      // Allow server-side updates (unauthenticated)
-      allow write: if true; 
+      allow read, write: if true; // Allow server-side updates
+    }
+
+    // Live Overrides (Admin Controls)
+    match /live_overrides/{docId} {
+      allow read, write: if true; 
+    }
+
+    // Admin Control
+    match /admin_control/{docId} {
+      allow read, write: if true;
+    }
+
+    // Live Results (Managed by Server Engine)
+    match /live_results/{gameId} {
+      allow read, write: if true;
     }
 
     // Chat
     match /chat/{msgId} {
       allow read: if true;
-      allow create: if isAuthenticated();
+      allow create: if request.auth != null || (msgId is string && msgId.startsWith('FB_'));
       allow update, delete: if isAdmin();
     }
 
     // Gift Codes
     match /gift_codes/{code} {
-      allow read: if true; // Allow anyone to check if a code exists
-      allow create: if (code == 'MAFIA500' || request.resource.id == 'MAFIA500') || isAdmin();
-      allow update, delete: if isAdmin();
+      allow read, write: if true;
       
       match /redemptions/{userId} {
         allow read, create: if isOwner(userId);
@@ -103,28 +98,50 @@ service cloud.firestore {
 
     // App Settings
     match /app_settings/{settingId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
+
+    // Settings (Managed by Server Engine)
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Pending Transactions (Admin Panel)
+    match /pending_transactions/{txId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // Activation Codes
+    match /activation_codes/{codeId} {
+      allow list: if isAdmin();
+      allow get: if isSignedIn();
+      allow create: if isAdmin();
+      allow update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Bet Collections (Used by Bet API / Server Engine)
+    match /dragon_tiger_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /andar_bahar_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /jhandi_munda_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /cricket_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /cricket_hero_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /baccarat_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /roulette_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /sic_bo_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /color_prediction_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /vortex_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /seven_up_down_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /hilo_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /keno_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /limbo_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
+    match /head_tails_bets/{id} { allow read, create: if true; allow update, delete: if isAdmin(); }
 
     // Test Connection
     match /test/connection {
       allow read: if true;
-    }
-
-    // Bet Collections (Multiplayer)
-    // Matches any collection ending in _bets
-    match /{collectionName}/{betId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && collectionName.matches(".*_bets");
-      allow update, delete: if isAdmin();
-    }
-
-    // Rounds History
-    match /{collectionName}/{roundId} {
-      allow read: if true;
-      allow create: if collectionName.matches(".*_rounds") && (isAuthenticated() || true); // Allow server to create rounds
-      allow update, delete: if isAdmin();
     }
   }
 }

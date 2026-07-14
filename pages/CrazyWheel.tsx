@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Wallet, HelpCircle, X, Clock, Plane, Sparkles, TrendingUp, RotateCcw, AlertTriangle, Users } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, subscribeToWinGoBets } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, shouldForceLoss } from '../services/supabaseService';
 import { GameResult } from '../types';
 
 type WheelOutcome = '1' | '2' | '5' | '10' | 'CRAZY_PLANE' | 'MEGA_CHANCE';
@@ -83,7 +83,7 @@ const CrazyWheel: React.FC<{ onBack: () => void; userBalance: number; onResult: 
 
     useEffect(() => {
         isMounted.current = true;
-        setHistory(['1', '10', '2', 'CRAZY_PLANE', '1', '5', '1', '2', 'MEGA_CHANCE'].slice(0, 8));
+        setHistory(['1', '10', '2', 'CRAZY_PLANE', '1', '5', '1', '2', 'MEGA_CHANCE'].slice(0, 8) as WheelOutcome[]);
         return () => { isMounted.current = false; };
     }, []);
 
@@ -92,12 +92,16 @@ const CrazyWheel: React.FC<{ onBack: () => void; userBalance: number; onResult: 
         if (gameState !== 'BETTING') return;
         const timer = setInterval(() => {
             setTimeLeft(prev => {
+                const nextVal = prev - 1;
+                if (nextVal <= 5 && nextVal > 0) {
+                    playSound('tick');
+                }
                 if (prev <= 1) {
                     clearInterval(timer);
                     startSpin();
                     return 0;
                 }
-                return prev - 1;
+                return nextVal;
             });
         }, 1000);
         return () => clearInterval(timer);
@@ -179,8 +183,24 @@ const CrazyWheel: React.FC<{ onBack: () => void; userBalance: number; onResult: 
         setGameState('SPINNING');
         playSound('wheel_spin');
         
-        const randomIndex = Math.floor(Math.random() * SEGMENTS.length);
-        const finalResult = SEGMENTS[randomIndex];
+        const totalStake = myBets.reduce((a, b) => a + b.amount, 0);
+        const isForcedLoss = shouldForceLoss(totalStake, userBalance);
+
+        let randomIndex = Math.floor(Math.random() * SEGMENTS.length);
+        let finalResult = SEGMENTS[randomIndex];
+
+        if (isForcedLoss && myBets.length > 0) {
+            const userTargets = myBets.map(b => b.type);
+            let found = false;
+            let safety = 0;
+            while (!found && safety < 54) {
+                 randomIndex = Math.floor(Math.random() * SEGMENTS.length);
+                 finalResult = SEGMENTS[randomIndex];
+                 if (!userTargets.includes(finalResult)) found = true;
+                 safety++;
+            }
+        }
+
         const segmentDeg = 360 / SEGMENTS.length;
         const targetSegDeg = randomIndex * segmentDeg;
         const extraRotations = (10 + Math.random() * 5) * 360; 
@@ -507,7 +527,7 @@ const CrazyWheel: React.FC<{ onBack: () => void; userBalance: number; onResult: 
                     </div>
                     
                     <div className="mt-16 relative">
-                        <div className="text-7xl font-black italic gold-text animate-pulse">{bonusX}x</div>
+                        <div className="text-7xl font-black italic gold-text animate-pulse">{planeX}x</div>
                         <div className="absolute -inset-10 bg-purple-500/20 blur-[60px] -z-10" />
                     </div>
                 </motion.div>
@@ -525,7 +545,7 @@ const CrazyWheel: React.FC<{ onBack: () => void; userBalance: number; onResult: 
                             className="w-56 h-72 bg-gradient-to-br from-pink-500 via-purple-600 to-indigo-800 rounded-[2.5rem] flex flex-col items-center justify-center shadow-[0_0_100px_rgba(236,72,153,0.5)] border-4 border-white/30 p-2"
                         >
                             <span className="text-[10px] font-black text-white/50 uppercase tracking-widest mb-4">MULTIPLIER</span>
-                            <span className="text-7xl font-black italic text-white drop-shadow-2xl">{bonusX}x</span>
+                            <span className="text-7xl font-black italic text-white drop-shadow-2xl">{megaX}x</span>
                             <Sparkles className="absolute top-4 right-4 text-white/30" size={24} />
                         </motion.div>
                         <div className="absolute -inset-20 bg-pink-500/10 blur-[120px] rounded-full -z-10" />

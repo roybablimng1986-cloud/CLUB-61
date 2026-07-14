@@ -45,7 +45,7 @@ const Logo: React.FC<{ size?: number; className?: string }> = ({ size = 64, clas
         </defs>
         <text fill="url(#goldGrad)" style={{ fontSize: '18px', fontWeight: '900', letterSpacing: '4px' }}>
           <textPath xlinkHref="#textPath" startOffset="50%" textAnchor="middle">
-            MAFIA CLUB • ELITE •
+            CLUB 99 • ELITE •
           </textPath>
         </text>
       </svg>

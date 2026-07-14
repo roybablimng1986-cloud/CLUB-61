@@ -1,21 +1,214 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Wallet, Info, Trophy, Settings, History, Play, Pause, Square } from 'lucide-react';
+import { ArrowLeft, Wallet, Info, Trophy, Settings, History, Play, Pause, Square, Volume2, VolumeX } from 'lucide-react';
 import { playSound, updateBalance, addGameHistory } from '../services/mockFirebase';
+import { getMuteStatus, toggleMute } from '../services/supabaseService';
 import { GameResult } from '../types';
+
+// Custom standalone AudioContext Synth class for lag-free professional Pump Up audio
+class PumpSfx {
+  private ctx: AudioContext | null = null;
+  private isMuted: boolean = false;
+
+  constructor() {
+    this.isMuted = getMuteStatus();
+  }
+
+  setMuted(muted: boolean) {
+    this.isMuted = muted;
+  }
+
+  private init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  playBet() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(300, now);
+    osc.frequency.exponentialRampToValueAtTime(600, now + 0.15);
+    
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.15);
+  }
+
+  playPump(multiplier: number) {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    
+    // 1. Air rush / pump push sound (noise)
+    const duration = 0.25;
+    const bufferSize = this.ctx.sampleRate * duration;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const noiseNode = this.ctx.createBufferSource();
+    noiseNode.buffer = buffer;
+
+    const noiseFilter = this.ctx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.setValueAtTime(1000, now);
+    noiseFilter.frequency.exponentialRampToValueAtTime(500, now + duration);
+
+    const noiseGain = this.ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.06, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noiseNode.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(this.ctx.destination);
+    noiseNode.start(now);
+    noiseNode.stop(now + duration);
+
+    // 2. Squeaky rubber stretch (oscillator)
+    // Pitch increases based on the size of the balloon (multiplier)
+    const baseFreq = 260 + Math.min(600, multiplier * 40);
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(baseFreq, now + 0.05); // slightly delayed after air rush starts
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.6, now + duration);
+    
+    gain.gain.setValueAtTime(0.0, now + 0.05);
+    gain.gain.linearRampToValueAtTime(0.05, now + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now + 0.05);
+    osc.stop(now + duration);
+  }
+
+  playBurst() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    
+    const now = this.ctx.currentTime;
+    
+    // Generate white noise for standard organic pop sound
+    const bufferSize = this.ctx.sampleRate * 0.35; // 0.35 seconds
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    
+    const noiseNode = this.ctx.createBufferSource();
+    noiseNode.buffer = buffer;
+    
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1000, now);
+    filter.frequency.exponentialRampToValueAtTime(10, now + 0.35);
+    
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.2, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    
+    noiseNode.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.ctx.destination);
+    
+    noiseNode.start(now);
+    noiseNode.stop(now + 0.35);
+
+    // Also trigger low sub-bass explosion
+    const osc = this.ctx.createOscillator();
+    const oscGain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(120, now);
+    osc.frequency.linearRampToValueAtTime(30, now + 0.3);
+    
+    oscGain.gain.setValueAtTime(0.12, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    
+    osc.connect(oscGain);
+    oscGain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.3);
+  }
+
+  playCashout() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    
+    // Fast high cash pitch chime
+    const notes = [523.25, 659.25, 783.99, 1046.50]; // C Major Chord
+    notes.forEach((f, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, now + i * 0.05);
+      gain.gain.setValueAtTime(0.05, now + i * 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.25);
+      osc.connect(gain);
+      gain.connect(this.ctx!.destination);
+      osc.start(now + i * 0.05);
+      osc.stop(now + i * 0.05 + 0.25);
+    });
+  }
+
+  playError() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(140, now);
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.25);
+  }
+}
 
 type Difficulty = 'Easy' | 'Normal' | 'Hard';
 
 const Pump: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
+    const sfx = useRef(new PumpSfx());
     const [betAmount, setBetAmount] = useState(10);
     const [difficulty, setDifficulty] = useState<Difficulty>('Normal');
     const [multiplier, setMultiplier] = useState(1.0);
     const [status, setStatus] = useState<'IDLE' | 'PLAYING' | 'CRASHED' | 'CASHOUT'>('IDLE');
     const [history, setHistory] = useState<number[]>([]);
+    const [muted, setMuted] = useState(getMuteStatus());
     const [showHelp, setShowHelp] = useState(false);
     
     const isMounted = useRef(true);
     const multiplierRef = useRef(1.0);
+
+    useEffect(() => {
+        sfx.current.setMuted(muted);
+    }, [muted]);
 
     const getDifficultySettings = (diff: Difficulty) => {
         switch(diff) {
@@ -26,11 +219,14 @@ const Pump: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
     };
 
     const handleStart = () => {
-        if (betAmount > userBalance) return alert("Insufficient Balance");
+        if (betAmount > userBalance) {
+            sfx.current.playError();
+            return alert("Insufficient Balance");
+        }
         if (betAmount < 10) return alert("Minimum bet is ₹10");
 
         updateBalance(-betAmount, 'BET', 'Pump Stake');
-        playSound('bet_place');
+        sfx.current.playBet();
         
         multiplierRef.current = 1.0;
         setMultiplier(1.0);
@@ -48,7 +244,8 @@ const Pump: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
             return;
         }
 
-        playSound('wingo_tick');
+        sfx.current.playPump(multiplierRef.current);
+        playSound('balloon_inflate');
         const nextMulti = multiplierRef.current + step;
         multiplierRef.current = nextMulti;
         setMultiplier(nextMulti);
@@ -56,7 +253,7 @@ const Pump: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
 
     const handleCrash = () => {
         setStatus('CRASHED');
-        playSound('plane_crash');
+        sfx.current.playBurst();
         setHistory(prev => [multiplierRef.current, ...prev].slice(0, 10));
         onResult({ 
             win: false, 
@@ -73,7 +270,7 @@ const Pump: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
 
         const win = betAmount * multiplierRef.current;
         updateBalance(win, 'WIN', 'Pump Cashout');
-        playSound('cash_out');
+        sfx.current.playCashout();
         setStatus('CASHOUT');
         setHistory(prev => [multiplierRef.current, ...prev].slice(0, 10));
         
@@ -105,13 +302,19 @@ const Pump: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
                         <p className="text-[8px] font-bold text-slate-500 tracking-[0.2em] uppercase mt-1">Inflation Arena</p>
                     </div>
                 </div>
-                <div className="flex gap-4 items-center">
+                <div className="flex gap-3 items-center">
                     <div className="flex items-center gap-2 bg-[#1a1f2e] px-4 py-2 rounded-2xl border border-white/5 shadow-inner">
                         <Wallet size={14} className="text-emerald-500" />
                         <span className="text-sm font-black font-mono">₹{userBalance.toFixed(2)}</span>
                     </div>
-                    <button onClick={() => setShowHelp(true)} className="text-slate-400 hover:text-white transition-colors">
-                        <Info size={20} />
+                    <button 
+                        onClick={() => setMuted(toggleMute())}
+                        className="p-2.5 bg-[#1a1f2e] text-slate-400 hover:text-white rounded-xl border border-white/5 active:scale-90 transition-all"
+                    >
+                        {muted ? <VolumeX size={18}/> : <Volume2 size={18}/>}
+                    </button>
+                    <button onClick={() => setShowHelp(true)} className="p-2.5 bg-[#1a1f2e] text-slate-400 hover:text-white rounded-xl border border-white/5 active:scale-90 transition-all">
+                        <Info size={18} />
                     </button>
                 </div>
             </div>

@@ -75,7 +75,7 @@ const SafetyCenter: React.FC<SafetyProps> = ({ setView, user }) => {
                             icon={ShieldCheck} 
                             label="Withdrawal PIN" 
                             subtitle={isWithdrawPasswordSet ? "Security PIN is active" : "Verification required for cashouts"} 
-                            value={isWithdrawPasswordSet ? "SECURED" : "SETUP"}
+                            value={isWithdrawPasswordSet ? "COMPLETE" : "SETUP"}
                             color={isWithdrawPasswordSet ? "text-green-500" : "text-yellow-500"}
                         />
                     </div>

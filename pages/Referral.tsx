@@ -33,14 +33,16 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
   };
 
   const handleShare = async () => {
+      const myInviteCode = user?.inviteCode || referralStats.code;
+      const shareLink = `${window.location.origin}/#/register?ref=${myInviteCode}`;
       const shareData = {
           title: 'Join MAFIA CLUB!',
-          text: `Join the elite MAFIA CLUB network. Register using my link ${referralStats.link} to win high rewards!`,
-          url: referralStats.link
+          text: `Join the elite MAFIA CLUB network. Register using my link ${shareLink} to win high rewards!`,
+          url: shareLink
       };
       if (navigator.share) {
           try { await navigator.share(shareData); } catch (err) {}
-      } else handleCopy(referralStats.link);
+      } else handleCopy(shareLink);
   };
 
   const handleClaim = async () => {
@@ -98,10 +100,10 @@ const Referral: React.FC<ReferralProps> = ({ user }) => {
                 </div>
                 <div>
                     <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">My Referral Code</p>
-                    <p className="text-2xl font-black text-white font-mono tracking-tighter">{referralStats.code}</p>
+                    <p className="text-2xl font-black text-white font-mono tracking-tighter">{user?.inviteCode || referralStats.code}</p>
                 </div>
             </div>
-            <button onClick={() => handleCopy(referralStats.code)} className="p-4 bg-slate-800 rounded-2xl border border-white/5 active:scale-90 transition-all text-yellow-500"><Copy size={20}/></button>
+            <button onClick={() => handleCopy(user?.inviteCode || referralStats.code)} className="p-4 bg-slate-800 rounded-2xl border border-white/5 active:scale-90 transition-all text-yellow-500"><Copy size={20}/></button>
         </div>
 
         <div className="bg-[#111827] rounded-[2.5rem] overflow-hidden shadow-2xl border border-slate-800">

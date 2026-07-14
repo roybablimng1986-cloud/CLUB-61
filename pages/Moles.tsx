@@ -1,20 +1,186 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowLeft, Wallet, Info, Trophy, History, Hammer, Circle, X } from 'lucide-react';
+import { ArrowLeft, Wallet, Info, Trophy, History, Hammer, Circle, X, Volume2, VolumeX } from 'lucide-react';
 import { playSound, updateBalance, addGameHistory } from '../services/mockFirebase';
+import { getMuteStatus, toggleMute } from '../services/supabaseService';
 import { GameResult } from '../types';
 
+// Custom standalone AudioContext Synth class for lag-free professional Whack-A-Mole / Rat Hunter audio
+class MolesSfx {
+  private ctx: AudioContext | null = null;
+  private isMuted: boolean = false;
+
+  constructor() {
+    this.isMuted = getMuteStatus();
+  }
+
+  setMuted(muted: boolean) {
+    this.isMuted = muted;
+  }
+
+  private init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  playBet() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(320, now);
+    osc.frequency.exponentialRampToValueAtTime(640, now + 0.12);
+    
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.12);
+  }
+
+  playWhack() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    
+    // Simulate wooden block / heavy thud whack
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(180, now);
+    osc1.frequency.linearRampToValueAtTime(60, now + 0.1);
+    
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(300, now);
+    osc2.frequency.linearRampToValueAtTime(120, now + 0.12);
+    
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+    
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.ctx.destination);
+    
+    osc1.start(now);
+    osc1.stop(now + 0.13);
+    osc2.start(now);
+    osc2.stop(now + 0.13);
+  }
+
+  playRatHit() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    
+    // Quick success high pitch beep squeak chime
+    const notes = [880.00, 1046.50, 1318.51]; // A5, C6, E6
+    notes.forEach((f, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, now + i * 0.05);
+      gain.gain.setValueAtTime(0.04, now + i * 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.15);
+      osc.connect(gain);
+      gain.connect(this.ctx!.destination);
+      osc.start(now + i * 0.05);
+      osc.stop(now + i * 0.05 + 0.15);
+    });
+  }
+
+  playMiss() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.linearRampToValueAtTime(80, now + 0.4);
+    
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.linearRampToValueAtTime(0.001, now + 0.4);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.4);
+  }
+
+  playCashout() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    
+    // Happy descending-ascending victory loop
+    const freqs = [523.25, 659.25, 783.99, 1046.50, 1318.51];
+    freqs.forEach((f, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, now + i * 0.06);
+      gain.gain.setValueAtTime(0.04, now + i * 0.06);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.3);
+      osc.connect(gain);
+      gain.connect(this.ctx!.destination);
+      osc.start(now + i * 0.06);
+      osc.stop(now + i * 0.06 + 0.3);
+    });
+  }
+
+  playError() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(150, now);
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.25);
+  }
+}
+
 const Moles: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
+    const sfx = useRef(new MolesSfx());
     const [betAmount, setBetAmount] = useState(10);
     const [ratsCount, setRatsCount] = useState(1);
     const [status, setStatus] = useState<'IDLE' | 'PLAYING' | 'GAMEOVER' | 'CASHOUT'>('IDLE');
     const [revealed, setRevealed] = useState<number[]>([]);
     const [molesPositions, setMolesPositions] = useState<number[]>([]);
     const [history, setHistory] = useState<any[]>([]);
+    const [muted, setMuted] = useState(getMuteStatus());
     const [showHelp, setShowHelp] = useState(false);
     const [multiplier, setMultiplier] = useState(1.0);
     
     const isMounted = useRef(true);
+
+    useEffect(() => {
+        sfx.current.setMuted(muted);
+    }, [muted]);
 
     const calculateMultiplier = (totalHoles: number, totalRats: number, hits: number) => {
         let m = 1.0;
@@ -32,11 +198,14 @@ const Moles: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
     };
 
     const handleStart = () => {
-        if (betAmount > userBalance) return alert("Insufficient Balance");
+        if (betAmount > userBalance) {
+            sfx.current.playError();
+            return alert("Insufficient Balance");
+        }
         if (betAmount < 10) return alert("Minimum bet is ₹10");
 
         updateBalance(-betAmount, 'BET', 'Moles Stake');
-        playSound('bet_place');
+        sfx.current.playBet();
         
         // Randomly place rats
         const positions: number[] = [];
@@ -54,7 +223,7 @@ const Moles: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
     const handleHit = (idx: number) => {
         if (status !== 'PLAYING' || revealed.includes(idx)) return;
 
-        playSound('dt_card'); // Hammer sound fallback
+        sfx.current.playWhack(); // Unique Whack Hammer sound
         setRevealed(prev => [...prev, idx]);
 
         if (molesPositions.includes(idx)) {
@@ -62,7 +231,7 @@ const Moles: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
             const nextHits = revealed.length + 1;
             const nextMulti = calculateMultiplier(6, ratsCount, nextHits);
             setMultiplier(nextMulti);
-            playSound('win');
+            sfx.current.playRatHit();
 
             // If all rats found (unlikely logic for this game, usually you can cashout whenever)
         } else {
@@ -73,8 +242,7 @@ const Moles: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
 
     const handleLoss = () => {
         setStatus('GAMEOVER');
-        playSound('loss');
-        playSound('plane_crash'); // Laughing sound fallback or generic loss
+        sfx.current.playMiss();
         
         setHistory(prev => [{ win: false, multi: 0 }, ...prev].slice(0, 10));
         onResult({ 
@@ -92,7 +260,7 @@ const Moles: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
 
         const win = betAmount * multiplier;
         updateBalance(win, 'WIN', 'Moles Cashout');
-        playSound('cash_out');
+        sfx.current.playCashout();
         setStatus('CASHOUT');
         
         setHistory(prev => [{ win: true, multi: multiplier }, ...prev].slice(0, 10));
@@ -120,13 +288,19 @@ const Moles: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: G
                         <p className="text-[8px] font-bold text-slate-500 tracking-[0.2em] uppercase mt-1">Underground Arena</p>
                     </div>
                 </div>
-                <div className="flex gap-4 items-center">
+                <div className="flex gap-3 items-center">
                     <div className="flex items-center gap-2 bg-[#1a1f2e] px-4 py-2 rounded-2xl border border-white/5 shadow-inner">
                         <Wallet size={14} className="text-emerald-500" />
                         <span className="text-sm font-black font-mono">₹{userBalance.toFixed(2)}</span>
                     </div>
-                    <button onClick={() => setShowHelp(true)} className="text-slate-400 hover:text-white transition-colors">
-                        <Info size={20} />
+                    <button 
+                        onClick={() => setMuted(toggleMute())}
+                        className="p-2.5 bg-[#1a1f2e] text-slate-400 hover:text-white rounded-xl border border-white/5 active:scale-90 transition-all"
+                    >
+                        {muted ? <VolumeX size={18}/> : <Volume2 size={18}/>}
+                    </button>
+                    <button onClick={() => setShowHelp(true)} className="p-2.5 bg-[#1a1f2e] text-slate-400 hover:text-white rounded-xl border border-white/5 active:scale-90 transition-all">
+                        <Info size={18} />
                     </button>
                 </div>
             </div>

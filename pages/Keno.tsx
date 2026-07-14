@@ -1,11 +1,153 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Wallet, HelpCircle, X, RotateCw, Trophy } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
+import { ArrowLeft, Wallet, HelpCircle, X, RotateCw, Trophy, Volume2, VolumeX } from 'lucide-react';
+import { updateBalance, addGameHistory, stopAllSounds, db, auth, addGameBet, getMuteStatus, toggleMute } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
 import KenoResultPopup from '../components/KenoResultPopup';
+
+// Custom high-fidelity standalone AudioContext Synth class for lag-free professional Keno audio
+class KenoSfx {
+  private ctx: AudioContext | null = null;
+  private isMuted: boolean = false;
+
+  constructor() {
+    this.isMuted = getMuteStatus();
+  }
+
+  setMuted(muted: boolean) {
+    this.isMuted = muted;
+  }
+
+  private init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  playClick() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600, now);
+    osc.frequency.exponentialRampToValueAtTime(300, now + 0.05);
+    gain.gain.setValueAtTime(0.04, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.05);
+  }
+
+  playBet() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(400, now);
+    osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.1);
+  }
+
+  playBallDraw() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.exponentialRampToValueAtTime(440, now + 0.1);
+    gain.gain.setValueAtTime(0.03, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.1);
+  }
+
+  playMatch() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(880, now); // A5
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(1320, now + 0.05); // E6
+    
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.ctx.destination);
+    
+    osc1.start(now);
+    osc2.start(now + 0.05);
+    osc1.stop(now + 0.2);
+    osc2.stop(now + 0.2);
+  }
+
+  playWin() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const freqs = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+    freqs.forEach((f, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, now + i * 0.08);
+      gain.gain.setValueAtTime(0.05, now + i * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.25);
+      osc.connect(gain);
+      gain.connect(this.ctx!.destination);
+      osc.start(now + i * 0.08);
+      osc.stop(now + i * 0.08 + 0.25);
+    });
+  }
+
+  playLoss() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.linearRampToValueAtTime(100, now + 0.4);
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.linearRampToValueAtTime(0.001, now + 0.4);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.4);
+  }
+}
 
 const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
   const [bet, setBet] = useState(10);
@@ -16,6 +158,15 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
   const [keResult, setKeResult] = useState<any | null>(null);
   const [floating, setFloating] = useState<{ text: string; color: string; id: number } | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+
+  const [muted, setMuted] = useState(getMuteStatus());
+  const sfx = useRef(new KenoSfx());
+
+  const handleToggleMute = () => {
+    const newMute = toggleMute();
+    setMuted(newMute);
+    sfx.current.setMuted(newMute);
+  };
 
   const isMounted = useRef(true);
 
@@ -33,9 +184,10 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
     if (gameState !== 'IDLE') return;
     if (selected.includes(num)) {
         setSelected(prev => prev.filter(n => n !== num));
+        sfx.current.playClick();
     } else if (selected.length < 10) {
         setSelected(prev => [...prev, num]);
-        playSound('click');
+        sfx.current.playClick();
     }
   };
 
@@ -56,7 +208,7 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
     setKeResult(null);
     setGameState('DRAWING');
     setDrawn([]);
-    playSound('bet_place');
+    sfx.current.playBet();
 
     const results: number[] = [];
     while(results.length < 15) {
@@ -64,9 +216,14 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
         if (!results.includes(n)) {
             results.push(n);
             setDrawn([...results]);
-            // FIX: Changed invalid sound name 'tick' to 'wingo_tick'
-            playSound('wingo_tick');
-            await new Promise(r => setTimeout(r, 100));
+            
+            // If the drawn number is one of the selected ones (HIT), play match sound, else normal ball draw tick
+            if (selected.includes(n)) {
+                sfx.current.playMatch();
+            } else {
+                sfx.current.playBallDraw();
+            }
+            await new Promise(r => setTimeout(r, 120));
         }
     }
 
@@ -89,8 +246,10 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
     if (winAmt > 0) {
         updateBalance(winAmt, 'WIN', 'Keno Elite Win');
         triggerFloating(`+₹${winAmt.toFixed(2)}`, 'text-green-400');
+        sfx.current.playWin();
     } else {
         triggerFloating(`-₹${bet.toFixed(2)}`, 'text-red-500');
+        sfx.current.playLoss();
     }
 
     addGameHistory('Keno Elite', bet, winAmt, `Matches: ${matches}`);
@@ -121,16 +280,15 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
                 <span className="text-[10px] font-mono font-black text-emerald-500">₹{userBalance.toFixed(2)}</span>
             </div>
         </div>
-        <button onClick={() => setShowRules(true)} className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl"><HelpCircle size={20}/></button>
+        <div className="flex items-center gap-2">
+            <button onClick={handleToggleMute} className="p-2 bg-zinc-900 rounded-xl text-yellow-500">
+                {muted ? <VolumeX size={18} className="text-red-500" /> : <Volume2 size={18} className="text-yellow-500" />}
+            </button>
+            <button onClick={() => setShowRules(true)} className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl"><HelpCircle size={20}/></button>
+        </div>
       </div>
 
       <div className="flex-1 p-4 flex flex-col items-center justify-center relative">
-          {gameState === 'IDLE' && (
-              <div className="absolute top-4 left-4 right-4 bg-zinc-900/80 backdrop-blur-xl p-4 rounded-2xl border border-emerald-500/20 text-[10px] text-zinc-400 leading-relaxed z-[60] shadow-2xl">
-                  <h4 className="font-black text-emerald-400 mb-1 uppercase tracking-widest">How to Play</h4>
-                  <p>1. Select up to 10 numbers on the grid.<br/>2. Click "START DRAW" to begin.<br/>3. 15 numbers will be randomly drawn.<br/>4. Match more numbers to win up to 100x!</p>
-              </div>
-          )}
           <div className="grid grid-cols-8 gap-1.5 w-full max-w-sm mb-6">
               {Array.from({length: 40}).map((_, i) => {
                   const n = i + 1;
@@ -182,10 +340,21 @@ const Keno: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: Ga
       {showRules && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-sm">
               <div className="bg-[#0a1a1a] border border-emerald-500/30 w-full max-w-sm p-8 rounded-[2.5rem] shadow-2xl">
-                   <div className="flex justify-between items-center mb-8">
-                       <h2 className="text-2xl font-black italic gold-text">KENO PAYTABLE</h2>
+                   <div className="flex justify-between items-center mb-6">
+                       <h2 className="text-2xl font-black italic gold-text">KENO GUIDE</h2>
                        <button onClick={() => setShowRules(false)} className="p-2 bg-zinc-900 rounded-full"><X/></button>
                    </div>
+                   
+                   <div className="bg-zinc-900/60 p-4 rounded-2xl border border-emerald-500/20 text-xs text-zinc-300 leading-relaxed mb-6 shadow-md">
+                       <h4 className="font-black text-emerald-400 mb-2 uppercase tracking-widest text-[11px]">How to Play</h4>
+                       <p className="space-y-1">
+                           <div>1. Select up to 10 numbers on the grid.</div>
+                           <div>2. Click "START DRAW" to begin.</div>
+                           <div>3. 15 numbers will be randomly drawn.</div>
+                           <div>4. Match more numbers to win up to 100x!</div>
+                       </p>
+                   </div>
+                   
                    <div className="space-y-3">
                        <div className="flex justify-between p-3 bg-black/40 rounded-xl border border-white/5">
                            <span className="text-slate-400">5+ Matches</span>

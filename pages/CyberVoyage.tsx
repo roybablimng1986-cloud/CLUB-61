@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Zap, Shield, Target, TrendingUp, Info } from 'lucide-react';
-import { playSound, updateBalance, addGameHistory } from '../services/mockFirebase';
+import { playSound, updateBalance, addGameHistory, shouldForceLoss } from '../services/supabaseService';
 import { GameResult } from '../types';
 
 const CyberVoyage: React.FC<{ onBack: () => void; userBalance: number; onResult: (r: GameResult) => void; }> = ({ onBack, userBalance, onResult }) => {
@@ -18,8 +18,13 @@ const CyberVoyage: React.FC<{ onBack: () => void; userBalance: number; onResult:
         { label: "QUANTUM CORE", mults: [5.0, 8.0, 0, 12.0] }
     ];
 
+    const isForcedLoss = useRef(false);
+
     const startGame = () => {
         if (bet > userBalance) return;
+        
+        isForcedLoss.current = shouldForceLoss(bet, userBalance);
+
         updateBalance(-bet, 'BET', 'Cyber Voyage');
         playSound('bet_place');
         setStatus('PLAYING');
@@ -31,7 +36,15 @@ const CyberVoyage: React.FC<{ onBack: () => void; userBalance: number; onResult:
     const handleChoice = (index: number) => {
         if (status !== 'PLAYING') return;
 
-        const mult = steps[currentStep].mults[index];
+        let mult = steps[currentStep].mults[index];
+        
+        if (isForcedLoss.current && currentStep >= 1 && mult > 0) {
+            // Force a loss if they are winning and forced
+            // Find a mirror index that is 0 if possible
+            const zeroIdx = steps[currentStep].mults.indexOf(0);
+            if (zeroIdx !== -1) mult = 0;
+        }
+
         setPath([...path, index]);
         
         if (mult === 0) {

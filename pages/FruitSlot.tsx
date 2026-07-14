@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Wallet, RotateCw, HelpCircle, X } from 'lucide-react';
-import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet } from '../services/supabaseService';
+import { updateBalance, playSound, addGameHistory, stopAllSounds, db, auth, addGameBet, shouldForceLoss } from '../services/supabaseService';
 import { GameResult } from '../types';
 import { collection, addDoc } from 'firebase/firestore';
 
@@ -31,16 +31,17 @@ const FruitSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
       setTimeout(() => setFloating(null), 3000);
   };
 
+  const isForcedLoss = useRef(false);
+
   const spin = async () => {
     if (spinning || userBalance < bet) return;
     
-    // Record bet in Firestore removed to save quota for instant games
-    // addGameHistory will still record the result for the user
+    isForcedLoss.current = shouldForceLoss(bet, userBalance);
 
     updateBalance(-bet, 'BET', 'Fruit Slots');
     setFsResult(null);
     setSpinning(true);
-    playSound('bet_place');
+    playSound('spin');
 
     let count = 0;
     const interval = setInterval(() => {
@@ -50,6 +51,10 @@ const FruitSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
             FRUITS[Math.floor(Math.random() * FRUITS.length)]
         ]);
         count++;
+        // Play ticking sound of rolling slots
+        if (count % 3 === 0) {
+            playSound('tick');
+        }
         if (count > 25) {
             clearInterval(interval);
             finalize();
@@ -61,7 +66,9 @@ const FruitSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
     if (!isMounted.current) return;
     
     // Balanced RTP 91.5%
-    const r = Math.random();
+    let r = Math.random();
+    if (isForcedLoss.current) r = 0.99; // Ensure empty outcome
+
     let outcome;
     if (r < 0.02) { // 2% Jackpot
         const sym = FRUITS[Math.floor(Math.random() * FRUITS.length)];
@@ -97,15 +104,16 @@ const FruitSlot: React.FC<{ onBack: () => void; userBalance: number; onResult: (
         const win = bet * mult;
         updateBalance(win, 'WIN', 'Fruit Slot Win');
         triggerFloating(`+₹${win.toFixed(2)}`, 'text-green-400');
+        playSound('win');
     } else {
         triggerFloating(`-₹${bet.toFixed(2)}`, 'text-red-500');
+        playSound('loss');
     }
     addGameHistory('Fruit Party', bet, mult > 0 ? bet * mult : 0, `Outcome: ${outcome.join('|')}`);
   };
 
   return (
     <div className="bg-[#1e0a11] min-h-screen flex flex-col font-sans text-white relative overflow-hidden">
-        <SlotResultPopup result={fsResult} onClose={() => setFsResult(null)} />
         <HowToPlay 
             isOpen={showRules} 
             onClose={() => setShowRules(false)} 

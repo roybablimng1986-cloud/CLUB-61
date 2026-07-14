@@ -27,7 +27,156 @@ const createDeck = (): Card[] => {
     return deck.sort(() => Math.random() - 0.5);
 };
 
+// Custom standalone AudioContext Synth class for lag-free professional Hi-Lo audio
+class HiLoSfx {
+  private ctx: AudioContext | null = null;
+  private isMuted: boolean = false;
+
+  constructor() {
+    this.isMuted = getMuteStatus();
+  }
+
+  setMuted(muted: boolean) {
+    this.isMuted = muted;
+  }
+
+  private init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx && this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  playBet() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(350, now);
+    osc.frequency.exponentialRampToValueAtTime(700, now + 0.1);
+    
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.12);
+  }
+
+  playFlip() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(450, now);
+    osc.frequency.exponentialRampToValueAtTime(250, now + 0.15);
+    
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.15);
+  }
+
+  playWinStep() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    
+    // Quick success high double-ding
+    const notes = [659.25, 880.00]; // E5, A5
+    notes.forEach((f, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, now + i * 0.08);
+      gain.gain.setValueAtTime(0.04, now + i * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.2);
+      osc.connect(gain);
+      gain.connect(this.ctx!.destination);
+      osc.start(now + i * 0.08);
+      osc.stop(now + i * 0.08 + 0.2);
+    });
+  }
+
+  playLoss() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.linearRampToValueAtTime(110, now + 0.45);
+    
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.linearRampToValueAtTime(0.001, now + 0.45);
+    
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.45);
+  }
+
+  playCashout() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    
+    // Arpeggio celebrating money collection
+    const freqs = [523.25, 659.25, 783.99, 1046.50, 1318.51]; // C5, E5, G5, C6, E6
+    freqs.forEach((f, i) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(f, now + i * 0.07);
+      gain.gain.setValueAtTime(0.04, now + i * 0.07);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.07 + 0.35);
+      osc.connect(gain);
+      gain.connect(this.ctx!.destination);
+      osc.start(now + i * 0.07);
+      osc.stop(now + i * 0.07 + 0.35);
+    });
+  }
+
+  playError() {
+    if (this.isMuted) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(180, now);
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.2);
+  }
+}
+
 const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
+  const sfx = useRef(new HiLoSfx());
   const [betAmount, setBetAmount] = useState(10);
   const [gameState, setGameState] = useState<'IDLE' | 'PLAYING' | 'REVEALING' | 'LOST' | 'WON'>('IDLE');
   const [currentCard, setCurrentCard] = useState<Card | null>(null);
@@ -43,6 +192,10 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   const deckRef = useRef<Card[]>([]);
 
   useEffect(() => {
+    sfx.current.setMuted(muted);
+  }, [muted]);
+
+  useEffect(() => {
     isMounted.current = true;
     return () => { isMounted.current = false; stopAllSounds(); };
   }, []);
@@ -53,7 +206,10 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
   };
 
   const startGame = async () => {
-    if (userBalance < betAmount) return;
+    if (userBalance < betAmount) {
+        sfx.current.playError();
+        return;
+    }
     
     // Record bet in Firestore
     if (auth.currentUser) {
@@ -66,7 +222,7 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     }
 
     updateBalance(-betAmount, 'BET', 'Hi-Lo Stake');
-    playSound('bet_place');
+    sfx.current.playBet();
     setHlResult(null);
     
     deckRef.current = createDeck();
@@ -83,8 +239,7 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     if (gameState !== 'PLAYING' || !currentCard) return;
 
     setGameState('REVEALING');
-    // FIX: Changed invalid sound name 'tick' to 'wingo_tick'
-    playSound('wingo_tick');
+    sfx.current.playFlip();
 
     if (deckRef.current.length < 5) deckRef.current = createDeck();
     const revealedCard = deckRef.current.pop()!;
@@ -95,7 +250,7 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     const isWin = guess === 'HI' ? revealedCard.value >= currentCard.value : revealedCard.value <= currentCard.value;
 
     if (isWin) {
-        playSound('win');
+        sfx.current.playWinStep();
         const increment = revealedCard.value === currentCard.value ? 1.0 : 1.6;
         const potentialWin = betAmount * (multiplier * increment - multiplier);
         triggerFloating(`+₹${potentialWin.toFixed(2)}`, 'text-green-400');
@@ -109,6 +264,7 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
             setGameState('PLAYING');
         }, 1000);
     } else {
+        sfx.current.playLoss();
         setHlResult({
             win: false,
             amount: betAmount * multiplier,
@@ -131,6 +287,7 @@ const HiLo: React.FC<Props> = ({ onBack, userBalance, onResult }) => {
     
     const winAmt = betAmount * multiplier;
     updateBalance(winAmt, 'WIN', 'Hi-Lo Cashout');
+    sfx.current.playCashout();
     triggerFloating(`+₹${winAmt.toFixed(2)}`, 'text-yellow-400');
     
     setHlResult({
